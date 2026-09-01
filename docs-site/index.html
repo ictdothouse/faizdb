@@ -451,6 +451,7 @@
         <div class="sidebar-title">Getting Started</div>
         <a href="#intro" class="sidebar-link active">🌟 Overview & Vision</a>
         <a href="#advantages" class="sidebar-link">💎 Why FaizDB Beats Other DBs</a>
+        <a href="#use-cases" class="sidebar-link">🎮 Use Cases & Gaming Architecture</a>
         <a href="#features-overview" class="sidebar-link">✨ Core Features Matrix</a>
         <a href="#installation" class="sidebar-link">📦 1-Line Installation</a>
         <a href="#quickstart" class="sidebar-link">⚡ 60-Second Quickstart</a>
@@ -630,6 +631,69 @@
               <li><strong>Built-in Disaster Recovery</strong>: Non-blocking atomic snapshots with SHA-256 integrity verification.</li>
             </ul>
           </div>
+        </div>
+      </section>
+
+      <!-- Section: Real-Time Gaming & High-Load Use Cases -->
+      <section id="use-cases">
+        <h2>🎮 Real-Time Multiplayer Gaming &amp; High-Load Use Cases</h2>
+        <p class="lead">
+          FaizDB is battle-tested for extreme concurrency workloads such as multiplayer game backends, real-time leaderboards, anti-bruteforce defense, and high-frequency flash sales.
+        </p>
+
+        <!-- Gaming Architecture Table -->
+        <table>
+          <thead>
+            <tr>
+              <th>FaizDB Architectural Feature</th>
+              <th>Traditional Database Pain Point</th>
+              <th>How FaizDB Solves Extreme Game Loads</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Lock-Free MemTable (<code>crossbeam-skiplist</code>)</strong></td>
+              <td>Servers freeze during simultaneous player score writes (Mutex lock contention).</td>
+              <td>Thousands of concurrent game threads write player states simultaneously <strong>without mutex locking</strong> (320,000+ ops/sec).</td>
+            </tr>
+            <tr>
+              <td><strong>gRPC Binary Protocol (Port 50051)</strong></td>
+              <td>JSON serialization is too heavy for 60 FPS fast telemetry updates.</td>
+              <td>Supports ultra-compact <strong>HTTP/2 binary Protocol Buffers</strong> with sub-millisecond latency (&lt; 1ms).</td>
+            </tr>
+            <tr>
+              <td><strong>WebSocket Change Streams (Port 27018)</strong></td>
+              <td>Clients must poll repeatedly for live match scores (High network/CPU load).</td>
+              <td>Live score updates and lobby events are <strong>instantly pushed</strong> to all connected clients in real-time.</td>
+            </tr>
+            <tr>
+              <td><strong>In-Memory TTL Cache Engine</strong></td>
+              <td>Server RAM overflows with abandoned matchmaking lobbies and stale sessions.</td>
+              <td>Lobbies, OTP tokens, and online states expire automatically with $O(\log N)$ min-heap eviction.</td>
+            </tr>
+            <tr>
+              <td><strong>Safe Rust (Zero GC Lag Spikes)</strong></td>
+              <td>JVM/Go databases suffer from Garbage Collector pauses (game freezes for 200-500ms).</td>
+              <td><strong>Zero Garbage Collection</strong>. Game frame times remain rock solid without jitter or stutter.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>python game server telemetry (grpc port 50051)</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from faizdb import FaizDbGrpcClient
+
+client = FaizDbGrpcClient(target="localhost:50051")
+
+# Sub-millisecond player score mutation during live gameplay (< 0.4ms)
+client.execute_query("""
+    UPDATE leaderboards 
+    SET score = score + 500, kills = kills + 2 
+    WHERE player_id = 'player_cyber_99'
+""")</code></pre>
         </div>
       </section>
 
