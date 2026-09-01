@@ -23,7 +23,7 @@ export interface SnapshotManifest {
   created_at: string;
   collections: string[];
   total_documents: number;
-  checksum_sha256: string;
+  checksum: string;
   file_size_bytes: number;
 }
 
@@ -35,7 +35,7 @@ export const BackupManager: React.FC = () => {
       created_at: new Date(Date.now() - 3600000).toISOString(),
       collections: ['users', 'articles', 'analytics_sales'],
       total_documents: 1420,
-      checksum_sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+      checksum: '9f86d081884c7d65',
       file_size_bytes: 482910,
     },
   ]);
@@ -204,60 +204,63 @@ export const BackupManager: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          {snapshots.map((snap, idx) => (
-            <div
-              key={snap.checksum_sha256}
-              className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 space-y-3"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-slate-400 dark:text-zinc-500">
-                    #{idx + 1}
-                  </span>
-                  <span className="text-xs font-bold font-mono text-slate-900 dark:text-zinc-100">
-                    Snapshot {new Date(snap.created_at).toLocaleString()}
-                  </span>
-                  <Badge variant="info">{snap.total_documents} Documents</Badge>
+          {snapshots.map((snap, idx) => {
+            const checksumStr = snap.checksum || '';
+            return (
+              <div
+                key={checksumStr || idx}
+                className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 space-y-3"
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-slate-400 dark:text-zinc-500">
+                      #{idx + 1}
+                    </span>
+                    <span className="text-xs font-bold font-mono text-slate-900 dark:text-zinc-100">
+                      Snapshot {new Date(snap.created_at).toLocaleString()}
+                    </span>
+                    <Badge variant="info">{snap.total_documents} Documents</Badge>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedSnapshot(snap);
+                        setRestoreSuccessMsg(null);
+                        setRestoreModalOpen(true);
+                      }}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Restore</span>
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedSnapshot(snap);
-                      setRestoreSuccessMsg(null);
-                      setRestoreModalOpen(true);
-                    }}
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Restore</span>
-                  </Button>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs font-mono text-slate-600 dark:text-zinc-400 pt-1">
+                  <div>
+                    <span className="text-slate-400 dark:text-zinc-500">Collections:</span>{' '}
+                    <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                      {(snap.collections || []).join(', ')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-zinc-500">Size:</span>{' '}
+                    <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                      {((snap.file_size_bytes || 0) / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  <div className="truncate">
+                    <span className="text-slate-400 dark:text-zinc-500">Checksum:</span>{' '}
+                    <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                      {checksumStr.substring(0, 16)}
+                    </span>
+                  </div>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs font-mono text-slate-600 dark:text-zinc-400 pt-1">
-                <div>
-                  <span className="text-slate-400 dark:text-zinc-500">Collections:</span>{' '}
-                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                    {snap.collections.join(', ')}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 dark:text-zinc-500">Size:</span>{' '}
-                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                    {(snap.file_size_bytes / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-                <div className="truncate">
-                  <span className="text-slate-400 dark:text-zinc-500">SHA256:</span>{' '}
-                  <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                    {snap.checksum_sha256.substring(0, 16)}...
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -289,7 +292,7 @@ export const BackupManager: React.FC = () => {
                   <span>Point-in-Time Restoration Warning</span>
                 </div>
                 <p className="text-[11px]">
-                  Restoring will re-hydrate documents into target collections. Cryptographic SHA256 checksum will be verified automatically before restoring.
+                  Restoring will re-hydrate documents into target collections. Cryptographic checksum will be verified automatically before restoring.
                 </p>
               </div>
 
@@ -302,7 +305,7 @@ export const BackupManager: React.FC = () => {
                     <span className="text-slate-400 dark:text-zinc-500">Documents:</span> {selectedSnapshot.total_documents}
                   </div>
                   <div>
-                    <span className="text-slate-400 dark:text-zinc-500">Checksum:</span> {selectedSnapshot.checksum_sha256}
+                    <span className="text-slate-400 dark:text-zinc-500">Checksum:</span> {selectedSnapshot.checksum}
                   </div>
                 </div>
               )}
