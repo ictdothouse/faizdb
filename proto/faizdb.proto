@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package faizdb.v1;
+
+option go_package = "github.com/ictdothouse/faizdb/pkg/faizdbv1";
+option java_package = "io.faizdb.v1";
+
+// ── FaizDB Universal gRPC Service ─────────────────────────────────
+
+service FaizDbService {
+  // Execute any SQL, MongoDB JSON, or FaizQL query
+  rpc ExecuteQuery (QueryRequest) returns (QueryResponse);
+
+  // High-performance ANN Vector Similarity Search
+  rpc VectorSearch (VectorSearchRequest) returns (VectorSearchResponse);
+
+  // High-throughput Document Ingestion
+  rpc InsertDocuments (InsertRequest) returns (InsertResponse);
+
+  // Real-time Reactive Change Stream subscription
+  rpc SubscribeChangeStream (StreamRequest) returns (stream ChangeEventMsg);
+
+  // Service Health and Readiness Check
+  rpc HealthCheck (HealthRequest) returns (HealthResponse);
+}
+
+// ── Messages ──────────────────────────────────────────────────────
+
+message QueryRequest {
+  string query = 1;
+  string database = 2;
+  string token = 3;
+}
+
+message QueryResponse {
+  bool success = 1;
+  string result_json = 2;
+  uint64 execution_time_us = 3;
+  string error_message = 4;
+}
+
+message VectorSearchRequest {
+  string collection = 1;
+  repeated float vector = 2;
+  uint32 top_k = 3;
+}
+
+message VectorHit {
+  string id = 1;
+  float score = 2;
+  string document_json = 3;
+}
+
+message VectorSearchResponse {
+  repeated VectorHit hits = 1;
+  uint64 search_time_us = 2;
+}
+
+message InsertRequest {
+  string collection = 1;
+  repeated string documents_json = 2;
+}
+
+message InsertResponse {
+  uint32 inserted_count = 1;
+  repeated string inserted_ids = 2;
+}
+
+message StreamRequest {
+  string collection = 1;
+}
+
+message ChangeEventMsg {
+  string event_type = 1;
+  string collection = 2;
+  string document_id = 3;
+  string payload_json = 4;
+  uint64 timestamp_ms = 5;
+}
+
+message HealthRequest {
+  string service = 1;
+}
+
+message HealthResponse {
+  string status = 1;
+  string version = 2;
+  uint64 uptime_seconds = 3;
+}

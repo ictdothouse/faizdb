@@ -24,7 +24,7 @@
 ```
                          ┌───────────────────────────────────────────────────────────┐
                          │                      FaizDB Engine                        │
-                         │            Dual-Protocol Entry Gateways                   │
+                         │            4-Way Multi-Protocol Gateways                  │
                          └─────────────────────────────┬─────────────────────────────┘
                                                        │
                            ┌───────────────────────────┴───────────────────────────┐
@@ -251,6 +251,7 @@ Key Studio Workspaces:
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
 * [🌐 Enterprise REST API Reference](docs/API_REFERENCE.md) — Full endpoint reference with authentication, queries, transactions, and migration.
 * [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python, and Go.
+* [⚔️ Competitive Analysis & Architectural Matrix](docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
 * [☸️ Kubernetes HA Cluster Guide](k8s/README.md) — 3-Node StatefulSet architecture with automated persistence and zero-downtime rolling upgrades.
 
 ---
@@ -264,6 +265,8 @@ Key Studio Workspaces:
 - [x] Native HNSW Vector Similarity Search (up to 4096 dimensions)
 - [x] Native Knowledge Graph & GraphRAG Engine
 - [x] MongoDB Wire Protocol Parser (Drop-in support on Port 27017)
+- [x] PostgreSQL Wire Protocol Engine (Drop-in support on Port 5432 for psql, DBeaver & SQL ORMs)
+- [x] gRPC & Protocol Buffers Gateway (Port 50051 for High-Performance Microservices & Vector Streaming)
 - [x] Real-time Change Streams (WebSockets)
 - [x] Distributed Raft Consensus Engine & 16,384 Virtual Hash Slots Auto-Sharding
 - [x] Bulk CSV / JSON Array Ingestion Engine (`/v1/collections/:name/import`)
@@ -274,7 +277,7 @@ Key Studio Workspaces:
 - [x] Time-To-Live (TTL) Auto-Expiry & High-Speed In-Memory Cache Engine
 - [x] Consistent Point-in-Time Backup & Disaster Recovery (PITR) Engine
 - [x] Modern Web Management Studio (React + Vite + TailwindCSS)
-- [ ] Multi-Datacenter Geo-Replication with Active-Active CRDTs
+- [x] Multi-Datacenter Geo-Replication with Active-Active CRDTs (Version Vectors, LWW, OR-Set, PN-Counter)
 - [ ] GPU-Accelerated Vector Indexing (CUDA / Metal Shaders)
 
 ---

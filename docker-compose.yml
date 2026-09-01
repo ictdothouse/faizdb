@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # FaizDB Database Engine (Port 27017: MongoDB Wire, Port 27018: HTTP REST API)
+  # FaizDB Database Engine (27017: Mongo, 5432: Postgres, 50051: gRPC, 27018: HTTP/REST)
   faizdb:
     build:
       context: .
@@ -9,6 +9,8 @@ services:
     container_name: faizdb-engine
     ports:
       - "27017:27017" # MongoDB Wire Protocol
+      - "5432:5432"   # PostgreSQL Wire Protocol
+      - "50051:50051" # gRPC / Protocol Buffers
       - "27018:27018" # FaizDB REST / HTTP API
     environment:
       # --- Security: Set strong random secrets in production! ---

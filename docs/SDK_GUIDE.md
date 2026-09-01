@@ -1,6 +1,6 @@
-# 📦 FaizDB Official Client SDKs Guide
+# 📦 FaizDB Official Polyglot Client SDKs Guide
 
-FaizDB provides zero-dependency, type-safe official SDKs for **Node.js/TypeScript**, **Python**, and **Go**.
+FaizDB provides zero-dependency, type-safe official SDKs with dual-mode support (**HTTP/REST & WebSockets** + **gRPC & Protocol Buffers**) for **Node.js/TypeScript**, **Python**, and **Go**.
 
 ---
 
@@ -8,37 +8,29 @@ FaizDB provides zero-dependency, type-safe official SDKs for **Node.js/TypeScrip
 
 ### Installation
 ```bash
-# In your project root
 npm install ./bindings/node  # or pnpm add ./bindings/node
 ```
 
-### Usage
+### High-Performance gRPC Client (Port 50051)
 ```typescript
-import { FaizDB } from 'faizdb';
+import { FaizDbGrpcClient } from '@faizdb/client';
 
 async function main() {
-  const db = new FaizDB('http://localhost:27018');
+  const client = new FaizDbGrpcClient({ target: 'localhost:50051' });
 
-  // Authenticate
-  await db.login('admin', 'faizdb-admin-2026');
+  // 1. Health Check
+  const health = await client.healthCheck();
+  console.log('gRPC Status:', health.status);
 
-  // 1. Collections & Document CRUD
-  const users = db.collection('users');
-  const userId = await users.insert({ name: 'Ahmad Faiz', role: 'Architect', email: 'faiz@ict.house' });
-  console.log('Inserted Document ID:', userId);
+  // 2. AI Vector Similarity Search (< 1ms)
+  const matches = await client.vectorSearch('products', [0.95, 0.90, 0.10, 0.05], 5);
+  console.log('Vector Matches:', matches);
 
-  // 2. Secondary Index & Constraints
-  await users.createIndex('email', { unique: true });
-
-  // 3. AI Vector Similarity Search (< 1ms)
-  const matches = await users.vectorSearch([0.95, 0.90, 0.10, 0.05], 5);
-
-  // 4. Okapi BM25 Fuzzy Text Search
-  const results = await users.search('Faiz', { fuzzy: true, topK: 10 });
-
-  // 5. Cost-Based EXPLAIN Query Plan
-  const plan = await db.explain('SELECT * FROM users WHERE email = "faiz@ict.house"');
-  console.log('Plan:', plan.plan_type, 'Latency:', plan.execution_time_us, 'µs');
+  // 3. Bulk Insert
+  const res = await client.insertDocuments('products', [
+    { name: 'Neural Processor', vector: [0.1, 0.5, 0.9] }
+  ]);
+  console.log('Inserted Count:', res.insertedCount);
 }
 
 main();
@@ -54,59 +46,55 @@ cd bindings/python
 pip install -e .
 ```
 
-### Usage
+### gRPC Client Usage (Port 50051)
 ```python
-from faizdb import FaizDB
+from faizdb import FaizDbGrpcClient
 
-db = FaizDB("http://localhost:27018")
-db.login("admin", "faizdb-admin-2026")
+client = FaizDbGrpcClient(target="localhost:50051")
 
-users = db.collection("users")
+# 1. Health Check
+health = client.health_check()
+print("gRPC Status:", health["status"])
 
-# Document Insert
-user_id = users.insert({"name": "Ahmad Faiz", "role": "Architect", "email": "faiz@ict.house"})
+# 2. AI Vector ANN Search
+hits = client.vector_search("ai_embeddings", vector=[0.95, 0.90, 0.10], top_k=5)
+for h in hits:
+    print(f"Match ID: {h['id']}, Score: {h['score']:.4f}")
 
-# AI Vector Search
-matches = users.vector_search([0.95, 0.90, 0.10, 0.05], top_k=5)
-
-# Okapi BM25 Fuzzy Text Search
-results = users.search("Faiz", fuzzy=True, top_k=10)
-
-# EXPLAIN Query Planner
-plan = db.explain("SELECT * FROM users WHERE email = 'faiz@ict.house'")
-print(f"Plan: {plan['plan_type']} in {plan['execution_time_us']} µs")
+# 3. Query Execution (SQL / Mongo AST)
+res = client.execute_query("SELECT * FROM ai_embeddings WHERE score > 0.8")
+print("Results:", res)
 ```
 
 ---
 
 ## 🔵 3. Go SDK
 
-### Usage
+### Installation & Usage
 ```go
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/ictdothouse/faizdb/bindings/go"
 )
 
 func main() {
-	client := faizdb.NewClient("http://localhost:27018")
-	token, err := client.Login("admin", "faizdb-admin-2026")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Authenticated with Token:", token)
+	client := faizdb.NewGrpcClient("localhost:50051")
 
-	users := client.Collection("users")
-	docId, err := users.Insert(map[string]interface{}{
-		"name":  "Ahmad Faiz",
-		"role":  "Architect",
-		"email": "faiz@ict.house",
-	})
+	// 1. Health check
+	health, err := client.HealthCheck(context.Background())
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Inserted document:", docId)
+	fmt.Println("gRPC Health:", health["status"])
+
+	// 2. AI Vector Similarity Search
+	hits, err := client.VectorSearch(context.Background(), "ai_embeddings", []float32{0.95, 0.90, 0.10}, 5)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Found %d vector matches\n", len(hits))
 }
 ```

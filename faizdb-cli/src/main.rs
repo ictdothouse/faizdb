@@ -38,11 +38,17 @@ enum Commands {
         data_dir: PathBuf,
     },
 
-    /// Start the Dual-Protocol Server (MongoDB Wire Protocol 27017 + HTTP API 27018)
+    /// Start the 4-Way Multi-Protocol Server (MongoDB 27017 + PostgreSQL 5432 + gRPC 50051 + HTTP API 27018)
     Serve {
         /// MongoDB Wire Protocol Port (Drop-in replacement for MongoDB apps)
         #[arg(short = 'w', long, default_value = "27017")]
         wire_port: u16,
+        /// PostgreSQL Wire Protocol Port (Drop-in compatibility for psql, DBeaver, TablePlus, Grafana)
+        #[arg(short = 'g', long, default_value = "5432")]
+        pg_port: u16,
+        /// gRPC & Protocol Buffers Port (Ultra-low latency microservices & vector streaming)
+        #[arg(short = 'r', long, default_value = "50051")]
+        grpc_port: u16,
         /// HTTP/REST API Port
         #[arg(short = 'p', long, default_value = "27018")]
         http_port: u16,
@@ -96,19 +102,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Some(Commands::Shell { data_dir }) => run_shell(&data_dir),
-        Some(Commands::Serve { wire_port, http_port, host }) => {
+        Some(Commands::Serve { wire_port, pg_port, grpc_port, http_port, host }) => {
             let wire_addr = format!("{host}:{wire_port}");
+            let pg_addr = format!("{host}:{pg_port}");
+            let grpc_addr = format!("{host}:{grpc_port}");
             let http_addr = format!("{host}:{http_port}");
             println!("╔══════════════════════════════════════════════════════════════════╗");
-            println!("║  🔥 FaizDB Server v{} Running Dual Protocols              ║", faizdb_core::VERSION);
+            println!("║  🔥 FaizDB Server v{} Running 4-Way Multi-Protocol Gateway ║", faizdb_core::VERSION);
             println!("╠══════════════════════════════════════════════════════════════════╣");
             println!("║  🍃 MongoDB Wire Protocol : mongodb://{:<26} ║", wire_addr);
+            println!("║  🐘 PostgreSQL Wire Proto : postgresql://{:<23} ║", pg_addr);
+            println!("║  ⚡ gRPC / Protobuf       : grpc://{:<29} ║", grpc_addr);
             println!("║  🌐 HTTP / REST API       : http://{:<29} ║", http_addr);
             println!("║                                                                  ║");
-            println!("║  👉 Drop-in connection string:                                   ║");
-            println!("║     mongodb://127.0.0.1:{}                                   ║", wire_port);
+            println!("║  👉 Connection Strings:                                          ║");
+            println!("║     Mongo : mongodb://127.0.0.1:{}                          ║", wire_port);
+            println!("║     PSQL  : psql -h 127.0.0.1 -p {} -U postgres -d faizdb    ║", pg_port);
+            println!("║     gRPC  : localhost:{}                                     ║", grpc_port);
+            println!("║     REST  : http://127.0.0.1:{}                              ║", http_port);
             println!("╚══════════════════════════════════════════════════════════════════╝");
-            faizdb_server::run_dual_server(&wire_addr, &http_addr).await?;
+            faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &grpc_addr, &http_addr).await?;
         }
         Some(Commands::Info) => print_info(),
         Some(Commands::Benchmark { count }) => run_benchmark(count),

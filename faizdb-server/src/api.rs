@@ -62,6 +62,18 @@ pub struct AppState {
     pub db: Arc<DatabaseContext>,
     pub auth: Arc<AuthManager>,
     pub backup_schedule: Arc<std::sync::RwLock<BackupScheduleConfig>>,
+    pub geo_replication: Arc<faizdb_core::cluster::GeoReplicationEngine>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegisterRegionRequest {
+    pub region_id: String,
+    pub endpoint: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GeoSyncRequest {
+    pub deltas: Vec<faizdb_core::cluster::ReplicationDelta>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -570,6 +582,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/cluster/failover", post(cluster_trigger_failover))
         .route("/v1/cluster/raft/vote", post(raft_request_vote))
         .route("/v1/cluster/raft/append", post(raft_append_entries))
+        .route("/v1/cluster/regions", get(cluster_get_regions).post(cluster_register_region))
+        .route("/v1/cluster/geo-sync", post(cluster_geo_sync))
         .layer(middleware::from_fn(cluster_auth_middleware));
 
     Router::new()
@@ -1445,3 +1459,67 @@ async fn handle_change_stream_socket(
 
     debug!("WebSocket client disconnected from Change Stream");
 }
+
+/// GET /v1/cluster/regions — List registered peer regions
+async fn cluster_get_regions(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let peers = state.geo_replication.list_peers();
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            success: true,
+            data: Some(serde_json::json!({
+                "local_region": state.geo_replication.local_region,
+                "peer_count": peers.len(),
+                "regions": peers,
+            })),
+            error: None,
+        }),
+    )
+}
+
+/// POST /v1/cluster/regions — Register a new remote region
+async fn cluster_register_region(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RegisterRegionRequest>,
+) -> impl IntoResponse {
+    state.geo_replication.register_peer(&payload.region_id, &payload.endpoint);
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            success: true,
+            data: Some(serde_json::json!({
+                "message": format!("Region '{}' registered successfully", payload.region_id),
+                "region_id": payload.region_id,
+                "endpoint": payload.endpoint,
+            })),
+            error: None,
+        }),
+    )
+}
+
+/// POST /v1/cluster/geo-sync — Exchange and apply replication deltas
+async fn cluster_geo_sync(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<GeoSyncRequest>,
+) -> impl IntoResponse {
+    let mut applied = 0;
+    for delta in payload.deltas {
+        if state.geo_replication.apply_remote_delta(delta) {
+            applied += 1;
+        }
+    }
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            success: true,
+            data: Some(serde_json::json!({
+                "applied_deltas": applied,
+                "version_vector": state.geo_replication.version_vector.read().clone(),
+            })),
+            error: None,
+        }),
+    )
+}
+

@@ -380,18 +380,20 @@ fn parse_literal(s: &str) -> Value {
     Value::String(s.to_string())
 }
 
-/// Parse INSERT INTO <table> ...
+/// Parse INSERT INTO <table> [(col1, col2)] VALUES (val1, val2) or INSERT INTO <table> {"key": "value"}
 fn parse_insert_query(input: &str) -> Result<Statement, String> {
-    let tokens: Vec<&str> = input.split_whitespace().collect();
-    if tokens.len() < 3 || !tokens[1].eq_ignore_ascii_case("INTO") {
-        return Err("Expected 'INSERT INTO <collection> ...'".to_string());
-    }
+    let clean = input.trim_end_matches(';').trim();
+    let upper = clean.to_uppercase();
 
-    let collection = tokens[2].to_string();
-
-    // Check if JSON follows or VALUES
-    if let Some(json_start) = input.find('{') {
-        let json_str = &input[json_start..].trim_end_matches(';').trim();
+    // 1. JSON body format: INSERT INTO <table> {"key": "value"}
+    if let Some(json_start) = clean.find('{') {
+        let prefix = clean[..json_start].trim();
+        let tokens: Vec<&str> = prefix.split_whitespace().collect();
+        if tokens.len() < 3 || !tokens[1].eq_ignore_ascii_case("INTO") {
+            return Err("Expected 'INSERT INTO <collection> ...'".to_string());
+        }
+        let collection = tokens[2].to_string();
+        let json_str = clean[json_start..].trim();
         let val: serde_json::Value =
             serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON insert: {e}"))?;
         let doc = Document::from_json_value(val).ok_or("Expected JSON object")?;
@@ -401,7 +403,64 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
         });
     }
 
-    Err("INSERT requires JSON body: INSERT INTO <table> {\"key\": \"value\"}".to_string())
+    // 2. Standard SQL format: INSERT INTO <table> [(cols)] VALUES (vals)
+    if let Some(values_pos) = upper.find("VALUES") {
+        let before_values = clean[..values_pos].trim();
+        let after_values = clean[values_pos + 6..].trim();
+
+        let tokens: Vec<&str> = before_values.split_whitespace().collect();
+        if tokens.len() < 3 || !tokens[1].eq_ignore_ascii_case("INTO") {
+            return Err("Expected 'INSERT INTO <collection> ...'".to_string());
+        }
+
+        let collection_token = tokens[2];
+        let collection = if let Some(p) = collection_token.find('(') {
+            collection_token[..p].to_string()
+        } else {
+            collection_token.to_string()
+        };
+
+        // Extract column list if provided
+        let cols: Vec<String> = if let Some(paren_start) = before_values.find('(') {
+            if let Some(paren_end) = before_values.rfind(')') {
+                before_values[paren_start + 1..paren_end]
+                    .split(',')
+                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').trim().to_string())
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        let val_paren_start = after_values.find('(').ok_or("Expected '(' after VALUES")?;
+        let val_paren_end = after_values.rfind(')').ok_or("Expected ')' after VALUES")?;
+        let val_strs: Vec<&str> = after_values[val_paren_start + 1..val_paren_end]
+            .split(',')
+            .map(|s| s.trim())
+            .collect();
+
+        let mut doc = Document::new();
+        if !cols.is_empty() {
+            for (idx, col) in cols.iter().enumerate() {
+                if let Some(val_str) = val_strs.get(idx) {
+                    doc.set(col.as_str(), parse_literal(val_str));
+                }
+            }
+        } else {
+            for (idx, val_str) in val_strs.iter().enumerate() {
+                doc.set(format!("col_{}", idx + 1), parse_literal(val_str));
+            }
+        }
+
+        return Ok(Statement::Insert {
+            collection,
+            documents: vec![doc],
+        });
+    }
+
+    Err("INSERT requires JSON body or VALUES clause: INSERT INTO <table> (cols) VALUES (vals)".to_string())
 }
 
 /// Parse DELETE FROM <table> WHERE ...

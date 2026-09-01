@@ -23,7 +23,11 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 27017
-              name: wire-protocol
+              name: mongo-wire
+            - containerPort: 5432
+              name: pg-wire
+            - containerPort: 50051
+              name: grpc
             - containerPort: 27018
               name: http-rest
           env:

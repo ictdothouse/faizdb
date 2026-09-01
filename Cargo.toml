@@ -28,9 +28,11 @@ bson = "2.13"
 # Async runtime
 tokio = { version = "1.42", features = ["full"] }
 
-# Networking
+# Networking & gRPC
 axum = { version = "0.8", features = ["ws"] }
 tonic = "0.12"
+prost = "0.13"
+tokio-stream = { version = "0.1", features = ["sync"] }
 tower = "0.5"
 hyper = "1.5"
 futures-util = "0.3"

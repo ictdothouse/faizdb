@@ -49,6 +49,8 @@ docker compose up -d
 
 * **Exposed Endpoints:**
   - **MongoDB Wire Protocol**: `mongodb://localhost:27017`
+  - **PostgreSQL Wire Protocol**: `psql -h localhost -p 5432 -U postgres -d faizdb`
+  - **gRPC / Protocol Buffers**: `localhost:50051`
   - **HTTP REST & WebSocket API**: `http://localhost:27018`
   - **FaizDB Web Studio**: `http://localhost:27020`
 

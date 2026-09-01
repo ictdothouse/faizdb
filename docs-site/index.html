@@ -470,6 +470,8 @@
       <div class="sidebar-group">
         <div class="sidebar-title">Protocols & Dialects</div>
         <a href="#mongo-wire" class="sidebar-link">🍃 MongoDB Wire (Port 27017)</a>
+        <a href="#postgres-wire" class="sidebar-link">🐘 PostgreSQL Wire (Port 5432)</a>
+        <a href="#grpc-wire" class="sidebar-link">⚡ gRPC & Protobuf (Port 50051)</a>
         <a href="#rest-api" class="sidebar-link">🌐 HTTP REST API (Port 27018)</a>
         <a href="#websockets" class="sidebar-link">📡 WebSocket Change Streams</a>
         <a href="#query-console" class="sidebar-link">🧠 Multi-Dialect Query Engine</a>
@@ -481,6 +483,7 @@
         <a href="#search-engine" class="sidebar-link">🔍 Full-Text BM25 & Fuzzy</a>
         <a href="#ttl-cache" class="sidebar-link">⏳ TTL & In-Memory Cache</a>
         <a href="#raft-cluster" class="sidebar-link">🌐 Raft Consensus & Shards</a>
+        <a href="#geo-replication" class="sidebar-link">🌍 Multi-Region Geo CRDTs</a>
         <a href="#backup-restore" class="sidebar-link">💾 Backup & Disaster Recovery</a>
       </div>
 
@@ -506,24 +509,24 @@
 
         <div class="grid-2">
           <div class="feature-card">
-            <div class="feature-icon">🍃</div>
-            <div class="feature-title">Drop-in MongoDB Wire Protocol</div>
-            <div class="feature-desc">Connect PyMongo, Mongoose, Prisma, or PHP on Port 27017 without modifying existing application code.</div>
+            <div class="feature-icon">🌐</div>
+            <div class="feature-title">4-Way Multi-Protocol Gateway</div>
+            <div class="feature-desc">Native MongoDB Wire (27017), PostgreSQL Wire (5432), ultra-fast gRPC (50051), and REST/WS (27018) on one unified engine.</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🚀</div>
             <div class="feature-title">320,000+ Writes / Sec</div>
-            <div class="feature-desc">Ultra-high throughput LSM-Tree storage with zero garbage collection lag spikes.</div>
+            <div class="feature-desc">Ultra-high throughput LSM-Tree storage with zero garbage collection lag spikes and MVCC ACID snapshot isolation.</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🤖</div>
             <div class="feature-title">AI-Native Vector & GraphRAG</div>
-            <div class="feature-desc">Sub-millisecond HNSW vector matching (up to 4096 dimensions) and native multi-hop graph traversal.</div>
+            <div class="feature-desc">Sub-millisecond HNSW vector matching (up to 4096 dimensions) and native multi-hop knowledge graph traversal.</div>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🛡️</div>
-            <div class="feature-title">Zero-Trust Enterprise Security</div>
-            <div class="feature-desc">Default AES-256-GCM encryption, Argon2id password hashing, and Point-In-Time Disaster Recovery (PITR).</div>
+            <div class="feature-icon">🌍</div>
+            <div class="feature-title">Multi-Region Geo-Replication</div>
+            <div class="feature-desc">Active-Active multi-datacenter replication with mathematically guaranteed Strong Eventual Consistency via CRDTs.</div>
           </div>
         </div>
       </section>

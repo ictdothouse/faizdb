@@ -428,3 +428,4 @@ export class FaizClient {
 }
 
 export default FaizClient;
+export * from './grpc';
