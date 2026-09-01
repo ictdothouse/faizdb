@@ -2,13 +2,15 @@
 
 use std::sync::Arc;
 use axum::{
+    body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path, State,
     },
-    http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
+    http::{header, HeaderValue, Method, Request, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
+    routing::{delete, get, post},
     Json, Router,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -63,12 +65,34 @@ impl<T> ApiResponse<T> {
     }
 }
 
+/// Permissive CORS Middleware allowing all origins, methods and headers
+async fn cors_middleware(req: Request<Body>, next: Next) -> Response {
+    let is_options = req.method() == Method::OPTIONS;
+    let mut response = if is_options {
+        Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .body(Body::empty())
+            .unwrap()
+    } else {
+        next.run(req).await
+    };
+
+    let headers = response.headers_mut();
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS, PATCH"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("*"));
+    headers.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("86400"));
+    response
+}
+
 /// Create the Axum HTTP router with REST, WebSocket Change Streams & Cluster RPC
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/v1/health", get(health_check))
         .route("/v1/info", get(server_info))
         .route("/v1/query", post(execute_query))
+        .route("/v1/collections/{name}/documents", get(get_collection_documents).post(insert_document))
+        .route("/v1/collections/{name}/documents/{id}", delete(delete_document))
         .route("/v1/collections/{name}/insert", post(insert_document))
         .route("/v1/collections/{name}/stats", get(collection_stats))
         .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
@@ -87,6 +111,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/backup/create", post(backup_create))
         .route("/v1/backup/list", get(backup_list))
         .route("/v1/backup/restore", post(backup_restore))
+        .layer(middleware::from_fn(cors_middleware))
         .with_state(state)
 }
 
@@ -141,6 +166,39 @@ async fn insert_document(
             )
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e.to_string()))),
+    }
+}
+
+async fn get_collection_documents(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let docs = col.find_all(None);
+    let output: Vec<serde_json::Value> = docs
+        .into_iter()
+        .map(|d| {
+            let mut val = serde_json::to_value(&d.fields).unwrap_or(serde_json::Value::Null);
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("_id".to_string(), serde_json::Value::String(d.id.as_str().to_string()));
+            }
+            val
+        })
+        .collect();
+    Json(ApiResponse::ok(output))
+}
+
+async fn delete_document(
+    State(state): State<Arc<AppState>>,
+    Path((name, id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    match col.delete_by_id(&id) {
+        Ok(_) => {
+            state.db.change_stream_bus().publish(ChangeEvent::delete(&name, &id));
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({ "deleted": true, "id": id }))))
+        }
+        Err(e) => (StatusCode::NOT_FOUND, Json(ApiResponse::err(e.to_string()))),
     }
 }
 
