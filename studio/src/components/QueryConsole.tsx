@@ -7,6 +7,10 @@ import {
   Download,
   Code2,
   Sparkles,
+  Zap,
+  Layers,
+  Search,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -22,20 +26,23 @@ export const QueryConsole: React.FC = () => {
 
   const templates = [
     { label: 'SQL Select', q: 'SELECT * FROM users' },
+    { label: 'EXPLAIN Plan', q: 'EXPLAIN SELECT * FROM users WHERE email = "faiz@ict.house"' },
+    { label: 'Create Unique Index', q: 'CREATE UNIQUE INDEX idx_email ON users(email)' },
     { label: 'SQL Filter', q: 'SELECT * FROM users WHERE active = true' },
-    { label: 'Mongo Aggregate ($group)', q: 'db.users.aggregate([\n  { "$match": { "active": true } },\n  { "$group": { "_id": "$country", "count": { "$sum": 1 } } },\n  { "$sort": { "count": -1 } }\n])' },
+    { label: 'Mongo Aggregate', q: 'db.users.aggregate([\n  { "$match": { "active": true } },\n  { "$group": { "_id": "$country", "count": { "$sum": 1 } } },\n  { "$sort": { "count": -1 } }\n])' },
     { label: 'Mongo Find', q: 'db.users.find({ "country": "Malaysia" })' },
-    { label: 'Mongo Insert', q: 'db.users.insert({ "name": "Faiz AI", "role": "Innovator", "country": "Malaysia", "active": true })' },
     { label: 'FaizQL Vector', q: 'FIND users VECTOR NEAR [0.12, 0.85, 0.43, 0.67] TOP 5' },
-    { label: 'SQL Count', q: 'SELECT COUNT(*) FROM users' },
+    { label: 'Begin Transaction', q: 'BEGIN' },
+    { label: 'Commit Transaction', q: 'COMMIT' },
   ];
 
-  const handleRunQuery = async () => {
-    if (!query.trim()) return;
+  const handleRunQuery = async (customQuery?: string) => {
+    const q = (customQuery || query).trim();
+    if (!q) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await api.query(query.trim());
+      const res = await api.query(q);
       setResult(res.data);
       setLatency(res.durationMs);
     } catch (err: any) {
@@ -43,6 +50,17 @@ export const QueryConsole: React.FC = () => {
       setResult(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExplain = () => {
+    const trimmed = query.trim();
+    if (!trimmed.toUpperCase().startsWith('EXPLAIN')) {
+      const explainQuery = `EXPLAIN ${trimmed}`;
+      setQuery(explainQuery);
+      handleRunQuery(explainQuery);
+    } else {
+      handleRunQuery(trimmed);
     }
   };
 
@@ -63,6 +81,7 @@ export const QueryConsole: React.FC = () => {
     a.click();
   };
 
+  const explainPlan = result && typeof result === 'object' && 'Explain' in result ? result.Explain : null;
   const isArrayResult = Array.isArray(result);
   const columns = isArrayResult && result.length > 0 ? Object.keys(result[0]) : [];
 
@@ -74,18 +93,26 @@ export const QueryConsole: React.FC = () => {
           <div className="flex items-center gap-2">
             <TermIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100 font-mono">
-              Query Workspace (SQL / MongoDB / FaizQL)
+              Query Workspace (SQL / MongoDB / FaizQL / EXPLAIN)
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono hidden sm:inline">
-              Press ⌘+Enter or Ctrl+Enter to execute
-            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExplain}
+              loading={loading}
+              className="border-emerald-600/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+            >
+              <Zap className="w-3.5 h-3.5 fill-current" />
+              <span>Explain Plan</span>
+            </Button>
+
             <Button
               variant="primary"
               size="sm"
-              onClick={handleRunQuery}
+              onClick={() => handleRunQuery()}
               loading={loading}
               className="px-4"
             >
@@ -103,8 +130,10 @@ export const QueryConsole: React.FC = () => {
           {templates.map((t, i) => (
             <button
               key={i}
-              onClick={() => setQuery(t.q)}
-              className="px-2 py-1 rounded bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:border-emerald-500 text-slate-800 dark:text-zinc-200 text-[11px] font-mono whitespace-nowrap transition-colors"
+              onClick={() => {
+                setQuery(t.q);
+              }}
+              className="px-2 py-1 rounded bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 hover:border-emerald-500 text-slate-800 dark:text-zinc-200 text-[11px] font-mono whitespace-nowrap transition-colors cursor-pointer"
             >
               {t.label}
             </button>
@@ -117,35 +146,34 @@ export const QueryConsole: React.FC = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            rows={4}
-            className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-3 font-mono text-xs text-slate-900 dark:text-emerald-300 placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed resize-y"
-            placeholder="Type SQL (SELECT * FROM table), MongoDB (db.table.find()), or FaizQL (FIND table VECTOR NEAR [...])..."
+            rows={3}
+            placeholder="Type SQL (SELECT...), MongoDB (db.users.find...), or EXPLAIN..."
+            className="w-full p-3 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 font-mono text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-hidden resize-y"
           />
         </div>
       </div>
 
-      {/* Query Output / Results Panel */}
-      <div className="flex-1 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col overflow-hidden">
+      {/* Query Result / Execution Plan Output Card */}
+      <div className="flex-1 flex flex-col min-h-0 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
         {/* Output Header Bar */}
-        <div className="p-3 border-b border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-900/90 flex items-center justify-between text-xs">
+        <div className="px-4 py-2.5 bg-slate-50/50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <span className="font-semibold text-slate-900 dark:text-zinc-100">Execution Result</span>
+            <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100">Execution Result</span>
             {latency !== null && (
-              <Badge variant="success" className="gap-1">
-                <Clock className="w-3 h-3" />
-                <span>{latency} ms</span>
+              <Badge variant="outline" className="flex items-center gap-1 font-mono text-[10px]">
+                <Clock className="w-3 h-3 text-emerald-500" />
+                {latency.toFixed(2)} ms
               </Badge>
             )}
-            {error && (
-              <Badge variant="warning" className="gap-1">
-                <AlertCircle className="w-3 h-3 text-rose-500" />
-                <span className="text-rose-600 dark:text-rose-300">Execution Error</span>
-              </Badge>
-            )}
-            {result !== null && isArrayResult && (
-              <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
-                {result.length} row(s) returned
+            {isArrayResult && (
+              <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">
+                {result.length} document(s)
               </span>
+            )}
+            {explainPlan && (
+              <Badge variant="success" className="font-mono text-[10px]">
+                EXPLAIN PLAN ACTIVE
+              </Badge>
             )}
           </div>
 
@@ -194,10 +222,69 @@ export const QueryConsole: React.FC = () => {
               </p>
               <p className="text-xs font-mono whitespace-pre-wrap">{error}</p>
             </div>
+          ) : explainPlan ? (
+            /* Visual Explain Plan Diagnostic Card */
+            <div className="space-y-4 max-w-3xl mx-auto py-2">
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/10 dark:bg-emerald-950/20 backdrop-blur-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-emerald-400" />
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">Query Execution Plan</h4>
+                      <p className="text-[11px] text-zinc-400">FaizDB Cost-Based Query Planner Diagnostics</p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                    {explainPlan.plan_type}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Engine Latency</span>
+                    <span className="text-base font-bold text-emerald-400 font-mono">
+                      {explainPlan.execution_time_us} µs
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Index Used</span>
+                    <span className="text-xs font-bold text-white font-mono truncate block">
+                      {explainPlan.index_used || 'None (Seq Scan)'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Docs Examined</span>
+                    <span className="text-base font-bold text-zinc-200 font-mono">
+                      {explainPlan.documents_examined} ➔ {explainPlan.documents_returned}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider block">Unique Constraint</span>
+                    <span className={`text-xs font-bold font-mono ${explainPlan.is_unique ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                      {explainPlan.is_unique ? 'ENFORCED' : 'NONE'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-400 space-y-1 font-mono">
+                  <div className="flex justify-between">
+                    <span>Target Collection:</span>
+                    <span className="text-white font-bold">{explainPlan.collection}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Estimated Optimizer Cost Score:</span>
+                    <span className="text-emerald-400 font-bold">{explainPlan.estimated_cost_score.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           ) : result === null ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-zinc-500 gap-2 text-center">
               <Code2 className="w-8 h-8 stroke-1 text-slate-300 dark:text-zinc-600" />
-              <p>Enter a query above and click "Run Query" to see instant results.</p>
+              <p>Enter a query above and click "Run Query" or "Explain Plan" to see instant results.</p>
             </div>
           ) : isArrayResult && result.length > 0 && viewMode === 'table' ? (
             <table className="w-full text-left border-collapse font-mono">

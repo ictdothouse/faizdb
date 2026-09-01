@@ -14,3 +14,4 @@ pub mod index;
 
 pub use model::{Document, DocumentId, Value};
 pub use collection::Collection;
+pub use index::{SecondaryIndex, SecondaryIndexDef};

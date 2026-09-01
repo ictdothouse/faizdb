@@ -220,6 +220,17 @@ fn run_shell(_data_dir: &PathBuf) {
                         QueryResult::Updated(u) => println!("✅ Updated {u} document(s)"),
                         QueryResult::Deleted(d) => println!("✅ Deleted {d} document(s)"),
                         QueryResult::Success(msg) => println!("✅ {msg}"),
+                        QueryResult::Explain(plan) => {
+                            println!("📊 Query Execution Plan:");
+                            println!("   Plan Type         : {}", plan.plan_type);
+                            println!("   Collection        : {}", plan.collection);
+                            println!("   Index Used        : {}", plan.index_used.unwrap_or_else(|| "None (Sequential Scan)".into()));
+                            println!("   Execution Latency : {} µs", plan.execution_time_us);
+                            println!("   Documents Examined: {}", plan.documents_examined);
+                            println!("   Documents Returned: {}", plan.documents_returned);
+                            println!("   Unique Constraint : {}", plan.is_unique);
+                            println!("   Estimated Cost    : {:.2}", plan.estimated_cost_score);
+                        }
                     },
                     Err(e) => println!("❌ Execution error: {e}"),
                 },

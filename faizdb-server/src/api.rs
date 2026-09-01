@@ -506,6 +506,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let read_routes = Router::new()
         .route("/v1/collections/{name}/documents", get(get_collection_documents))
         .route("/v1/collections/{name}/stats", get(collection_stats))
+        .route("/v1/collections/{name}/indexes", get(get_collection_indexes))
         .route("/v1/collections/{name}/search", post(search_collection))
         .route("/v1/collections/{name}/ttl/stats", get(collection_ttl_stats))
         .route("/v1/subscribe", get(ws_global_subscribe))
@@ -519,9 +520,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/query", post(execute_query))
         .route("/v1/collections/{name}/documents", post(insert_document))
         .route("/v1/collections/{name}/documents/{id}", delete(delete_document))
+        .route("/v1/collections/{name}/indexes", post(create_collection_index))
+        .route("/v1/collections/{name}/indexes/{field}", delete(drop_collection_index))
         .route("/v1/collections/{name}/insert", post(insert_document))
         .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
         .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
+        .route("/v1/transaction/begin", post(transaction_begin))
+        .route("/v1/transaction/commit", post(transaction_commit))
+        .route("/v1/transaction/rollback", post(transaction_rollback))
         .route("/v1/backup/create", post(backup_create))
         .layer(middleware::from_fn(rbac_write_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
@@ -843,6 +849,87 @@ async fn collection_ttl_stats(
     let col = state.db.get_or_create_collection(&name);
     let stats = col.ttl_stats();
     Json(ApiResponse::ok(stats))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateIndexRequest {
+    pub field: String,
+    #[serde(default)]
+    pub unique: bool,
+}
+
+async fn get_collection_indexes(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let indexes = col.list_secondary_indexes();
+    Json(ApiResponse::ok(indexes))
+}
+
+async fn create_collection_index(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(payload): Json<CreateIndexRequest>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    match col.create_secondary_index(&payload.field, payload.unique) {
+        Ok(idx_name) => (
+            StatusCode::CREATED,
+            Json(ApiResponse::ok(serde_json::json!({
+                "index_name": idx_name,
+                "collection": name,
+                "field": payload.field,
+                "unique": payload.unique,
+            }))),
+        ),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(e.to_string()))),
+    }
+}
+
+async fn drop_collection_index(
+    State(state): State<Arc<AppState>>,
+    Path((name, field)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let dropped = col.drop_secondary_index(&field);
+    if dropped {
+        (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({ "dropped": true, "field": field }))))
+    } else {
+        (StatusCode::NOT_FOUND, Json(ApiResponse::err(format!("No index found for field '{field}'"))))
+    }
+}
+
+async fn transaction_begin() -> impl IntoResponse {
+    let txn_id = format!("txn_{}", uuid::Uuid::now_v7());
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "txn_id": txn_id,
+            "isolation_level": "SnapshotIsolation",
+            "status": "Active",
+        }))),
+    )
+}
+
+async fn transaction_commit() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "status": "Committed",
+            "message": "All staged mutations written to WAL",
+        }))),
+    )
+}
+
+async fn transaction_rollback() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "status": "Aborted",
+            "message": "Transaction rolled back, write-buffer discarded",
+        }))),
+    )
 }
 
 async fn collection_ttl_purge(

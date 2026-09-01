@@ -7,6 +7,7 @@
 //! - Thread-safe for concurrent access
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use dashmap::DashMap;
@@ -101,6 +102,9 @@ pub struct Collection {
     /// Using DashMap for concurrent, lock-free access
     documents: DashMap<String, Document>,
 
+    /// Secondary B-Tree index map (field name -> SecondaryIndex instance)
+    secondary_indexes: DashMap<String, Arc<crate::document::index::SecondaryIndex>>,
+
     /// Secondary index definitions
     indexes: RwLock<Vec<IndexDef>>,
 
@@ -129,6 +133,7 @@ impl Collection {
                 ..Default::default()
             },
             documents: DashMap::new(),
+            secondary_indexes: DashMap::new(),
             indexes: RwLock::new(Vec::new()),
             index_data: DashMap::new(),
             doc_count: AtomicU64::new(0),
@@ -143,6 +148,7 @@ impl Collection {
         Self {
             config,
             documents: DashMap::new(),
+            secondary_indexes: DashMap::new(),
             indexes: RwLock::new(Vec::new()),
             index_data: DashMap::new(),
             doc_count: AtomicU64::new(0),
@@ -192,7 +198,7 @@ impl Collection {
         let id = doc.id.clone();
         let id_str = id.as_str().to_string();
 
-        // Check for duplicate key
+        // Check for duplicate key on primary ID
         if self.documents.contains_key(&id_str) {
             return Err(FaizError::DuplicateKey {
                 collection: self.config.name.clone(),
@@ -201,7 +207,15 @@ impl Collection {
             });
         }
 
-        // Update secondary indexes
+        // Check unique constraints across all active secondary indexes BEFORE mutating
+        for idx_entry in self.secondary_indexes.iter() {
+            idx_entry.value().check_unique(&doc)?;
+        }
+
+        // Update secondary B-Tree indexes
+        for idx_entry in self.secondary_indexes.iter() {
+            idx_entry.value().insert(&doc);
+        }
         self.update_indexes_insert(&doc);
 
         // Index for Full-Text Search (BM25)
@@ -390,6 +404,9 @@ impl Collection {
             .fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
 
         // Remove from secondary indexes & text search index
+        for idx_entry in self.secondary_indexes.iter() {
+            idx_entry.value().remove(&doc);
+        }
         self.update_indexes_delete(&doc);
         self.text_index.remove_document(&id);
 
@@ -480,8 +497,70 @@ impl Collection {
 
     // ── Index Operations ─────────────────────────────────────────
 
-    /// Create a secondary index on the collection.
+    /// Create a secondary B-Tree index on a specific field with optional unique constraint.
+    pub fn create_secondary_index(&self, field: &str, unique: bool) -> FaizResult<String> {
+        let index_name = format!("idx_{field}");
+        if self.secondary_indexes.contains_key(&index_name) {
+            return Ok(index_name);
+        }
+
+        let def = crate::document::index::SecondaryIndexDef {
+            name: index_name.clone(),
+            collection: self.config.name.clone(),
+            field: field.to_string(),
+            unique,
+        };
+
+        let index = Arc::new(crate::document::index::SecondaryIndex::new(def));
+
+        // Index and validate all existing documents
+        for entry in self.documents.iter() {
+            let doc = entry.value();
+            index.check_unique(doc)?;
+            index.insert(doc);
+        }
+
+        self.secondary_indexes.insert(index_name.clone(), index);
+        Ok(index_name)
+    }
+
+    /// Lookup documents matching field = value via secondary B-Tree index: O(log N)
+    pub fn find_by_secondary_index(&self, field: &str, value: &Value) -> Option<Vec<Document>> {
+        let index_name = format!("idx_{field}");
+        let idx = self.secondary_indexes.get(&index_name)?;
+        let doc_ids = idx.lookup(value);
+
+        let mut docs = Vec::with_capacity(doc_ids.len());
+        for id in doc_ids {
+            if let Some(entry) = self.documents.get(&id) {
+                docs.push(entry.value().clone());
+            }
+        }
+        Some(docs)
+    }
+
+    /// Check if a secondary index exists on a field
+    pub fn get_secondary_index(&self, field: &str) -> Option<Arc<crate::document::index::SecondaryIndex>> {
+        let index_name = format!("idx_{field}");
+        self.secondary_indexes.get(&index_name).map(|i| i.value().clone())
+    }
+
+    /// List all secondary indexes
+    pub fn list_secondary_indexes(&self) -> Vec<crate::document::index::SecondaryIndexDef> {
+        self.secondary_indexes.iter().map(|i| i.value().def.clone()).collect()
+    }
+
+    /// Drop a secondary index
+    pub fn drop_secondary_index(&self, field: &str) -> bool {
+        let index_name = format!("idx_{field}");
+        self.secondary_indexes.remove(&index_name).is_some()
+    }
+
+    /// Create a secondary index on the collection (legacy IndexDef compatibility).
     pub fn create_index(&self, index_def: IndexDef) -> FaizResult<()> {
+        if let Some((field, _)) = index_def.fields.first() {
+            let _ = self.create_secondary_index(field, index_def.unique)?;
+        }
         let mut indexes = self.indexes.write();
 
         // Check if index already exists

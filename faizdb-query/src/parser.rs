@@ -12,12 +12,39 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
 
     let upper = trimmed.to_uppercase();
 
+    // 0. EXPLAIN query execution plan
+    if upper.starts_with("EXPLAIN") {
+        let inner = trimmed[7..].trim();
+        let inner_stmt = parse_query(inner)?;
+        return Ok(Statement::Explain(Box::new(inner_stmt)));
+    }
+
+    // Transactions
+    if upper == "BEGIN" || upper == "BEGIN TRANSACTION" {
+        return Ok(Statement::BeginTransaction);
+    }
+    if upper == "COMMIT" || upper == "COMMIT TRANSACTION" {
+        return Ok(Statement::CommitTransaction);
+    }
+    if upper == "ROLLBACK" || upper == "ROLLBACK TRANSACTION" {
+        return Ok(Statement::RollbackTransaction);
+    }
+
     // 1. MongoDB JS shell format: `db.collection.action(...)`
     if trimmed.starts_with("db.") {
         return parse_mongo_query(trimmed);
     }
 
-    // 2. SQL format: SELECT / INSERT / DELETE / COUNT
+    // 2. Index DDL: CREATE [UNIQUE] INDEX ... / DROP INDEX ...
+    if upper.starts_with("CREATE") && upper.contains("INDEX") {
+        return parse_create_index_query(trimmed);
+    }
+
+    if upper.starts_with("DROP") && upper.contains("INDEX") {
+        return parse_drop_index_query(trimmed);
+    }
+
+    // 3. SQL format: SELECT / INSERT / DELETE / COUNT
     if upper.starts_with("SELECT") || upper.starts_with("FIND") {
         return parse_select_query(trimmed);
     }
@@ -87,6 +114,17 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                 Some(parse_json_filter(args_str)?)
             };
             Ok(Statement::Count { collection, filter })
+        }
+        "createIndex" => {
+            let val: serde_json::Value =
+                serde_json::from_str(args_str).unwrap_or_else(|_| serde_json::json!({}));
+            let field = val.as_object().and_then(|o| o.keys().next().cloned()).unwrap_or_else(|| "id".to_string());
+            let unique = args_str.to_lowercase().contains("unique") && args_str.to_lowercase().contains("true");
+            Ok(Statement::CreateIndex { collection, field, unique })
+        }
+        "dropIndex" => {
+            let field = args_str.trim_matches(|c| c == '"' || c == '\'' || c == ' ').to_string();
+            Ok(Statement::DropIndex { collection, field })
         }
         _ => Err(format!("Unsupported MongoDB method: '{method}'")),
     }
@@ -397,6 +435,41 @@ fn parse_count_query(input: &str) -> Result<Statement, String> {
     };
 
     Ok(Statement::Count { collection, filter })
+}
+
+/// Parse CREATE [UNIQUE] INDEX [idx_name] ON <collection>(<field>) [UNIQUE]
+fn parse_create_index_query(input: &str) -> Result<Statement, String> {
+    let clean = input.trim_end_matches(';').trim();
+    let upper = clean.to_uppercase();
+    let unique = upper.contains("UNIQUE");
+
+    let on_pos = upper.find("ON").ok_or("Expected 'ON <collection>(<field>)' in CREATE INDEX")?;
+    let target = clean[on_pos + 2..].trim();
+    
+    let paren_open = target.find('(').ok_or("Expected '(' around indexed field name")?;
+    let paren_close = target.find(')').ok_or("Expected ')' around indexed field name")?;
+
+    let collection = target[..paren_open].trim().to_string();
+    let field = target[paren_open + 1..paren_close].trim().to_string();
+
+    if collection.is_empty() || field.is_empty() {
+        return Err("Invalid collection or field in CREATE INDEX".to_string());
+    }
+
+    Ok(Statement::CreateIndex { collection, field, unique })
+}
+
+/// Parse DROP INDEX [idx_name] ON <collection> or DROP INDEX <field> ON <collection>
+fn parse_drop_index_query(input: &str) -> Result<Statement, String> {
+    let clean = input.trim_end_matches(';').trim();
+    let upper = clean.to_uppercase();
+    let on_pos = upper.find("ON").ok_or("Expected 'ON <collection>' in DROP INDEX")?;
+    
+    let index_part = clean[..on_pos].trim();
+    let field = index_part.split_whitespace().last().unwrap_or("").trim_start_matches("idx_").to_string();
+    let collection = clean[on_pos + 2..].trim().to_string();
+
+    Ok(Statement::DropIndex { collection, field })
 }
 
 #[cfg(test)]

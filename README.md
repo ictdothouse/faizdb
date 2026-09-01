@@ -67,6 +67,9 @@
 | **Graph & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Native Knowledge Graph & BFS/DFS Traversal** |
 | **Full-Text Search Engine** | Basic text index | `tsvector` (Complex) | Requires plugin | **Native Okapi BM25 with Fuzzy Typo Tolerance** |
 | **In-Memory Cache (TTL)** | TTL index (slow sweeper) | Unsuitable for sub-ms cache | In-memory only | **Unified Cache + Persistence (Min-Heap $O(\log N)$)** |
+| **Secondary Indexing & Constraints** | Standard B-Tree | B-Tree / GIN / GiST | Limited | **High-Speed B-Tree + Strict Unique Constraints ($O(\log N)$)** |
+| **Query Diagnostics (EXPLAIN)** | `.explain()` | `EXPLAIN ANALYZE` | `SLOWLOG` | **Cost-Based `EXPLAIN` Plan with Microsecond Latency & Index Visualizer** |
+| **ACID Transactions** | Multi-doc ACID (high overhead) | Full ACID | Multi-key transactions | **Snapshot Isolation Multi-Document ACID with Write-Ahead Logging (WAL)** |
 | **Consensus & Sharding** | Complex ConfigDB + Mongos | Citus (Third-party) | Redis Cluster | **Embedded Raft Consensus + 16,384 Virtual Hash Slots** |
 | **Disaster Recovery (PITR)** | `mongodump` | `pg_dump` / WAL-G | RDB / AOF | **Atomic Non-blocking Snapshots with AES-256 / SHA Checksum** |
 

@@ -122,6 +122,19 @@ pub struct TraverseClause {
     pub relation: Option<String>,
 }
 
+/// Execution plan details for EXPLAIN queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExplainPlan {
+    pub plan_type: String,
+    pub collection: String,
+    pub index_used: Option<String>,
+    pub execution_time_us: u64,
+    pub documents_examined: usize,
+    pub documents_returned: usize,
+    pub is_unique: bool,
+    pub estimated_cost_score: f64,
+}
+
 /// Top-level AST statement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
@@ -162,4 +175,12 @@ pub enum Statement {
         field: String,
         unique: bool,
     },
+    DropIndex {
+        collection: String,
+        field: String,
+    },
+    Explain(Box<Statement>),
+    BeginTransaction,
+    CommitTransaction,
+    RollbackTransaction,
 }
