@@ -5,12 +5,12 @@
 [![Rust](https://img.shields.io/badge/rust-2024_edition-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
-[![Protocols](https://img.shields.io/badge/protocols-Universal_Wire_%7C_REST_%7C_WebSocket-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
-[![Architecture](https://img.shields.io/badge/consensus-Raft_v1.0_%7C_16384_Slots-purple.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
+[![Protocols](https://img.shields.io/badge/gateways-Mongo_%7C_PostgreSQL_%7C_gRPC_%7C_REST-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
+[![Architecture](https://img.shields.io/badge/consensus-Raft_%7C_CRDT_Geo_Replication-purple.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 
 <br/>
 
-> **"Sub-millisecond speed for modern applications. Unified Document, In-Memory Cache, Vector & Graph. 100% Memory-Safe Rust."**  
+> **"Sub-millisecond speed for modern applications. Unified Document, PostgreSQL & MongoDB Wire, gRPC, In-Memory Cache, Vector & Graph. 100% Memory-Safe Rust."**  
 > *Created and Architected by **Ahmad Faiz***
 
 </div>
@@ -19,23 +19,29 @@
 
 ## 🌟 Vision & Architectural Breakthrough
 
-**FaizDB** is an enterprise-grade, distributed, high-performance universal multi-model database engineered from the ground up in 100% Rust. It delivers extreme concurrency, sub-millisecond latency, and unified storage for Web, Mobile, Real-Time Gaming, Enterprise Systems, and AI Workloads.
+**FaizDB** is an enterprise-grade, distributed, high-performance universal multi-model database engineered from the ground up in 100% Safe Rust. It delivers extreme concurrency, sub-millisecond latency, and unified storage across Web, Mobile, Real-Time Gaming, Enterprise Systems, and AI Workloads.
 
 ```
                          ┌───────────────────────────────────────────────────────────┐
                          │                      FaizDB Engine                        │
-                         │            4-Way Multi-Protocol Gateways                  │
+                         │             4-Way Multi-Protocol Gateways                 │
                          └─────────────────────────────┬─────────────────────────────┘
                                                        │
-                           ┌───────────────────────────┴───────────────────────────┐
-                           ▼                                                       ▼
-            ┌─────────────────────────────┐                         ┌─────────────────────────────┐
-            │   MongoDB Wire Protocol     │                         │      HTTP REST / WS Bus     │
-            │        (Port 27017)         │                         │        (Port 27018)         │
-            │ PyMongo / Mongoose / Prisma │                         │ Web / Mobile / IoT Streams  │
-            └──────────────┬──────────────┘                         └──────────────┬──────────────┘
-                           │                                                       │
-                           └───────────────────────────┬───────────────────────────┘
+          ┌──────────────────────────────┬─────────────┴──────────────┬──────────────────────────────┐
+          ▼                              ▼                            ▼                              ▼
+┌───────────────────┐          ┌───────────────────┐        ┌───────────────────┐          ┌───────────────────┐
+│ MongoDB Wire Proto│          │ Postgres Wire Prot│        │  gRPC / Protobuf  │          │ HTTP REST / WS Bus│
+│   (Port 27017)    │          │    (Port 5432)    │        │   (Port 50051)    │          │   (Port 27018)    │
+│  Mongoose/PyMongo │          │  psql / DBeaver   │        │ Ultra-Fast Micro. │          │  Web / Studio /IoT│
+└─────────┬─────────┘          └─────────┬─────────┘        └─────────┬─────────┘          └─────────┬─────────┘
+          │                              │                            │                              │
+          └──────────────────────────────┴─────────────┬──────────────┴──────────────────────────────┘
+                                                       │
+                                                       ▼
+                                     ┌───────────────────────────────────┐
+                                     │       faizdb-query (Parser)       │
+                                     │       AST & Cost-Based Optimizer  │
+                                     └─────────────────┬─────────────────┘
                                                        │
           ┌────────────────────────────────────────────┼────────────────────────────────────────────┐
           ▼                                            ▼                                            ▼
@@ -49,8 +55,8 @@
           ┌────────────────────────────────────────────┼────────────────────────────────────────────┐
           ▼                                            ▼                                            ▼
 ┌───────────────────┐                        ┌───────────────────┐                        ┌───────────────────┐
-│  Full-Text Search │                        │ High-Speed Cache  │                        │ Distributed Raft  │
-│  Okapi BM25 Fuzzy │                        │  TTL Min-Heap     │                        │ Auto-Sharded HA   │
+│  Full-Text Search │                        │ High-Speed Cache  │                        │ Multi-Region Geo  │
+│  Okapi BM25 Fuzzy │                        │  TTL Min-Heap     │                        │ Active-Active CRDT│
 └───────────────────┘                        └───────────────────┘                        └───────────────────┘
 ```
 
@@ -60,8 +66,8 @@
 
 | Capability | Legacy MongoDB | PostgreSQL + Plugins | Redis | 🚀 **FaizDB (Unified)** |
 |:---|:---:|:---:|:---:|:---:|
-| **Language & Engine Core** | C++ (Memory leak risks, GC jitter) | C (Manual memory management) | C (No strict type safety) | **100% Safe Rust (Zero memory leaks, No GC pauses, Borrow-Checker verified)** |
-| **Drop-in Wire Compatibility** | Native | Emulated/Foreign | No | **Native MongoDB Wire (Port 27017)** |
+| **Language & Engine Core** | C++ (Memory leak risks, GC jitter) | C (Manual memory management) | C (No strict type safety) | **100% Safe Rust (Zero memory leaks, 0 GC pauses, Borrow-Checker verified)** |
+| **Multi-Protocol Gateways** | MongoDB only | PostgreSQL only | Redis RESP only | **4-Way Native: MongoDB (27017), Postgres (5432), gRPC (50051), REST/WS (27018)** |
 | **Document Memory & Payload** | 16 MB hard ceiling (C++ buffer bloat) | 1 GB (TOAST out-of-line disk overhead) | N/A | **Zero-Copy Byte Slices (Safe 16MB default, scalable for AI Context)** |
 | **AI Vector Search (ANN)** | Add-on / Atlas Cloud only | Requires `pgvector` extension | Requires RedisSearch | **Native HNSW (Cosine, L2, Dot) < 1ms** |
 | **Graph & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Native Knowledge Graph & BFS/DFS Traversal** |
@@ -70,8 +76,10 @@
 | **Secondary Indexing & Constraints** | Standard B-Tree | B-Tree / GIN / GiST | Limited | **High-Speed B-Tree + Strict Unique Constraints ($O(\log N)$)** |
 | **Query Diagnostics (EXPLAIN)** | `.explain()` | `EXPLAIN ANALYZE` | `SLOWLOG` | **Cost-Based `EXPLAIN` Plan with Microsecond Latency & Index Visualizer** |
 | **ACID Transactions** | Multi-doc ACID (high overhead) | Full ACID | Multi-key transactions | **Snapshot Isolation Multi-Document ACID with Write-Ahead Logging (WAL)** |
-| **Consensus & Sharding** | Complex ConfigDB + Mongos | Citus (Third-party) | Redis Cluster | **Embedded Raft Consensus + 16,384 Virtual Hash Slots** |
+| **Consensus & Global Mesh** | Complex ConfigDB + Mongos | Citus (Third-party) | Redis Cluster | **Embedded Raft (16,384 Hash Slots) + Active-Active Multi-Region CRDTs** |
 | **Disaster Recovery (PITR)** | `mongodump` | `pg_dump` / WAL-G | RDB / AOF | **Atomic Non-blocking Snapshots with AES-256 / SHA Checksum** |
+
+*For a detailed competitive breakdown vs SurrealDB, CockroachDB, Qdrant, and ArangoDB, see [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md).*
 
 ---
 
@@ -93,16 +101,22 @@ Conducted on standard hardware (Rust Release Build with Link-Time Optimization):
 
 ```
 faizdb/
-├── faizdb-core/        # 🌲 LSM-Tree, MemTable, SSTable, WAL, MVCC ACID, BM25, TTL, Snapshots
+├── proto/              # ⚡ Official Protocol Buffers v3 Schema (faizdb.proto)
+├── bindings/           # 📦 Polyglot SDKs: Python (pip), Node.js (npm), Go, and PHP
+├── faizdb-core/        # 🌲 LSM-Tree, MemTable, SSTable, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs
 ├── faizdb-vector/      # 🎯 HNSW Multi-Layer Vector Index (Cosine, L2, Dot Product)
 ├── faizdb-graph/       # 🕸️ Knowledge Graph, Multi-Hop Traversal & GraphRAG Engine
-├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, FaizQL) & Aggregations
+├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, FaizQL) & Cost Optimizer
 ├── faizdb-security/    # 🔒 Zero-Trust AES-256-GCM Encryption, Argon2id & JWT RBAC
-├── faizdb-server/      # 🌐 Axum REST API, WebSocket Streams & MongoDB Wire Protocol Server
+├── faizdb-server/      # 🌐 Multi-Protocol Server (MongoDB 27017, Postgres 5432, gRPC 50051, REST 27018)
 ├── faizdb-cli/         # 💻 Production CLI, Interactive REPL Shell, Backup & Restore Tools
-├── studio/             # 🎛️ Modern Web Management Studio (React + Vite + TailwindCSS + Lucide)
-└── tests/              # 🧪 Comprehensive Automated Test Suites
+├── studio/             # 🎛️ Modern Web Management Studio (React + Vite + TailwindCSS)
+├── docs/               # 📚 Comprehensive Guides, Competitive Analysis & API References
+├── docs-site/          # 🌐 Interactive Web Documentation Portal
+└── tests/              # 🧪 Integration & End-to-End Test Suites (84/84 Passed)
 ```
+
+---
 
 ## 📦 Universal 1-Line Installation
 
@@ -128,64 +142,80 @@ docker compose up -d
 
 ## 🚀 Quick Start Guide
 
-### 1. Build and Run Server Daemon
+### 1. Launch 4-Way Multi-Protocol Server Daemon
 
 ```bash
 # Clone the repository
 git clone https://github.com/ictdothouse/faizdb.git
 cd faizdb
 
-# Compile workspace
+# Compile workspace in release mode
 cargo build --release
 
-# Launch Dual-Protocol Server (MongoDB Wire on 27017 + REST/WebSockets on 27018)
-./target/release/faizdb serve --wire-port 27017 --http-port 27018
+# Launch 4-Way Multi-Protocol Gateway
+./target/release/faizdb serve
 ```
 
-### 2. Connect from Any Existing MongoDB Application (Zero Code Changes)
+Console Banner:
+```text
+╔══════════════════════════════════════════════════════════════════╗
+║  🔥 FaizDB Server v0.1.0 Running 4-Way Multi-Protocol Gateway ║
+╠══════════════════════════════════════════════════════════════════╣
+║  🍃 MongoDB Wire Protocol : mongodb://0.0.0.0:27017             ║
+║  🐘 PostgreSQL Wire Proto : postgresql://0.0.0.0:5432            ║
+║  ⚡ gRPC / Protobuf       : grpc://0.0.0.0:50051                 ║
+║  🌐 HTTP / REST API       : http://0.0.0.0:27018                 ║
+║                                                                  ║
+║  👉 Connection Strings:                                          ║
+║     Mongo : mongodb://127.0.0.1:27017                            ║
+║     PSQL  : psql -h 127.0.0.1 -p 5432 -U postgres -d faizdb      ║
+║     gRPC  : localhost:50051                                      ║
+║     REST  : http://127.0.0.1:27018                               ║
+╚══════════════════════════════════════════════════════════════════╝
+```
 
-#### Python (`pymongo`):
+---
+
+### 2. Connect via Your Preferred Protocol & Driver
+
+#### A. 🐘 PostgreSQL Wire (`psql`, DBeaver, TablePlus, Grafana):
+```bash
+psql -h 127.0.0.1 -p 5432 -U postgres -d faizdb
+
+# Execute standard SQL:
+SELECT * FROM users WHERE active = true;
+INSERT INTO users (name, role, score) VALUES ('Ahmad Faiz', 'Architect', 9950);
+```
+
+#### B. ⚡ gRPC & Protocol Buffers (Python, TypeScript, Go):
+```python
+from faizdb import FaizDbGrpcClient
+
+client = FaizDbGrpcClient(target="localhost:50051")
+
+# Sub-millisecond ANN Vector Similarity Search (< 1ms)
+hits = client.vector_search("ai_embeddings", vector=[0.95, 0.90, 0.10], top_k=5)
+for h in hits:
+    print(f"ID: {h['id']}, Score: {h['score']:.4f}")
+```
+
+#### C. 🍃 MongoDB Wire (`pymongo`, `mongoose`, Prisma, PHP):
 ```python
 from pymongo import MongoClient
 
-# Drop-in connection to FaizDB
 client = MongoClient("mongodb://127.0.0.1:27017")
 db = client["enterprise_db"]
-collection = db["users"]
+col = db["analytics"]
 
-# Insert document
-collection.insert_one({"name": "Ahmad Faiz", "role": "Architect", "status": "active"})
-
-# Run Aggregation Pipeline
-pipeline = [
-    {"$match": {"status": "active"}},
-    {"$group": {"_id": "$role", "count": {"$sum": 1}}},
-    {"$sort": {"count": -1}}
-]
-results = list(collection.aggregate(pipeline))
-print("Aggregation Results:", results)
+col.insert_one({"sensor": "alpha-01", "temp": 36.4, "status": "nominal"})
+print(col.find_one({"sensor": "alpha-01"}))
 ```
 
-#### Node.js / TypeScript (`mongodb` / `mongoose`):
-```typescript
-import { MongoClient } from 'mongodb';
-
-const client = new MongoClient('mongodb://127.0.0.1:27017');
-await client.connect();
-const collection = client.db('enterprise_db').collection('metrics');
-
-await collection.insertOne({ server: 'node-01', cpu_load: 14.2, _ttl: 60 });
-console.log('Document inserted with 60s auto-expiry TTL!');
-```
-
-#### PHP (`mongodb/mongodb`):
-```php
-<?php
-require 'vendor/autoload.php';
-
-$client = new MongoDB\Client("mongodb://127.0.0.1:27017");
-$collection = $client->enterprise_db->orders;
-$collection->insertOne(['order_id' => 'ORD-991', 'total' => 1450.00]);
+#### D. 🌐 HTTP / REST API & WebSockets:
+```bash
+curl -X POST http://127.0.0.1:27018/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT * FROM users WHERE score >= 9000"}'
 ```
 
 ---
@@ -237,6 +267,7 @@ Key Studio Workspaces:
 - **⚡ FaizQL & SQL Console**: Multi-dialect SQL & MongoDB playground with **Cost-Based `EXPLAIN` Query Plan Visualizer**.
 - **📡 Live Change Streams**: Reactive WebSocket event stream monitor.
 - **🌐 Cluster & Shards**: Raft node topology visualizer, shard allocation heatmap, and one-click failover.
+- **🌍 Multi-Region Mesh**: Active-Active Geo-Replication monitor and cross-datacenter latency metrics.
 - **🔍 Full-Text Search**: Okapi BM25 relevance score inspection and fuzzy typo testing.
 - **⏳ TTL & Cache**: Live countdown tickers for expiring session tokens and OTP keys.
 - **💾 Backup & Disaster Recovery**: Point-in-time snapshot manager with **Automated Hourly/Daily Schedules & SOC2 Retention**.
@@ -249,7 +280,7 @@ Key Studio Workspaces:
 ## 📚 Comprehensive Documentation
 
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
-* [🌐 Enterprise REST API Reference](docs/API_REFERENCE.md) — Full endpoint reference with authentication, queries, transactions, and migration.
+* [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, and Geo-Replication.
 * [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python, and Go.
 * [⚔️ Competitive Analysis & Architectural Matrix](docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
 * [☸️ Kubernetes HA Cluster Guide](k8s/README.md) — 3-Node StatefulSet architecture with automated persistence and zero-downtime rolling upgrades.
