@@ -687,6 +687,156 @@ print("Financial Aggregation Report:", results)</code></pre>
         </div>
       </section>
 
+      <!-- Section: Architecture -->
+      <section id="architecture">
+        <h2>🏛️ Architecture & Storage Engine</h2>
+        <p>FaizDB utilizes a state-of-the-art Log-Structured Merge Tree (LSM-Tree) with non-blocking concurrency primitives in Rust.</p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">Lock-Free MemTable</div>
+            <div class="feature-desc">Crossbeam SkipList memory buffers allow concurrent multi-threaded writes at 320k+ ops/sec without mutex bottlenecks.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">Sequential Write-Ahead Log (WAL)</div>
+            <div class="feature-desc">Guarantees strict ACID durability with CRC32 integrity verification before memory acknowledge.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">Zero-Allocation Chunking</div>
+            <div class="feature-desc">Supports up to 256 MB per document using memory-mapped streaming byte slices.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">Background Compaction</div>
+            <div class="feature-desc">Multi-tiered SSTable compaction merges sorted string tables in worker threads without impacting query latency.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: REST API -->
+      <section id="rest-api">
+        <h2>🌐 HTTP REST API Reference (Port 27018)</h2>
+        <p>Connect any HTTP-capable client, serverless function, or webhook directly to FaizDB:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/v1/health</code></td>
+              <td>Server health check and version telemetry</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/v1/info</code></td>
+              <td>Engine capabilities and feature manifest</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/v1/query</code></td>
+              <td>Execute SQL, MongoDB JSON or FaizQL raw string</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/v1/collections/{name}/documents</code></td>
+              <td>Retrieve all documents in collection</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/v1/collections/{name}/documents</code></td>
+              <td>Insert new JSON document (with optional <code>_ttl</code>)</td>
+            </tr>
+            <tr>
+              <td><code>DELETE</code></td>
+              <td><code>/v1/collections/{name}/documents/{id}</code></td>
+              <td>Delete document by unique ID</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/v1/collections/{name}/aggregate</code></td>
+              <td>Execute complex aggregation pipeline stage array</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/v1/collections/{name}/search</code></td>
+              <td>Execute Okapi BM25 fuzzy full-text search</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: WebSockets -->
+      <section id="websockets">
+        <h2>📡 WebSocket Change Streams (Reactive CDC)</h2>
+        <p>Subscribe to database modifications in real-time with sub-millisecond event push:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>javascript</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>// Connect to Global Change Stream:
+const ws = new WebSocket('ws://localhost:27018/v1/subscribe');
+
+ws.onmessage = (event) => {
+  const change = JSON.parse(event.data);
+  console.log(`[CDC] Op: ${change.op_type} on Collection: ${change.collection}`);
+  console.log('Document Data:', change.document);
+};</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Multi-Dialect Query Engine -->
+      <section id="query-console">
+        <h2>🧠 Multi-Dialect Query Engine</h2>
+        <p>FaizDB's AST Parser automatically interprets multiple query dialects seamlessly:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql dialect</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>-- 1. SQL Standard
+SELECT name, role, score FROM players WHERE score > 5000 ORDER BY score DESC LIMIT 10;
+INSERT INTO players {"name": "Faiz", "role": "Architect", "score": 9900};
+UPDATE players SET score = 10000 WHERE name = 'Faiz';
+DELETE FROM players WHERE score < 1000;</code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>mongodb json dialect</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>// 2. MongoDB Shell Dialect
+db.players.find({ "score": { "$gte": 5000 } }).sort({ "score": -1 }).limit(10);
+db.players.insertOne({ "name": "Cyber Specialist", "role": "Security" });
+db.players.deleteOne({ "name": "Inactive User" });</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Raft Cluster & Sharding -->
+      <section id="raft-cluster">
+        <h2>🌐 Raft Consensus, High Availability & Auto-Sharding</h2>
+        <p>FaizDB includes a native Raft distributed consensus implementation with automated leader election and 16,384 virtual hash slots:</p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">Automated Failover</div>
+            <div class="feature-desc">When a leader node goes offline, followers initiate a Term Election and elect a new Leader within 150-300ms.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">Consistent Hash Ring</div>
+            <div class="feature-desc">Keys are partitioned into 16,384 virtual slots using CRC32 hash algorithms for balanced distribution.</div>
+          </div>
+        </div>
+      </section>
+
       <!-- Section 8: Backup & Disaster Recovery -->
       <section id="backup-restore">
         <h2>💾 Backup, Snapshot & Point-In-Time Disaster Recovery (PITR)</h2>
@@ -704,10 +854,100 @@ faizdb backup --output ./backups/faizdb_snapshot_2026.json
 faizdb restore --input ./backups/faizdb_snapshot_2026.json</code></pre>
         </div>
       </section>
+
+      <!-- Section: Python SDK -->
+      <section id="sdk-python">
+        <h2>🐍 Python Integration Guide</h2>
+        <p>Connect using the official Python MongoDB driver (<code>pymongo</code>):</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import pymongo
+
+client = pymongo.MongoClient("mongodb://127.0.0.1:27017")
+db = client["production_db"]
+collection = db["telemetry"]
+
+collection.insert_one({"sensor": "alpha-01", "humidity": 65.2, "status": "ok"})
+print("Retrieved:", collection.find_one({"sensor": "alpha-01"}))</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Node.js SDK -->
+      <section id="sdk-node">
+        <h2>⚡ Node.js & TypeScript Integration Guide</h2>
+        <p>Connect using <code>mongodb</code> or <code>mongoose</code>:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>typescript</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import { MongoClient } from 'mongodb';
+
+const client = new MongoClient('mongodb://127.0.0.1:27017');
+await client.connect();
+const db = client.db('enterprise_app');
+const users = db.collection('customers');
+
+await users.insertOne({ company: 'Acme Corp', tier: 'Enterprise', mrr: 5000 });
+console.log('Customer saved successfully in FaizDB!');</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: PHP SDK -->
+      <section id="sdk-php">
+        <h2>🐘 PHP & Laravel Integration Guide</h2>
+        <p>Connect directly via the official MongoDB PHP Driver or cURL REST API:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>php</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>&lt;?php
+// Using MongoDB PHP Extension:
+$manager = new MongoDB\Driver\Manager("mongodb://127.0.0.1:27017");
+$bulk = new MongoDB\Driver\BulkWrite;
+$bulk->insert(['name' => 'Faiz Aziz', 'role' => 'Architect', 'created_at' => date('c')]);
+$manager->executeBulkWrite('app_db.users', $bulk);
+echo "Document inserted successfully into FaizDB!\n";
+?&gt;</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Static Web -->
+      <section id="sdk-static-web">
+        <h2>🌍 Pure Static HTML & JS Web Integration</h2>
+        <p>Build direct client-side database integrations with zero backend boilerplate:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>javascript</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>// 1. Save Document
+await fetch('http://localhost:27018/v1/collections/leaderboard/documents', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ player: 'Hero', score: 9500 })
+});
+
+// 2. Fetch Documents
+const res = await fetch('http://localhost:27018/v1/collections/leaderboard/documents');
+const { data } = await res.json();
+console.log('Leaderboard:', data);</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Mobile & Smart TV -->
+      <section id="sdk-mobile-tv">
+        <h2>📱 Mobile Apps (Flutter / React Native) & Smart TV Integration</h2>
+        <p>FaizDB supports both network connections (via REST / WebSockets) and embedded native engines (compiled into <code>.so</code> / <code>.dylib</code> / <code>.framework</code> for offline embedded storage in Flutter & React Native).</p>
+      </section>
     </main>
   </div>
 
-  <!-- JavaScript for Search, Theme Toggle, and Copy Buttons -->
+  <!-- JavaScript for Search, Theme Toggle, Copy Buttons, and Active Link Highlighting -->
   <script>
     // Theme Toggle
     function toggleTheme() {
@@ -753,6 +993,26 @@ faizdb restore --input ./backups/faizdb_snapshot_2026.json</code></pre>
         const text = sec.innerText.toLowerCase();
         sec.style.display = text.includes(q) ? 'block' : 'none';
       });
+    });
+
+    // Active Sidebar Link on Scroll (Intersection Observer)
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.getAttribute('id');
+          document.querySelectorAll('.sidebar-link').forEach(link => {
+            if (link.getAttribute('href') === `#${id}`) {
+              link.classList.add('active');
+            } else {
+              link.classList.remove('active');
+            }
+          });
+        }
+      });
+    }, { rootMargin: '-10% 0px -70% 0px' });
+
+    document.querySelectorAll('main.content section').forEach(section => {
+      observer.observe(section);
     });
   </script>
 </body>
