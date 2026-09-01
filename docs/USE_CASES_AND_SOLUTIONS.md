@@ -41,7 +41,7 @@ FaizDB is engineered from the ground up as an **AI-Native database engine**, con
 
 ### 1.1 Semantic Caching (Slash 70%+ LLM API Costs)
 
-**The Challenge:** Frontier AI model API calls (**GPT-5, Claude 3.7 Sonnet, Gemini 2.5 Pro, DeepSeek-R1**) are computationally expensive and introduce latency (1–3 seconds). Semantically identical user questions (e.g., *"How much is the Enterprise subscription?"* and *"What are the Enterprise plan pricing tiers?"*) repeatedly trigger costly LLM inferences.
+**The Challenge:** API calls to frontier foundation models (such as the OpenAI GPT series, Anthropic Claude, Google Gemini, DeepSeek, and open-weight models like Llama) are computationally expensive and introduce latency (1–3 seconds). Semantically identical user questions (e.g., *"How much is the Enterprise subscription?"* and *"What are the Enterprise plan pricing tiers?"*) repeatedly trigger costly LLM inferences.
 
 **The FaizDB Solution:**
 1. Inbound user prompts are converted to vector embeddings.
@@ -63,9 +63,9 @@ def ask_ai_with_semantic_cache(user_prompt: str, prompt_vector: list[float]) -> 
         print("⚡ Semantic Cache Hit! Saved LLM API tokens.")
         return cached[0]["document"]["response"]
 
-    # 2. Cache Miss: Query frontier flagship LLM (GPT-5 / Claude 3.7 / Gemini 2.5)
+    # 2. Cache Miss: Query frontier foundation model (OpenAI GPT, Claude, Gemini, etc.)
     response = openai.chat.completions.create(
-        model="gpt-5",
+        model="gpt-4o",  # or any preferred foundation model
         messages=[{"role": "user", "content": user_prompt}]
     ).choices[0].message.content
 
