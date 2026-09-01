@@ -233,6 +233,70 @@ class FaizApiClient {
     if (!json.success) throw new Error(json.error || 'Insert failed');
     return json.data.id;
   }
+
+  // ── Security & Audit Trail ────────────────────────────────────────────────
+
+  async getAuditLogs(limit: number = 50): Promise<Array<{
+    timestamp: string;
+    event: string;
+    ip: string;
+    path: string;
+    status: number;
+    request_id: string;
+    engine: string;
+  }>> {
+    const res = await this.fetch(`${this.baseUrl}/v1/audit/logs?limit=${limit}`);
+    const json: ApiResponse<any[]> = await res.json();
+    if (!json.success || !json.data) throw new Error(json.error || 'Failed to fetch audit logs');
+    return json.data;
+  }
+
+  async generateToken(username: string, role: string, validSeconds: number = 86400 * 30): Promise<{
+    token: string;
+    username: string;
+    role: string;
+    valid_seconds: number;
+  }> {
+    const res = await this.fetch(`${this.baseUrl}/v1/auth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, role, valid_seconds: validSeconds }),
+    });
+    const json: ApiResponse<any> = await res.json();
+    if (!json.success || !json.data) throw new Error(json.error || 'Failed to generate token');
+    return json.data;
+  }
+
+  // ── Backup & Disaster Recovery ───────────────────────────────────────────
+
+  async createBackup(passphrase?: string): Promise<any> {
+    const res = await this.fetch(`${this.baseUrl}/v1/backup/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase: passphrase || undefined }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Backup creation failed');
+    return json.data;
+  }
+
+  async listBackups(): Promise<any[]> {
+    const res = await this.fetch(`${this.baseUrl}/v1/backup/list`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to list backups');
+    return json.data || [];
+  }
+
+  async restoreBackup(filename?: string, passphrase?: string): Promise<any> {
+    const res = await this.fetch(`${this.baseUrl}/v1/backup/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename, passphrase }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Restore failed');
+    return json.data;
+  }
 }
 
 export const api = new FaizApiClient();

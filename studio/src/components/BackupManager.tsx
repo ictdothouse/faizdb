@@ -11,6 +11,8 @@ import {
   Plus,
   RefreshCw,
   AlertTriangle,
+  Lock,
+  Key,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -43,9 +45,15 @@ export const BackupManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [isRestoring, setIsRestoring] = useState<boolean>(false);
+  
+  // Modals
+  const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
   const [restoreModalOpen, setRestoreModalOpen] = useState<boolean>(false);
+  const [createPassphrase, setCreatePassphrase] = useState<string>('');
+  const [restorePassphrase, setRestorePassphrase] = useState<string>('');
   const [selectedSnapshot, setSelectedSnapshot] = useState<SnapshotManifest | null>(null);
   const [restoreSuccessMsg, setRestoreSuccessMsg] = useState<string | null>(null);
+  const [restoreErrorMsg, setRestoreErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSnapshots();
@@ -54,12 +62,9 @@ export const BackupManager: React.FC = () => {
   const fetchSnapshots = async () => {
     setIsLoading(true);
     try {
-      const res = await api.fetch(`${api.getEndpoint()}/v1/backup/list`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          setSnapshots(json.data);
-        }
+      const list = await api.listBackups();
+      if (Array.isArray(list) && list.length > 0) {
+        setSnapshots(list);
       }
     } catch (e) {
       console.warn('Fetch snapshots error:', e);
@@ -71,12 +76,11 @@ export const BackupManager: React.FC = () => {
   const handleCreateSnapshot = async () => {
     setIsCreating(true);
     try {
-      const res = await api.fetch(`${api.getEndpoint()}/v1/backup/create`, { method: 'POST' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          setSnapshots((prev) => [json.data, ...prev]);
-        }
+      const manifest = await api.createBackup(createPassphrase.trim() || undefined);
+      if (manifest) {
+        setSnapshots((prev) => [manifest, ...prev]);
+        setCreateModalOpen(false);
+        setCreatePassphrase('');
       }
     } catch (e) {
       console.warn('Create snapshot error:', e);
@@ -89,20 +93,14 @@ export const BackupManager: React.FC = () => {
     if (!selectedSnapshot) return;
     setIsRestoring(true);
     setRestoreSuccessMsg(null);
+    setRestoreErrorMsg(null);
     try {
-      const res = await api.fetch(`${api.getEndpoint()}/v1/backup/restore`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) {
-          setRestoreSuccessMsg(`Snapshot restored successfully! SHA256 integrity verified.`);
-        }
+      const res = await api.restoreBackup(undefined, restorePassphrase.trim() || undefined);
+      if (res.restored) {
+        setRestoreSuccessMsg(`Snapshot restored successfully! Restored ${res.documents_restored} documents.`);
       }
-    } catch (e) {
-      console.warn('Restore error:', e);
+    } catch (e: any) {
+      setRestoreErrorMsg(e.message || 'Restore failed');
     } finally {
       setIsRestoring(false);
     }
@@ -111,7 +109,7 @@ export const BackupManager: React.FC = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] overflow-y-auto p-6 space-y-6 bg-slate-50 dark:bg-zinc-950">
       {/* Top Header Card */}
-      <div className="p-5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center justify-between">
+      <div className="p-5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400">
             <Archive className="w-5 h-5" />
@@ -119,12 +117,12 @@ export const BackupManager: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-                Automated Consistent Backup & Disaster Recovery (PITR)
+                Automated Consistent Backup & AES-256 Disaster Recovery
               </h2>
-              <Badge variant="success">SHA256 Verified</Badge>
+              <Badge variant="success">AES-256-GCM Supported</Badge>
             </div>
             <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Non-blocking atomic point-in-time database snapshots with zero downtime restoration.
+              Non-blocking atomic point-in-time database snapshots with optional military-grade encryption.
             </p>
           </div>
         </div>
@@ -135,9 +133,9 @@ export const BackupManager: React.FC = () => {
             <span>Refresh</span>
           </Button>
 
-          <Button variant="primary" size="sm" onClick={handleCreateSnapshot} loading={isCreating}>
+          <Button variant="primary" size="sm" onClick={() => setCreateModalOpen(true)}>
             <Plus className="w-3.5 h-3.5" />
-            <span>Create Snapshot Now</span>
+            <span>Create Snapshot</span>
           </Button>
         </div>
       </div>
@@ -168,13 +166,13 @@ export const BackupManager: React.FC = () => {
 
         <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
           <span className="text-slate-500 dark:text-zinc-400 uppercase tracking-wider font-semibold">
-            Integrity Check
+            Encryption Standard
           </span>
           <div className="flex items-center gap-2">
-            <FileCheck className="w-4 h-4 text-indigo-500" />
-            <p className="text-lg font-bold text-slate-900 dark:text-zinc-100">SHA-256</p>
+            <Lock className="w-4 h-4 text-emerald-500" />
+            <p className="text-lg font-bold text-slate-900 dark:text-zinc-100">AES-256-GCM</p>
           </div>
-          <p className="text-[11px] text-indigo-600 dark:text-indigo-400">Cryptographically Validated</p>
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400">AEAD Tamper-Evident</p>
         </div>
 
         <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-1.5">
@@ -199,13 +197,14 @@ export const BackupManager: React.FC = () => {
             </h3>
           </div>
           <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
-            Format: .faizsnap JSON Archive
+            Format: .json / .enc.json Snapshot Archives
           </span>
         </div>
 
         <div className="space-y-3">
           {snapshots.map((snap, idx) => {
             const checksumStr = snap.checksum || '';
+            const isEncrypted = checksumStr.includes('Encrypted');
             return (
               <div
                 key={checksumStr || idx}
@@ -220,6 +219,9 @@ export const BackupManager: React.FC = () => {
                       Snapshot {new Date(snap.created_at).toLocaleString()}
                     </span>
                     <Badge variant="info">{snap.total_documents} Documents</Badge>
+                    {isEncrypted && (
+                      <Badge variant="success">🔒 AES-256 Encrypted</Badge>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -229,6 +231,8 @@ export const BackupManager: React.FC = () => {
                       onClick={() => {
                         setSelectedSnapshot(snap);
                         setRestoreSuccessMsg(null);
+                        setRestoreErrorMsg(null);
+                        setRestorePassphrase('');
                         setRestoreModalOpen(true);
                       }}
                     >
@@ -254,7 +258,7 @@ export const BackupManager: React.FC = () => {
                   <div className="truncate">
                     <span className="text-slate-400 dark:text-zinc-500">Checksum:</span>{' '}
                     <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold">
-                      {checksumStr.substring(0, 16)}
+                      {checksumStr}
                     </span>
                   </div>
                 </div>
@@ -263,6 +267,45 @@ export const BackupManager: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Create Snapshot Modal */}
+      <Modal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        title="Create Database Snapshot"
+      >
+        <div className="space-y-4 font-mono text-xs">
+          <p className="text-slate-600 dark:text-zinc-300 font-sans text-xs">
+            Creates an atomic snapshot of all collections and writes it to disk.
+          </p>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-mono text-slate-800 dark:text-zinc-200 font-semibold flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>AES-256 Encryption Passphrase (Optional)</span>
+            </label>
+            <input
+              type="password"
+              value={createPassphrase}
+              onChange={(e) => setCreatePassphrase(e.target.value)}
+              placeholder="Leave blank for unencrypted JSON snapshot"
+              className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+            <p className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans">
+              If provided, the snapshot payload will be encrypted with AES-256-GCM.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleCreateSnapshot} loading={isCreating}>
+              Create Snapshot
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Restore Confirmation Modal */}
       <Modal
@@ -289,10 +332,10 @@ export const BackupManager: React.FC = () => {
               <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 space-y-1">
                 <div className="flex items-center gap-2 font-bold">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  <span>Point-in-Time Restoration Warning</span>
+                  <span>Point-in-Time Restoration Notice</span>
                 </div>
                 <p className="text-[11px]">
-                  Restoring will re-hydrate documents into target collections. Cryptographic checksum will be verified automatically before restoring.
+                  Restoring will re-hydrate documents into target collections.
                 </p>
               </div>
 
@@ -307,6 +350,27 @@ export const BackupManager: React.FC = () => {
                   <div>
                     <span className="text-slate-400 dark:text-zinc-500">Checksum:</span> {selectedSnapshot.checksum}
                   </div>
+                </div>
+              )}
+
+              {/* Passphrase Input if encrypted */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono text-slate-800 dark:text-zinc-200 font-semibold flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Decryption Passphrase (If encrypted)</span>
+                </label>
+                <input
+                  type="password"
+                  value={restorePassphrase}
+                  onChange={(e) => setRestorePassphrase(e.target.value)}
+                  placeholder="Enter passphrase to decrypt AES-256 snapshot"
+                  className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              {restoreErrorMsg && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-xs">
+                  {restoreErrorMsg}
                 </div>
               )}
 

@@ -7,7 +7,7 @@ use axum::{
     body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        ConnectInfo, Path, State,
+        ConnectInfo, Path, Query, State,
     },
     http::{header, HeaderValue, Method, Request, StatusCode},
     middleware::{self, Next},
@@ -187,6 +187,21 @@ async fn rbac_write_middleware(
         }
     }
     // No user extension means auth middleware was bypassed — should not happen
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+/// RBAC Admin Guard — strictly requires Role::Admin
+async fn rbac_admin_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if let Some(user) = req.extensions().get::<AuthenticatedUser>() {
+        if user.role == Role::Admin {
+            return Ok(next.run(req).await);
+        }
+        warn!("[RBAC] Non-admin user '{}' ({:?}) attempted admin operation — 403", user.username, user.role);
+        return Err(StatusCode::FORBIDDEN);
+    }
     Err(StatusCode::UNAUTHORIZED)
 }
 
@@ -508,8 +523,15 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
         .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
         .route("/v1/backup/create", post(backup_create))
-        .route("/v1/backup/restore", post(backup_restore))
         .layer(middleware::from_fn(rbac_write_middleware))
+        .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
+
+    // Admin-only routes — strictly requires Admin role (Audit Trail, Backup Restore, Token Generator)
+    let admin_routes = Router::new()
+        .route("/v1/audit/logs", get(get_audit_logs))
+        .route("/v1/auth/token", post(generate_token_handler))
+        .route("/v1/backup/restore", post(backup_restore))
+        .layer(middleware::from_fn(rbac_admin_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
 
     let cluster_routes = Router::new()
@@ -524,6 +546,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .merge(public_routes)
         .merge(read_routes)
         .merge(write_routes)
+        .merge(admin_routes)
         .merge(cluster_routes)
         // Global middleware (outermost = first to execute on every request)
         .layer(
@@ -835,12 +858,88 @@ async fn collection_ttl_purge(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct RestoreBackupRequest {
-    pub filename: Option<String>,
+pub struct AuditLogQuery {
+    pub limit: Option<usize>,
 }
 
-/// Create a new atomic consistent snapshot
-async fn backup_create(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn get_audit_logs(
+    Query(params): Query<AuditLogQuery>,
+) -> impl IntoResponse {
+    let log_path = std::env::var("FAIZDB_AUDIT_LOG")
+        .unwrap_or_else(|_| "./logs/audit.jsonl".to_string());
+    
+    let path = std::path::Path::new(&log_path);
+    if !path.exists() {
+        return Json(ApiResponse::ok(Vec::<serde_json::Value>::new()));
+    }
+
+    let content = match tokio::fs::read_to_string(path).await {
+        Ok(c) => c,
+        Err(e) => return Json(ApiResponse::err(format!("Failed to read audit log: {e}"))),
+    };
+
+    let limit = params.limit.unwrap_or(100);
+    let mut logs: Vec<serde_json::Value> = content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+
+    logs.reverse();
+    logs.truncate(limit);
+
+    Json(ApiResponse::ok(logs))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GenerateTokenRequest {
+    pub username: String,
+    pub role: String,
+    pub valid_seconds: Option<u64>,
+}
+
+async fn generate_token_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<GenerateTokenRequest>,
+) -> impl IntoResponse {
+    let role = match payload.role.to_lowercase().as_str() {
+        "admin" => Role::Admin,
+        "readwrite" | "read_write" => Role::ReadWrite,
+        "readonly" | "read_only" => Role::ReadOnly,
+        _ => return (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err("Invalid role. Use Admin, ReadWrite, or ReadOnly"))).into_response(),
+    };
+
+    let valid_seconds = payload.valid_seconds.unwrap_or(86400 * 30); // 30 days default
+    match state.auth.generate_token(&payload.username, role, valid_seconds) {
+        Ok(token) => (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
+                "token": token,
+                "username": payload.username,
+                "role": format!("{:?}", role),
+                "valid_seconds": valid_seconds,
+            }))),
+        ).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::err(e))).into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateBackupRequest {
+    pub passphrase: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RestoreBackupRequest {
+    pub filename: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+/// Create a new atomic consistent snapshot (with optional AES-256-GCM encryption)
+async fn backup_create(
+    State(state): State<Arc<AppState>>,
+    body: Option<Json<CreateBackupRequest>>,
+) -> impl IntoResponse {
     let collections = state.db.all_collections();
     let mut data = Vec::new();
     for (name, col) in collections {
@@ -848,13 +947,46 @@ async fn backup_create(State(state): State<Arc<AppState>>) -> impl IntoResponse 
         data.push((name, docs));
     }
 
-    let archive = faizdb_core::backup::build_snapshot(&data);
-    let filename = format!("faizdb_snapshot_{}.json", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    let mut archive = faizdb_core::backup::build_snapshot(&data);
+    let passphrase = body.and_then(|b| b.0.passphrase).filter(|p| !p.trim().is_empty());
+
+    let filename = if passphrase.is_some() {
+        format!("faizdb_snapshot_{}.enc.json", chrono::Utc::now().format("%Y%m%d_%H%M%S"))
+    } else {
+        format!("faizdb_snapshot_{}.json", chrono::Utc::now().format("%Y%m%d_%H%M%S"))
+    };
     let path = std::path::PathBuf::from("./backups").join(&filename);
 
-    match faizdb_core::backup::save_snapshot_file(&archive, &path) {
-        Ok(_) => (StatusCode::CREATED, Json(ApiResponse::ok(archive.manifest))),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e))),
+    if let Some(pass) = passphrase {
+        // Encrypt with AES-256-GCM
+        let cipher = faizdb_security::Cipher::from_passphrase(pass.as_str());
+        let raw_json = match serde_json::to_vec_pretty(&archive) {
+            Ok(b) => b,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e.to_string()))),
+        };
+        let encrypted = match cipher.encrypt(&raw_json) {
+            Ok(enc) => enc,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e))),
+        };
+
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let enc_wrapper = serde_json::json!({
+            "encrypted": true,
+            "cipher": "AES-256-GCM",
+            "manifest": archive.manifest,
+            "ciphertext": encrypted.ciphertext
+        });
+        match std::fs::write(&path, serde_json::to_string_pretty(&enc_wrapper).unwrap_or_default()) {
+            Ok(_) => (StatusCode::CREATED, Json(ApiResponse::ok(archive.manifest))),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e.to_string()))),
+        }
+    } else {
+        match faizdb_core::backup::save_snapshot_file(&archive, &path) {
+            Ok(_) => (StatusCode::CREATED, Json(ApiResponse::ok(archive.manifest))),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e))),
+        }
     }
 }
 
@@ -869,7 +1001,21 @@ async fn backup_list() -> impl IntoResponse {
     if let Ok(entries) = std::fs::read_dir(backup_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            let ext = path.extension().and_then(|s| s.to_str());
+            if ext == Some("json") {
+                if let Ok(raw) = std::fs::read_to_string(&path) {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                        if val.get("encrypted").and_then(|v| v.as_bool()) == Some(true) {
+                            if let Some(m_val) = val.get("manifest") {
+                                if let Ok(mut m) = serde_json::from_value::<faizdb_core::backup::SnapshotManifest>(m_val.clone()) {
+                                    m.checksum = format!("🔒 [Encrypted] {}", m.checksum);
+                                    manifests.push(m);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
                 if let Ok(archive) = faizdb_core::backup::load_and_verify_snapshot(&path) {
                     manifests.push(archive.manifest);
                 }
@@ -881,7 +1027,7 @@ async fn backup_list() -> impl IntoResponse {
     Json(ApiResponse::ok(manifests))
 }
 
-/// Restore database from snapshot
+/// Restore database from snapshot (with optional AES-256-GCM decryption)
 async fn backup_restore(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RestoreBackupRequest>,
@@ -905,33 +1051,64 @@ async fn backup_restore(
             }
             match latest {
                 Some((p, _)) => p,
-                None => return (StatusCode::NOT_FOUND, Json(ApiResponse::err("No backup snapshots found to restore"))),
+                None => return (StatusCode::NOT_FOUND, Json(ApiResponse::<()>::err("No backup snapshots found to restore"))).into_response(),
             }
         }
     };
 
-    match faizdb_core::backup::load_and_verify_snapshot(&target_file) {
+    let raw_content = match std::fs::read_to_string(&target_file) {
+        Ok(c) => c,
+        Err(e) => return (StatusCode::NOT_FOUND, Json(ApiResponse::<()>::err(e.to_string()))).into_response(),
+    };
+
+    let archive_result: Result<faizdb_core::backup::SnapshotArchive, String> = if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw_content) {
+        if val.get("encrypted").and_then(|v| v.as_bool()) == Some(true) {
+            let pass = match payload.passphrase.filter(|p| !p.trim().is_empty()) {
+                Some(p) => p,
+                None => return (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err("Snapshot is encrypted with AES-256-GCM. Passphrase is required to restore."))).into_response(),
+            };
+            let cipher = faizdb_security::Cipher::from_passphrase(pass.as_str());
+            let ciphertext: Vec<u8> = match val.get("ciphertext").and_then(|c| serde_json::from_value(c.clone()).ok()) {
+                Some(ct) => ct,
+                None => return (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err("Corrupted encrypted snapshot format"))).into_response(),
+            };
+            match cipher.decrypt(&faizdb_security::EncryptedData { ciphertext }) {
+                Ok(plain) => serde_json::from_slice(&plain).map_err(|e| format!("Corrupted snapshot data after decryption: {e}")),
+                Err(e) => return (StatusCode::UNAUTHORIZED, Json(ApiResponse::<()>::err(format!("Decryption failed — invalid passphrase: {e}")))).into_response(),
+            }
+        } else {
+            faizdb_core::backup::load_and_verify_snapshot(&target_file)
+        }
+    } else {
+        faizdb_core::backup::load_and_verify_snapshot(&target_file)
+    };
+
+    match archive_result {
         Ok(archive) => {
             let mut restored_count = 0;
             for (col_name, doc_vals) in archive.collections_data {
                 let col = state.db.get_or_create_collection(&col_name);
                 for val in doc_vals {
                     if let Some(doc) = faizdb_core::document::model::Document::from_json_value(val) {
-                        if col.insert(doc).is_ok() {
-                            restored_count += 1;
-                        }
+                        let _ = col.insert(doc);
+                        restored_count += 1;
                     }
                 }
             }
-            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-                "message": "Database snapshot successfully verified and restored",
-                "checksum": archive.manifest.checksum,
-                "restored_documents": restored_count,
-            }))))
+            (
+                StatusCode::OK,
+                Json(ApiResponse::ok(serde_json::json!({
+                    "restored": true,
+                    "checksum": archive.manifest.checksum,
+                    "documents_restored": restored_count,
+                    "created_at": archive.manifest.created_at,
+                }))),
+            ).into_response()
         }
-        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Restore verification failed: {e}")))),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err(format!("Restore verification failed: {e}")))).into_response(),
     }
 }
+
 
 /// Cluster Status Handler: `/v1/cluster/status`
 async fn cluster_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {

@@ -36,6 +36,14 @@ impl Cipher {
         }
     }
 
+    /// Create a cipher by deriving a 256-bit key from a user passphrase using SHA-256
+    pub fn from_passphrase(passphrase: &str) -> Self {
+        let hash = ring::digest::digest(&ring::digest::SHA256, passphrase.as_bytes());
+        let mut key = [0u8; 32];
+        key.copy_from_slice(hash.as_ref());
+        Self::new(key)
+    }
+
     /// Generate a cryptographically secure random 256-bit key
     pub fn generate_key() -> Result<[u8; 32], String> {
         let rng = SystemRandom::new();
