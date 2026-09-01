@@ -3,53 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 158 64% 42%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --border: 214 32% 90%;
-    --input: 214 32% 90%;
-    --sidebar: 0 0% 100%;
-    --sidebar-border: 214 32% 90%;
-  }
-
-  .dark {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 158 64% 52%;
-    --primary-foreground: 240 10% 4%;
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 4% 16%;
-    --accent-foreground: 0 0% 98%;
-    --border: 240 4% 18%;
-    --input: 240 4% 18%;
-    --sidebar: 240 10% 5%;
-    --sidebar-border: 240 4% 14%;
-  }
-
-  * {
-    @apply border-border;
-  }
   body {
-    @apply bg-background text-foreground transition-colors duration-150;
+    @apply bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100 transition-colors duration-150;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
@@ -71,18 +26,4 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.5);
-}
-
-.glass-panel {
-  background-color: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
-}
-
-.table-cell-hover {
-  transition: background-color 0.12s ease;
-}
-
-.table-cell-hover:hover {
-  background-color: hsl(var(--muted) / 0.7);
 }

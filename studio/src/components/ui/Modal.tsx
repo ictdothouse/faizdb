@@ -42,13 +42,13 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Dialog Box */}
       <div
-        className={`relative w-full ${maxWidth} glass-panel bg-card border border-border rounded-xl shadow-2xl p-6 z-10 animate-in fade-in zoom-in-95 duration-150`}
+        className={`relative w-full ${maxWidth} bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-2xl p-6 z-10 animate-in fade-in zoom-in-95 duration-150`}
       >
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-border">
-          <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-zinc-800">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-100">{title}</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>

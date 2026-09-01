@@ -80,25 +80,25 @@ export const VectorExplorer: React.FC = () => {
     .slice(0, topK);
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-4rem)]">
+    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-4rem)] bg-slate-50 dark:bg-zinc-950">
       {/* Top Banner */}
-      <div className="glass-panel p-5 rounded-xl border border-border space-y-4">
+      <div className="p-5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400">
               <BrainCircuit className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
                 Hierarchical Navigable Small World (HNSW) ANN Engine
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
                 Native vector similarity indexing with zero external plugins required.
               </p>
             </div>
           </div>
           <Badge variant="success" className="gap-1">
-            <Zap className="w-3 h-3 text-emerald-500" />
+            <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400 fill-current" />
             <span>Sub-ms ANN Search</span>
           </Badge>
         </div>
@@ -106,7 +106,7 @@ export const VectorExplorer: React.FC = () => {
         {/* Vector Query Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
           <div className="md:col-span-2 space-y-1.5">
-            <label className="text-xs font-mono font-medium text-foreground">
+            <label className="text-xs font-mono font-medium text-slate-700 dark:text-zinc-300">
               Query Embedding Vector (Float Array)
             </label>
             <div className="relative">
@@ -114,22 +114,22 @@ export const VectorExplorer: React.FC = () => {
                 type="text"
                 value={queryVector}
                 onChange={(e) => setQueryVector(e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-emerald-300 placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 placeholder="e.g. 0.85, 0.42, 0.15, 0.93"
               />
             </div>
             <div className="flex items-center gap-2 pt-1">
-              <span className="text-[11px] text-muted-foreground font-mono">Quick vectors:</span>
+              <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">Quick vectors:</span>
               <button
                 onClick={() => setQueryVector('0.85, 0.42, 0.15, 0.93')}
-                className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+                className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:underline font-semibold"
               >
                 AI/NLP Topic
               </button>
-              <span className="text-border">•</span>
+              <span className="text-slate-300 dark:text-zinc-700">•</span>
               <button
                 onClick={() => setQueryVector('0.15, 0.92, 0.70, 0.25')}
-                className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+                className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400 hover:underline font-semibold"
               >
                 Distributed Systems
               </button>
@@ -137,13 +137,13 @@ export const VectorExplorer: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-mono font-medium text-foreground">
+            <label className="text-xs font-mono font-medium text-slate-700 dark:text-zinc-300">
               Distance Metric
             </label>
             <select
               value={metric}
               onChange={(e) => setMetric(e.target.value as any)}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
               <option value="cosine">Cosine Distance (Recommended)</option>
               <option value="euclidean">Euclidean (L2) Distance</option>
@@ -155,35 +155,35 @@ export const VectorExplorer: React.FC = () => {
       </div>
 
       {/* Results Ranking */}
-      <div className="glass-panel p-5 rounded-xl border border-border space-y-4">
-        <div className="flex items-center justify-between pb-2 border-b border-border">
+      <div className="p-5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="text-sm font-semibold text-foreground">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
               Nearest Neighbors (Top {topK} Matches)
             </h3>
           </div>
-          <span className="text-xs text-muted-foreground font-mono">Indexed Embeddings: 5</span>
+          <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">Indexed Embeddings: 5</span>
         </div>
 
         <div className="space-y-3">
           {scoredResults.map((item, idx) => (
             <div
               key={item.id}
-              className="p-4 rounded-lg bg-muted/40 border border-border hover:border-border/80 transition-all space-y-2.5"
+              className="p-4 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-zinc-700 transition-all space-y-2.5"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold font-mono px-2 py-0.5 rounded bg-muted border border-border text-foreground">
+                  <span className="text-xs font-bold font-mono px-2 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200">
                     #{idx + 1}
                   </span>
-                  <span className="text-xs font-semibold text-foreground font-mono">
+                  <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100 font-mono">
                     {item.title}
                   </span>
                   <Badge variant="outline">{item.category}</Badge>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400">
                     Score: {item.score}
                   </span>
                 </div>
@@ -191,16 +191,16 @@ export const VectorExplorer: React.FC = () => {
 
               {/* Similarity Bar */}
               <div className="space-y-1">
-                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden border border-border">
+                <div className="w-full bg-slate-200 dark:bg-zinc-800 rounded-full h-2.5 overflow-hidden">
                   <div
-                    className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full transition-all duration-300"
+                    className="bg-emerald-500 h-2.5 rounded-full transition-all duration-300"
                     style={{ width: `${item.percentage}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono pt-0.5">
+                <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-zinc-400 font-mono pt-0.5">
                   <span>ID: {item.id}</span>
                   <span>Embedding: [{item.vector.join(', ')}]</span>
-                  <span className="font-semibold text-foreground">{item.percentage}% Match</span>
+                  <span className="font-semibold text-slate-900 dark:text-zinc-100">{item.percentage}% Match</span>
                 </div>
               </div>
             </div>

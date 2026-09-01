@@ -21,7 +21,7 @@ export const App: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('faizdb_theme');
-    return saved === 'dark' ? 'dark' : 'light'; // Light mode is default!
+    return saved === 'dark' ? 'dark' : 'light'; // Default is Light Mode!
   });
 
   // Modals state
@@ -65,13 +65,10 @@ export const App: React.FC = () => {
     try {
       await api.getHealth();
       setIsConnected(true);
-
-      // Attempt to load documents for default collection
       await loadCollectionDocuments(selectedCollection);
     } catch (e) {
       console.warn('FaizDB Engine connecting/offline:', e);
       setIsConnected(false);
-      // Populate demo fallback documents if engine is offline
       if (documents.length === 0) {
         setDocuments([
           {
@@ -105,7 +102,6 @@ export const App: React.FC = () => {
         setDocuments([]);
       }
     } catch (err) {
-      // Fallback
       console.warn(`Query for ${colName} failed:`, err);
     } finally {
       setLoadingDocs(false);
@@ -129,7 +125,6 @@ export const App: React.FC = () => {
       await api.query(`DELETE FROM ${selectedCollection} WHERE id = '${id}'`);
       setDocuments((prev) => prev.filter((d) => d._id !== id));
     } catch (err) {
-      // Optimistic filter
       setDocuments((prev) => prev.filter((d) => d._id !== id));
     }
   };
@@ -148,7 +143,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100 font-sans">
       {/* Left Navigation Sidebar */}
       <Sidebar
         currentTab={currentTab}
@@ -161,7 +156,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Workspace Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 dark:bg-zinc-950">
         <Header
           currentTab={currentTab}
           selectedCollection={selectedCollection}
@@ -173,7 +168,7 @@ export const App: React.FC = () => {
           onToggleTheme={toggleTheme}
         />
 
-        <main className="flex-1 overflow-hidden bg-background">
+        <main className="flex-1 overflow-hidden bg-slate-50 dark:bg-zinc-950">
           {currentTab === 'overview' && (
             <Overview
               stats={{
@@ -214,19 +209,19 @@ export const App: React.FC = () => {
       >
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-mono text-zinc-300">
+            <label className="text-xs font-mono font-medium text-slate-700 dark:text-zinc-300">
               Document Payload (JSON)
             </label>
             <textarea
               value={newDocJson}
               onChange={(e) => setNewDocJson(e.target.value)}
               rows={8}
-              className="w-full mt-1.5 bg-zinc-950 border border-zinc-700 rounded-lg p-3 font-mono text-xs text-emerald-300 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+              className="w-full mt-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg p-3 font-mono text-xs text-slate-900 dark:text-emerald-300 placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
             />
           </div>
 
           {modalError && (
-            <p className="text-xs font-mono text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-800">
+            <p className="text-xs font-mono text-rose-600 bg-rose-50 dark:bg-rose-950/40 p-2.5 rounded border border-rose-200 dark:border-rose-800">
               {modalError}
             </p>
           )}
@@ -257,7 +252,7 @@ export const App: React.FC = () => {
       >
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-mono text-zinc-300">
+            <label className="text-xs font-mono font-medium text-slate-700 dark:text-zinc-300">
               Collection Identifier Name
             </label>
             <input
@@ -265,7 +260,7 @@ export const App: React.FC = () => {
               value={newColName}
               onChange={(e) => setNewColName(e.target.value)}
               placeholder="e.g. customers, embeddings, transactions"
-              className="w-full mt-1.5 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full mt-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 font-mono text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 

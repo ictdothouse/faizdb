@@ -104,25 +104,25 @@ export const GraphExplorer: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 dark:bg-zinc-950">
       {/* Interactive Graph Canvas Area */}
       <div className="flex-1 flex flex-col p-4 space-y-4">
         {/* Canvas Toolbar */}
-        <div className="glass-panel p-3.5 rounded-xl border border-border flex items-center justify-between">
+        <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Network className="w-4 h-4 text-amber-500" />
-            <span className="text-xs font-semibold text-foreground font-mono">
+            <span className="text-xs font-semibold text-slate-900 dark:text-zinc-100 font-mono">
               Knowledge Graph & GraphRAG Traversal Canvas
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground mr-2">
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-zinc-400 mr-2">
               <span>Depth:</span>
               <select
                 value={traversalDepth}
                 onChange={(e) => setTraversalDepth(Number(e.target.value))}
-                className="bg-background border border-border rounded px-2 py-0.5 text-foreground text-xs"
+                className="bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded px-2 py-0.5 text-slate-900 dark:text-zinc-100 text-xs"
               >
                 <option value={1}>1-Hop</option>
                 <option value={2}>2-Hops</option>
@@ -147,7 +147,7 @@ export const GraphExplorer: React.FC = () => {
         </div>
 
         {/* SVG Interactive Canvas */}
-        <div className="glass-panel flex-1 rounded-xl border border-border relative bg-card overflow-hidden flex items-center justify-center">
+        <div className="flex-1 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm relative overflow-hidden flex items-center justify-center">
           <svg className="w-full h-full min-h-[420px]" viewBox="0 0 700 360">
             {/* Draw Edges */}
             {edges.map((edge, idx) => {
@@ -177,7 +177,7 @@ export const GraphExplorer: React.FC = () => {
                     width={76}
                     height={18}
                     rx={4}
-                    className="fill-card stroke-border"
+                    className="fill-white stroke-slate-200 dark:fill-zinc-900 dark:stroke-zinc-700"
                   />
                   <text
                     x={midX}
@@ -219,7 +219,7 @@ export const GraphExplorer: React.FC = () => {
 
                   <circle
                     r="26"
-                    className="fill-card shadow-sm"
+                    className="fill-white dark:fill-zinc-900 shadow-sm"
                     stroke={node.color}
                     strokeWidth={isSelected ? 3 : 2}
                   />
@@ -238,7 +238,7 @@ export const GraphExplorer: React.FC = () => {
                   <text
                     textAnchor="middle"
                     y="42"
-                    className="fill-foreground font-semibold"
+                    className="fill-slate-900 dark:fill-zinc-100 font-semibold"
                     fontSize="11"
                     fontFamily="sans-serif"
                   >
@@ -250,8 +250,8 @@ export const GraphExplorer: React.FC = () => {
           </svg>
 
           {/* Legend badge */}
-          <div className="absolute bottom-3 left-3 bg-card/90 border border-border rounded-lg p-2.5 text-[10px] font-mono text-muted-foreground space-y-1 shadow-sm">
-            <p className="text-foreground font-semibold">GraphRAG Engine</p>
+          <div className="absolute bottom-3 left-3 bg-white/90 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 rounded-lg p-2.5 text-[10px] font-mono text-slate-500 dark:text-zinc-400 space-y-1 shadow-sm">
+            <p className="text-slate-900 dark:text-zinc-100 font-semibold">GraphRAG Engine</p>
             <p>• Click any node to inspect properties</p>
             <p>• Run "Simulate GraphRAG" to animate traversal</p>
           </div>
@@ -259,17 +259,17 @@ export const GraphExplorer: React.FC = () => {
       </div>
 
       {/* Right Detail Inspector Panel */}
-      <div className="w-80 border-l border-border bg-sidebar p-4 flex flex-col justify-between overflow-y-auto">
+      <div className="w-80 border-l border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 flex flex-col justify-between overflow-y-auto">
         <div className="space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-border">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-zinc-800">
             <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="text-sm font-semibold text-foreground">Vertex Inspector</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">Vertex Inspector</h3>
           </div>
 
           {selectedNode ? (
             <div className="space-y-3">
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-zinc-500">
                   Node Identifier
                 </span>
                 <p className="text-sm font-mono font-bold text-emerald-700 dark:text-emerald-400">
@@ -278,33 +278,33 @@ export const GraphExplorer: React.FC = () => {
               </div>
 
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-zinc-500">
                   Type & Category
                 </span>
-                <p className="text-xs font-semibold text-foreground mt-0.5">
+                <p className="text-xs font-semibold text-slate-900 dark:text-zinc-100 mt-0.5">
                   <Badge variant="info">{selectedNode.type}</Badge>
                 </p>
               </div>
 
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-zinc-500">
                   Document Properties (JSON)
                 </span>
-                <pre className="mt-1 bg-muted/40 p-3 rounded-lg border border-border font-mono text-[11px] text-foreground overflow-x-auto leading-relaxed shadow-xs">
+                <pre className="mt-1 bg-slate-50 dark:bg-zinc-900 p-3 rounded-lg border border-slate-200 dark:border-zinc-800 font-mono text-[11px] text-slate-900 dark:text-emerald-300 overflow-x-auto leading-relaxed shadow-xs">
                   {JSON.stringify(selectedNode.properties, null, 2)}
                 </pre>
               </div>
             </div>
           ) : (
-            <div className="py-12 text-center text-muted-foreground text-xs space-y-2">
-              <Share2 className="w-8 h-8 mx-auto stroke-1 text-muted-foreground/60" />
+            <div className="py-12 text-center text-slate-400 dark:text-zinc-500 text-xs space-y-2">
+              <Share2 className="w-8 h-8 mx-auto stroke-1 text-slate-300 dark:text-zinc-600" />
               <p>Click on any graph node to inspect its document schema and connected edges.</p>
             </div>
           )}
         </div>
 
-        <div className="pt-4 border-t border-border text-[11px] text-muted-foreground font-mono space-y-1">
-          <p className="text-foreground font-semibold">GraphRAG AI Traversal</p>
+        <div className="pt-4 border-t border-slate-200 dark:border-zinc-800 text-[11px] text-slate-500 dark:text-zinc-400 font-mono space-y-1">
+          <p className="text-slate-900 dark:text-zinc-100 font-semibold">GraphRAG AI Traversal</p>
           <p>Enables LLM agents to perform multi-hop contextual reasoning over interconnected relational graphs.</p>
         </div>
       </div>
