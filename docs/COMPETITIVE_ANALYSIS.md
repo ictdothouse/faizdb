@@ -29,10 +29,10 @@ Dokumen ini memperincikan kedudukan strategik, perbandingan arkitektur, kekuatan
 Kebanyakan pangkalan data moden berdepan masalah **"Architecture Sprawl"**—di mana sesebuah syarikat terpaksa menguruskan 3 hingga 5 pangkalan data berbeza (contoh: MongoDB untuk profil pengguna, Qdrant untuk AI embedding, Neo4j untuk graf hubungan, dan Redis untuk caching).
 
 **FaizDB menghapuskan bebanan ini melalui 4 Moat Teras:**
-1. **Drop-in MongoDB Wire Protocol (Port 27017):** Sifar geseran migrasi (Zero-Friction Migration). Pembangun boleh terus menggunakan SDK rasmi MongoDB (`mongoose`, `pymongo`, `mongodb-driver`) tanpa mengubah kod aplikasi sedia ada.
-2. **Enjin Storan Natif Safe Rust (LSM-Tree + Zero-Copy Byte Slices):** Memori efisien, tiada Garbage Collection (GC) pauses, dan *footprint* yang sangat ringan (<50MB idle).
+1. **4-Way Multi-Protocol Gateways (Mongo 27017, Postgres 5432, gRPC 50051, REST 27018):** Sifar geseran migrasi (Zero-Friction Migration). Pembangun boleh terus menggunakan SDK rasmi MongoDB (`mongoose`, `pymongo`), `psql`/DBeaver, atau gRPC tanpa mengubah seni bina aplikasi sedia ada.
+2. **Enjin Storan Natif Safe Rust (LSM-Tree + Zero-Copy Byte Slices):** Memori efisien, tiada Garbage Collection (GC) pauses, dan *footprint* yang sangat ringan (<40MB idle).
 3. **Unified Multi-Model (Document + Graph + Vector HNSW + Full-Text):** Melakukan carian vektor AI serentak dengan *Graph Traversal* dan *Document ACID* dalam satu query tanpa perlu Two-Phase Commit merentas rangkaian.
-4. **Auto-Sharding Teragih (16,384 Raft Virtual Slots):** Pembahagian data dan skala mendatar berautonomi tinggi tanpa konfigurasi rumit.
+4. **Auto-Sharding & Multi-Region CRDTs (16,384 Raft Slots + Active-Active):** Pembahagian data dan skala mendatar berautonomi tinggi serta penyelarasan rentas pusat data global.
 
 ---
 
@@ -41,14 +41,14 @@ Kebanyakan pangkalan data moden berdepan masalah **"Architecture Sprawl"**—di 
 | Dimensi Penilaian | **FaizDB** 🚀 | **SurrealDB** | **FerretDB** | **ArangoDB** | **Qdrant** | **CockroachDB** | **Neo4j** | **MongoDB (Atlas)** | **PostgreSQL (+Extensions)** |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Bahasa Teras** | **Safe Rust** | Rust | Go | C++ | Rust | Go | Java | C++ | C |
-| **Protokol Wire** | **Mongo 27017** + REST/WS | SurrealQL | Mongo 27017 | AQL / HTTP | REST / gRPC | Postgres 26257 | Bolt / Cypher | Mongo Wire | Postgres 5432 |
+| **Protokol Wire** | **4-Way: Mongo/PG/gRPC/REST** | SurrealQL | Mongo 27017 | AQL / HTTP | REST / gRPC | Postgres 26257 | Bolt / Cypher | Mongo Wire | Postgres 5432 |
 | **Storan Enjin** | **LSM-Tree (Zero-Copy)** | KV Engine / RocksDB | Postgres/SQLite Luaran | RocksDB | Custom Vector Store | Pebble (LSM in Go) | Native Graph Store | WiredTiger | Heap MVCC |
 | **Multi-Model** | ✅ Terpadu (Semua) | ✅ Terpadu | ❌ Dokumen Sahaja | ✅ Doc + Graph | ❌ Vektor Sahaja | ❌ Relasional SQL | ❌ Graf Sahaja | ⚠️ Dokumen (Cloud Vektor) | ⚠️ Bergantung Extension |
 | **AI / Vector HNSW** | ✅ Natif Terbina | ✅ Terbina | ❌ Tiada | ⚠️ Plugin | ✅ Sangat Pantas | ❌ Tiada | ⚠️ Terhad | ⚠️ Atlas Sahaja | ⚠️ pgvector (Table Bloat) |
 | **Knowledge Graph (GraphRAG)** | ✅ Natif Terbina | ⚠️ Graph Asas | ❌ Tiada | ✅ AQL Graph | ❌ Tiada | ❌ Tiada | ✅ Peneraju Graf | ❌ Tiada | ⚠️ Apache AGE (Kompleks) |
-| **Clustering / Sharding** | ✅ **16,384 Raft Slots** | ⚠️ TiKV Dependency | ❌ Bergantung DB Luaran | ✅ Sharding | ✅ Raft Sharding | ✅ Multi-Raft Dynamic Ranges | ⚠️ Causal Clustering | ✅ Sharded Clusters | ❌ Citus / Manual |
+| **Clustering & Geo-Sync** | ✅ **16,384 Raft + CRDTs** | ⚠️ TiKV Dependency | ❌ Bergantung DB Luaran | ✅ Sharding | ✅ Raft Sharding | ✅ Multi-Raft Dynamic Ranges | ⚠️ Causal Clustering | ✅ Sharded Clusters | ❌ Citus / Manual |
 | **GC Pause & Memory Bloat** | ✅ **Sifar (Zero GC)** | ✅ Rendah | ❌ GC Overhead (Go) | ⚠️ Tinggi (C++) | ✅ Rendah | ❌ GC Overhead (Go) | ❌ Berat (JVM GC) | ⚠️ Cache Overhead | ⚠️ Table/Index Bloat |
-| **Model Lesen** | **Open / Self-Host** | BSL / FSL | Apache 2.0 | Apache / Enterprise | Apache 2.0 | BSL (Komersial) | GPL / Enterprise | SSPL (Proprietari) | PostgreSQL License |
+| **Model Lesen** | **Apache 2.0 (Open Source)** | BSL / FSL | Apache 2.0 | Apache / Enterprise | Apache 2.0 | BSL (Komersial) | GPL / Enterprise | SSPL (Proprietari) | PostgreSQL License |
 
 ---
 
@@ -134,22 +134,41 @@ Diilhamkan oleh Google Spanner, CockroachDB dibina menggunakan Go (dengan enjin 
 
 ## 7. Panduan Pemilihan Senario
 
+Berikut adalah carta alir dan matriks keputusan untuk memilih pangkalan data yang tepat mengikut keperluan projek anda:
+
 ```mermaid
-flowchart TD
-    Start([Pilih Pangkalan Data Sesuai]) --> Q1{Perlukan SQL Relasional Tulen & Transaksi Perbankan Global?}
-    Q1 -- Ya --> Cockroach[Pilih CockroachDB / PostgreSQL]
-    Q1 -- Tidak --> Q2{Aplikasi memerlukan Dokumen JSON + AI Vector + GraphRAG?}
+graph TD
+    Start["Pilih Pangkalan Data Sesuai"] --> Q1{"Perlukan Transaksi Perbankan SQL Global?"}
+    Q1 -- "Ya" --> Cockroach["Pilih CockroachDB / PostgreSQL"]
+    Q1 -- "Tidak" --> Q2{"Perlukan JSON + AI Vector + GraphRAG?"}
     
-    Q2 -- Ya --> Q3{Adakah pasukan anda biasa dengan MongoDB / Mongoose / BSON?}
-    Q3 -- Ya --> FaizDBChoice["🚀 PILIH FAIZDB\n(Sifar migrasi, Prestasi Pantas Rust LSM, 16k Raft Sharding)"]
-    Q3 -- Tidak --> Q4{Sedia belajar sintaks proprietari SurrealQL / AQL?}
-    Q4 -- Ya --> Surreal[Pilih SurrealDB / ArangoDB]
-    Q4 -- Tidak --> FaizDBChoice
+    Q2 -- "Ya" --> Q3{"Ingin sambungan sedia ada (Mongo/Postgres/gRPC)?"}
+    Q3 -- "Ya" --> FaizDBChoice["🚀 PILIH FAIZDB<br/>(4-Way Gateways, Safe Rust LSM, Active-Active CRDT)"]
+    Q3 -- "Tidak" --> Q4{"Sedia pelajari SurrealQL / AQL?"}
+    Q4 -- "Ya" --> Surreal["Pilih SurrealDB / ArangoDB"]
+    Q4 -- "Tidak" --> FaizDBChoice
     
-    Q2 -- Hanya Vektor AI Sahaja --> QdrantChoice[Pilih Qdrant]
-    Q2 -- Hanya Graf Perhubungan Sahaja --> Neo4jChoice[Pilih Neo4j]
+    Q2 -- "Hanya Vektor" --> QdrantChoice["Pilih Qdrant / Pinecone"]
+    Q2 -- "Hanya Graf" --> Neo4jChoice["Pilih Neo4j / Memgraph"]
 ```
 
-### Kesimpulan Ringkas:
-* **Pilih CockroachDB** sekiranya anda membina sistem teras perbankan (*Core Banking*) yang memerlukan jadual relasional SQL tegar merentasi pelbagai benua.
-* **Pilih FaizDB** sekiranya anda membina aplikasi moden, perkhidmatan mikro (*microservices*), sistem berasaskan AI / LLM / GraphRAG, atau aplikasi NoSQL berprestasi tinggi yang memerlukan integrasi pantas tanpa kerumitan pengurusan pelbagai pangkalan data.
+---
+
+### 📊 Matriks Pemilihan Mengikut Senario Penggunaan
+
+| Senario Projek | Pilihan Utama | Alternatif | Mengapa? |
+| :--- | :---: | :---: | :--- |
+| **Aplikasi AI Moden & RAG (LLM + Vektor + Graf)** | 🚀 **FaizDB** | SurrealDB | FaizDB menggabungkan carian vektor HNSW, Graf Perhubungan, dan Dokumen JSON dalam satu binari Rust tanpa perlu mengurus 3 pangkalan data berasingan. |
+| **Migrasi Segera dari Stack MongoDB / Mongoose** | 🚀 **FaizDB** | FerretDB | FaizDB menyediakan pintu masuk drop-in *MongoDB Wire Protocol (Port 27017)* dengan enjin natif Rust LSM-Tree yang jauh lebih pantas berbanding proksi FerretDB. |
+| **Sistem Mikroservis Berkelajuan Tinggi (Microservices)** | 🚀 **FaizDB** | Redis / gRPC | Menyokong gRPC binary Protocol Buffers (Port 50051) dengan latensi sub-milisaat dan *Change Streams*. |
+| **Integrasi Dashboard BI & SQL (DBeaver/Grafana/psql)** | 🚀 **FaizDB** | PostgreSQL | Pintu masuk *PostgreSQL Wire (Port 5432)* membolehkan alat analitis standard membaca data FaizDB secara terus. |
+| **Replikasi Multi-Benua Global (Active-Active)** | 🚀 **FaizDB** | CockroachDB | FaizDB menggunakan CRDTs (*Version Vectors, LWW, OR-Set*) untuk penulisan tempatan tanpa *distributed lock overhead*. |
+| **Sistem Teras Perbankan Tulen (Multi-Table Relational SQL)** | **CockroachDB** | PostgreSQL | CockroachDB cemerlang dalam integriti rujukan skema relasional tegar dengan konsensus Raft teragih. |
+| **Carian Vektor Berskala Berbilion Item Sahaja** | **Qdrant** | Milvus | Qdrant dibina khusus untuk pengindeksan vektor berskala ekstrem tanpa memerlukan storan multi-model. |
+
+---
+
+### 💡 Kesimpulan Strategik FaizDB:
+* **Pilih CockroachDB** sekiranya anda membina sistem perbankan tradisional (*Core Banking*) yang memerlukan skema SQL berjadual tegar merentasi pelbagai benua.
+* **Pilih FaizDB** sekiranya anda membina aplikasi moden, platform AI/LLM, aplikasi web/mudah alih masa-nyata, atau perkhidmatan mikro berprestasi tinggi yang memerlukan integrasi serentak (MongoDB, Postgres, gRPC, REST) dengan kecekapan storan maksimum.
+
