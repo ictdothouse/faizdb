@@ -1,0 +1,15 @@
+[package]
+name = "faizdb-vector"
+description = "Vector search engine for FaizDB — HNSW/IVF indexes, similarity search"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+faizdb-core = { path = "../faizdb-core" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+parking_lot = { workspace = true }

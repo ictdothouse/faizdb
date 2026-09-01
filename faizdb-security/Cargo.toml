@@ -1,0 +1,16 @@
+[package]
+name = "faizdb-security"
+description = "Security engine for FaizDB — encryption, TLS, RBAC, audit"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+faizdb-core = { path = "../faizdb-core" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ring = { workspace = true }
+argon2 = { workspace = true }
+jsonwebtoken = { workspace = true }

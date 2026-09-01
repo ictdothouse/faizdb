@@ -1,0 +1,4 @@
+target/
+faizdb_data/
+*.log
+.git

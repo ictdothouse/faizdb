@@ -1,0 +1,23 @@
+[package]
+name = "faizdb-server"
+description = "Server for FaizDB — HTTP/REST API & Wire Protocols"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+faizdb-core = { path = "../faizdb-core" }
+faizdb-query = { path = "../faizdb-query" }
+faizdb-vector = { path = "../faizdb-vector" }
+faizdb-graph = { path = "../faizdb-graph" }
+faizdb-security = { path = "../faizdb-security" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+dashmap = { workspace = true }

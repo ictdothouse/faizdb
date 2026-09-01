@@ -1,0 +1,8 @@
+/target/
+faizdb_data/
+*.log
+*.sst
+*.wal
+.DS_Store
+Thumbs.db
+faizdb

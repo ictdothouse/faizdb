@@ -1,0 +1,34 @@
+[package]
+name = "faizdb-core"
+description = "Core storage engine for FaizDB — the AI-Native NoSQL Database"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+bson = { workspace = true }
+tokio = { workspace = true }
+crossbeam-skiplist = { workspace = true }
+parking_lot = { workspace = true }
+crc32fast = { workspace = true }
+lz4_flex = { workspace = true }
+bytes = { workspace = true }
+memmap2 = { workspace = true }
+dashmap = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tempfile = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+tempfile = { workspace = true }
+
+[[bench]]
+name = "storage_bench"
+harness = false

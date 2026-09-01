@@ -1,0 +1,649 @@
+//! Storage Engine — the unified interface to FaizDB's persistence layer.
+//!
+//! The StorageEngine orchestrates all storage components:
+//! - WAL for durability
+//! - MemTable for fast writes
+//! - SSTables for persistent storage
+//! - Compaction for maintenance
+//!
+//! It provides a simple key-value interface that the Document layer builds upon.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
+
+use crate::error::{FaizError, FaizResult};
+use crate::storage::memtable::{MemEntry, MemTable};
+use crate::storage::sstable::{SSTableReader, SSTableWriter};
+use crate::storage::wal::{Wal, WalOpType};
+
+/// Configuration for the storage engine
+#[derive(Debug, Clone)]
+pub struct StorageConfig {
+    /// Directory to store all data files
+    pub data_dir: PathBuf,
+    /// Maximum MemTable size before flush (bytes)
+    pub memtable_size: usize,
+    /// Whether to sync WAL writes immediately (safer but slower)
+    pub sync_writes: bool,
+    /// Whether to enable WAL (disable for read-only or testing)
+    pub enable_wal: bool,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            data_dir: PathBuf::from(crate::DEFAULT_DATA_DIR),
+            memtable_size: crate::DEFAULT_MEMTABLE_SIZE,
+            sync_writes: true,
+            enable_wal: true,
+        }
+    }
+}
+
+/// The core storage engine.
+///
+/// Provides a key-value interface with durability, crash recovery,
+/// and background compaction.
+///
+/// ## Thread Safety
+///
+/// The engine is fully thread-safe:
+/// - Multiple readers can read concurrently (lock-free)
+/// - Writes are serialized through the WAL and MemTable
+/// - Background compaction runs independently
+pub struct StorageEngine {
+    /// Engine configuration
+    config: StorageConfig,
+
+    /// Write-Ahead Log
+    wal: Option<Wal>,
+
+    /// Active (mutable) MemTable
+    active_memtable: Arc<MemTable>,
+
+    /// Immutable MemTables waiting to be flushed to SSTables
+    immutable_memtables: RwLock<Vec<Arc<MemTable>>>,
+
+    /// SSTable readers (sorted newest to oldest)
+    sstables: RwLock<Vec<SSTableReader>>,
+
+    /// SSTable generation counter
+    sstable_generation: AtomicU64,
+
+    /// Whether the engine is open
+    is_open: std::sync::atomic::AtomicBool,
+}
+
+impl StorageEngine {
+    /// Open or create a storage engine at the specified directory.
+    ///
+    /// If the directory contains existing data, the engine will recover
+    /// by replaying the WAL and loading existing SSTables.
+    pub fn open(config: StorageConfig) -> FaizResult<Self> {
+        // Create data directory structure
+        let data_dir = &config.data_dir;
+        let wal_dir = data_dir.join("wal");
+        let sst_dir = data_dir.join("sst");
+
+        fs::create_dir_all(&wal_dir).map_err(|e| FaizError::io(&wal_dir, e))?;
+        fs::create_dir_all(&sst_dir).map_err(|e| FaizError::io(&sst_dir, e))?;
+
+        // Open WAL
+        let wal = if config.enable_wal {
+            Some(Wal::open(&wal_dir)?)
+        } else {
+            None
+        };
+
+        // Create MemTable
+        let memtable = Arc::new(MemTable::new(config.memtable_size));
+
+        // Recover from WAL
+        if config.enable_wal {
+            let records = Wal::replay(&wal_dir)?;
+            tracing::info!("Recovered {} records from WAL", records.len());
+
+            for record in &records {
+                match record.op_type {
+                    WalOpType::Put => {
+                        memtable.put(record.key.clone(), record.value.clone())?;
+                    }
+                    WalOpType::Delete => {
+                        memtable.delete(record.key.clone())?;
+                    }
+                    _ => {} // Transaction markers handled separately
+                }
+            }
+        }
+
+        // Load existing SSTables
+        let mut sstables = Vec::new();
+        if sst_dir.exists() {
+            let mut sst_files: Vec<PathBuf> = fs::read_dir(&sst_dir)
+                .map_err(|e| FaizError::io(&sst_dir, e))?
+                .filter_map(|entry| {
+                    let entry = entry.ok()?;
+                    let path = entry.path();
+                    if path.extension().and_then(|e| e.to_str()) == Some("sst") {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // Sort by name (which includes generation) — newest first
+            sst_files.sort();
+            sst_files.reverse();
+
+            for sst_path in sst_files {
+                match SSTableReader::open(&sst_path) {
+                    Ok(reader) => sstables.push(reader),
+                    Err(e) => {
+                        tracing::warn!("Failed to open SSTable {}: {e}", sst_path.display());
+                    }
+                }
+            }
+        }
+
+        // Determine the current SSTable generation
+        let max_gen = sstables
+            .iter()
+            .filter_map(|sst| {
+                sst.path()
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| s.strip_prefix("sst_"))
+                    .and_then(|s| s.parse::<u64>().ok())
+            })
+            .max()
+            .unwrap_or(0);
+
+        tracing::info!(
+            "Storage engine opened: {} SSTables loaded, generation={}",
+            sstables.len(),
+            max_gen
+        );
+
+        Ok(Self {
+            config,
+            wal,
+            active_memtable: memtable,
+            immutable_memtables: RwLock::new(Vec::new()),
+            sstables: RwLock::new(sstables),
+            sstable_generation: AtomicU64::new(max_gen),
+            is_open: std::sync::atomic::AtomicBool::new(true),
+        })
+    }
+
+    /// Open a storage engine with default configuration at the given path.
+    pub fn open_default(path: impl AsRef<Path>) -> FaizResult<Self> {
+        Self::open(StorageConfig {
+            data_dir: path.as_ref().to_path_buf(),
+            ..Default::default()
+        })
+    }
+
+    /// Put a key-value pair into the storage engine.
+    ///
+    /// The write is:
+    /// 1. First logged to the WAL (for durability)
+    /// 2. Then inserted into the MemTable (for fast access)
+    /// 3. Eventually flushed to an SSTable (for persistence)
+    pub fn put(&self, key: &[u8], value: &[u8]) -> FaizResult<()> {
+        self.check_open()?;
+
+        // Step 1: Write to WAL
+        if let Some(wal) = &self.wal {
+            wal.log_put(key, value)?;
+        }
+
+        // Step 2: Write to MemTable
+        self.active_memtable.put(key.to_vec(), value.to_vec())?;
+
+        // Step 3: Check if MemTable needs flushing
+        if self.active_memtable.should_flush() {
+            self.maybe_flush_memtable()?;
+        }
+
+        Ok(())
+    }
+
+    /// Get a value by key.
+    ///
+    /// Search order (most recent data first):
+    /// 1. Active MemTable
+    /// 2. Immutable MemTables (waiting to be flushed)
+    /// 3. SSTables (newest to oldest)
+    pub fn get(&self, key: &[u8]) -> FaizResult<Option<Vec<u8>>> {
+        self.check_open()?;
+
+        // Step 1: Check active MemTable
+        if let Some(entry) = self.active_memtable.get(key) {
+            return match entry {
+                MemEntry::Value(v) => Ok(Some(v)),
+                MemEntry::Tombstone => Ok(None), // Deleted
+            };
+        }
+
+        // Step 2: Check immutable MemTables (newest first)
+        {
+            let immutables = self.immutable_memtables.read().unwrap();
+            for mt in immutables.iter().rev() {
+                if let Some(entry) = mt.get(key) {
+                    return match entry {
+                        MemEntry::Value(v) => Ok(Some(v)),
+                        MemEntry::Tombstone => Ok(None),
+                    };
+                }
+            }
+        }
+
+        // Step 3: Check SSTables (newest first)
+        {
+            let sstables = self.sstables.read().unwrap();
+            for sst in sstables.iter() {
+                if let Some(entry) = sst.get(key)? {
+                    return match entry {
+                        MemEntry::Value(v) => Ok(Some(v)),
+                        MemEntry::Tombstone => Ok(None),
+                    };
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Delete a key from the storage engine.
+    ///
+    /// This inserts a "tombstone" marker. The actual data is removed
+    /// during compaction.
+    pub fn delete(&self, key: &[u8]) -> FaizResult<()> {
+        self.check_open()?;
+
+        // Write to WAL
+        if let Some(wal) = &self.wal {
+            wal.log_delete(key)?;
+        }
+
+        // Insert tombstone into MemTable
+        self.active_memtable.delete(key.to_vec())?;
+
+        if self.active_memtable.should_flush() {
+            self.maybe_flush_memtable()?;
+        }
+
+        Ok(())
+    }
+
+    /// Scan all keys with a given prefix.
+    ///
+    /// Returns key-value pairs in sorted order.
+    pub fn prefix_scan(&self, prefix: &[u8]) -> FaizResult<Vec<(Vec<u8>, Vec<u8>)>> {
+        self.check_open()?;
+
+        let mut results = std::collections::BTreeMap::new();
+
+        // Scan SSTables (oldest first, so newer values overwrite)
+        {
+            let sstables = self.sstables.read().unwrap();
+            for sst in sstables.iter().rev() {
+                for entry_result in sst.iter()? {
+                    let (key, entry) = entry_result?;
+                    if key.starts_with(prefix) {
+                        match entry {
+                            MemEntry::Value(v) => {
+                                results.insert(key, Some(v));
+                            }
+                            MemEntry::Tombstone => {
+                                results.insert(key, None);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Scan immutable MemTables
+        {
+            let immutables = self.immutable_memtables.read().unwrap();
+            for mt in immutables.iter() {
+                for (key, entry) in mt.prefix_scan(prefix) {
+                    match entry {
+                        MemEntry::Value(v) => {
+                            results.insert(key, Some(v));
+                        }
+                        MemEntry::Tombstone => {
+                            results.insert(key, None);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Scan active MemTable (newest, overwrites everything)
+        for (key, entry) in self.active_memtable.prefix_scan(prefix) {
+            match entry {
+                MemEntry::Value(v) => {
+                    results.insert(key, Some(v));
+                }
+                MemEntry::Tombstone => {
+                    results.insert(key, None);
+                }
+            }
+        }
+
+        // Filter out tombstones and collect results
+        Ok(results
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|val| (k, val)))
+            .collect())
+    }
+
+    /// Flush the active MemTable to an SSTable on disk.
+    ///
+    /// This is called automatically when the MemTable reaches its size limit,
+    /// but can also be called manually for testing or before shutdown.
+    pub fn flush(&self) -> FaizResult<()> {
+        self.flush_memtable_to_sstable()
+    }
+
+    /// Get storage engine statistics
+    pub fn stats(&self) -> StorageStats {
+        let sstables = self.sstables.read().unwrap();
+        StorageStats {
+            memtable_size: self.active_memtable.size(),
+            memtable_entries: self.active_memtable.entry_count(),
+            immutable_memtables: self.immutable_memtables.read().unwrap().len(),
+            sstable_count: sstables.len(),
+            total_sstable_entries: sstables.iter().map(|s| s.entry_count()).sum(),
+        }
+    }
+
+    /// Close the storage engine gracefully.
+    ///
+    /// Flushes all in-memory data to disk.
+    pub fn close(&self) -> FaizResult<()> {
+        if !self.is_open.load(Ordering::Acquire) {
+            return Ok(());
+        }
+
+        // Flush active MemTable
+        if self.active_memtable.entry_count() > 0 {
+            self.flush_memtable_to_sstable()?;
+        }
+
+        // Sync WAL
+        if let Some(wal) = &self.wal {
+            wal.sync()?;
+        }
+
+        self.is_open.store(false, Ordering::Release);
+        tracing::info!("Storage engine closed gracefully");
+        Ok(())
+    }
+
+    // ── Internal Methods ─────────────────────────────────────────
+
+    fn check_open(&self) -> FaizResult<()> {
+        if !self.is_open.load(Ordering::Acquire) {
+            return Err(FaizError::EngineClosed);
+        }
+        Ok(())
+    }
+
+    fn maybe_flush_memtable(&self) -> FaizResult<()> {
+        if self.active_memtable.should_flush() {
+            self.flush_memtable_to_sstable()?;
+        }
+        Ok(())
+    }
+
+    fn flush_memtable_to_sstable(&self) -> FaizResult<()> {
+        // Get all entries from the current MemTable
+        let entries = self.active_memtable.entries();
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        // Generate new SSTable path
+        let gen_num = self.sstable_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let sst_path = self
+            .config
+            .data_dir
+            .join("sst")
+            .join(format!("sst_{gen_num:06}.sst"));
+
+        // Write SSTable
+        let mut writer = SSTableWriter::new(&sst_path, entries.len())?;
+        for (key, entry) in &entries {
+            writer.write_entry(key, entry)?;
+        }
+        writer.finish()?;
+
+        // Load the new SSTable reader
+        let reader = SSTableReader::open(&sst_path)?;
+
+        // Add to SSTable list (at the beginning = newest)
+        {
+            let mut sstables = self.sstables.write().unwrap();
+            sstables.insert(0, reader);
+        }
+
+        // Clear the MemTable
+        self.active_memtable.clear();
+
+        tracing::info!(
+            "Flushed MemTable to SSTable: {} ({} entries)",
+            sst_path.display(),
+            entries.len()
+        );
+
+        Ok(())
+    }
+}
+
+impl Drop for StorageEngine {
+    fn drop(&mut self) {
+        if self.is_open.load(Ordering::Acquire) {
+            if let Err(e) = self.close() {
+                tracing::error!("Error closing storage engine: {e}");
+            }
+        }
+    }
+}
+
+/// Storage engine statistics
+#[derive(Debug)]
+pub struct StorageStats {
+    pub memtable_size: usize,
+    pub memtable_entries: usize,
+    pub immutable_memtables: usize,
+    pub sstable_count: usize,
+    pub total_sstable_entries: u64,
+}
+
+impl std::fmt::Display for StorageStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Storage Engine Stats:")?;
+        writeln!(
+            f,
+            "  MemTable: {} entries ({} bytes)",
+            self.memtable_entries, self.memtable_size
+        )?;
+        writeln!(
+            f,
+            "  Immutable MemTables: {}",
+            self.immutable_memtables
+        )?;
+        writeln!(
+            f,
+            "  SSTables: {} ({} total entries)",
+            self.sstable_count, self.total_sstable_entries
+        )?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_engine(dir: &Path) -> StorageEngine {
+        StorageEngine::open(StorageConfig {
+            data_dir: dir.to_path_buf(),
+            memtable_size: 4096, // Small for testing
+            sync_writes: false,
+            enable_wal: true,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn test_put_and_get() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = test_engine(dir.path());
+
+        engine.put(b"hello", b"world").unwrap();
+        engine.put(b"foo", b"bar").unwrap();
+
+        assert_eq!(engine.get(b"hello").unwrap(), Some(b"world".to_vec()));
+        assert_eq!(engine.get(b"foo").unwrap(), Some(b"bar".to_vec()));
+        assert_eq!(engine.get(b"nonexistent").unwrap(), None);
+    }
+
+    #[test]
+    fn test_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = test_engine(dir.path());
+
+        engine.put(b"key", b"old_value").unwrap();
+        engine.put(b"key", b"new_value").unwrap();
+
+        assert_eq!(engine.get(b"key").unwrap(), Some(b"new_value".to_vec()));
+    }
+
+    #[test]
+    fn test_delete() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = test_engine(dir.path());
+
+        engine.put(b"key", b"value").unwrap();
+        assert!(engine.get(b"key").unwrap().is_some());
+
+        engine.delete(b"key").unwrap();
+        assert_eq!(engine.get(b"key").unwrap(), None);
+    }
+
+    #[test]
+    fn test_flush_and_recovery() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Write data and flush
+        {
+            let engine = test_engine(dir.path());
+            engine.put(b"persist_key", b"persist_value").unwrap();
+            engine.flush().unwrap();
+        }
+
+        // Re-open and verify data is still there
+        {
+            let engine = test_engine(dir.path());
+            assert_eq!(
+                engine.get(b"persist_key").unwrap(),
+                Some(b"persist_value".to_vec())
+            );
+        }
+    }
+
+    #[test]
+    fn test_wal_recovery() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Write data (don't flush — simulate crash)
+        {
+            let engine = test_engine(dir.path());
+            engine.put(b"wal_key", b"wal_value").unwrap();
+            // Don't call flush() — data only in WAL + MemTable
+        }
+
+        // Re-open — should recover from WAL
+        {
+            let engine = test_engine(dir.path());
+            assert_eq!(
+                engine.get(b"wal_key").unwrap(),
+                Some(b"wal_value".to_vec())
+            );
+        }
+    }
+
+    #[test]
+    fn test_prefix_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = test_engine(dir.path());
+
+        engine.put(b"users:1", b"faiz").unwrap();
+        engine.put(b"users:2", b"ali").unwrap();
+        engine.put(b"users:3", b"abu").unwrap();
+        engine.put(b"orders:1", b"order1").unwrap();
+
+        let users = engine.prefix_scan(b"users:").unwrap();
+        assert_eq!(users.len(), 3);
+
+        let orders = engine.prefix_scan(b"orders:").unwrap();
+        assert_eq!(orders.len(), 1);
+    }
+
+    #[test]
+    fn test_many_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = test_engine(dir.path());
+
+        // Insert 500 entries (should trigger multiple flushes with small memtable)
+        for i in 0..500u32 {
+            let key = format!("key_{i:04}");
+            let value = format!("value_{i}");
+            engine.put(key.as_bytes(), value.as_bytes()).unwrap();
+        }
+
+        // Verify all entries
+        for i in 0..500u32 {
+            let key = format!("key_{i:04}");
+            let expected = format!("value_{i}");
+            let result = engine.get(key.as_bytes()).unwrap();
+            assert_eq!(
+                result,
+                Some(expected.into_bytes()),
+                "Failed at key_{i:04}"
+            );
+        }
+
+        let stats = engine.stats();
+        assert!(
+            stats.sstable_count > 0 || stats.memtable_entries > 0,
+            "Data should exist somewhere"
+        );
+    }
+
+    #[test]
+    fn test_engine_close_and_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+
+        {
+            let engine = test_engine(dir.path());
+            engine.put(b"key1", b"value1").unwrap();
+            engine.put(b"key2", b"value2").unwrap();
+            engine.close().unwrap();
+        }
+
+        {
+            let engine = test_engine(dir.path());
+            // Data should be recovered either from WAL or SSTable
+            assert_eq!(engine.get(b"key1").unwrap(), Some(b"value1".to_vec()));
+            assert_eq!(engine.get(b"key2").unwrap(), Some(b"value2".to_vec()));
+        }
+    }
+}

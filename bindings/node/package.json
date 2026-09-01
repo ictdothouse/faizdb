@@ -1,0 +1,24 @@
+{
+  "name": "faizdb",
+  "version": "0.1.0",
+  "description": "Official Node.js, Bun, and TypeScript Client for FaizDB — The AI-Native NoSQL Database",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test"
+  },
+  "keywords": [
+    "faizdb",
+    "database",
+    "nosql",
+    "vector",
+    "ai",
+    "hnsw",
+    "graph",
+    "sql"
+  ],
+  "author": "Ahmad Faiz",
+  "license": "Apache-2.0"
+}

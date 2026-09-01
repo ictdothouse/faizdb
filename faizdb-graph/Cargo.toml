@@ -1,0 +1,13 @@
+[package]
+name = "faizdb-graph"
+description = "Graph engine for FaizDB — vertices, edges, traversals"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+faizdb-core = { path = "../faizdb-core" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
