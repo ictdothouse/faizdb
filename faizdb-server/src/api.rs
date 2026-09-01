@@ -484,7 +484,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let public_routes = Router::new()
         .route("/v1/health", get(health_check))
         .route("/v1/info", get(server_info))
-        .route("/v1/auth/login", post(auth_login));
+        .route("/v1/auth/login", post(auth_login))
+        .route("/v1/metrics", get(metrics_handler));
 
     // Read-only routes — requires any valid JWT (Admin, ReadWrite, or ReadOnly)
     let read_routes = Router::new()
@@ -614,6 +615,49 @@ async fn health_check() -> impl IntoResponse {
         "engine": "FaizDB",
         "version": env!("CARGO_PKG_VERSION")
     }))
+}
+
+/// GET /v1/metrics — Prometheus-compatible text exposition format.
+/// No auth required so Prometheus scrapers can poll without credentials.
+/// Tracks: rate limiter state, blocklist size, uptime, version.
+static SERVER_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+async fn metrics_handler() -> impl IntoResponse {
+    let uptime = SERVER_START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs();
+
+    let blocked_ips = get_blocklist().len();
+    let tracked_ips = get_rate_limiter().len();
+
+    let metrics = format!(
+        "# HELP faizdb_uptime_seconds Total server uptime in seconds\n\
+         # TYPE faizdb_uptime_seconds counter\n\
+         faizdb_uptime_seconds {uptime}\n\
+         \n\
+         # HELP faizdb_blocked_ips_total IPs currently on the permanent blocklist\n\
+         # TYPE faizdb_blocked_ips_total gauge\n\
+         faizdb_blocked_ips_total {blocked_ips}\n\
+         \n\
+         # HELP faizdb_rate_tracked_ips IPs currently tracked by rate limiter\n\
+         # TYPE faizdb_rate_tracked_ips gauge\n\
+         faizdb_rate_tracked_ips {tracked_ips}\n\
+         \n\
+         # HELP faizdb_build_info Static build information\n\
+         # TYPE faizdb_build_info gauge\n\
+         faizdb_build_info{{version=\"{version}\",engine=\"FaizDB\"}} 1\n",
+        uptime = uptime,
+        blocked_ips = blocked_ips,
+        tracked_ips = tracked_ips,
+        version = env!("CARGO_PKG_VERSION"),
+    );
+
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        metrics,
+    )
 }
 
 async fn server_info() -> impl IntoResponse {

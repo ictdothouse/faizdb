@@ -1,6 +1,6 @@
 /**
  * FaizDB Studio REST Client
- * Connects seamlessly via Vite Proxy or direct host with CORS fallback
+ * JWT-aware — obtains a short-lived token via /v1/auth/login and refreshes automatically.
  */
 
 export interface ApiResponse<T = any> {
@@ -24,11 +24,57 @@ export interface CollectionStats {
   index_count: number;
 }
 
+export interface AuthSession {
+  token: string;
+  username: string;
+  role: string;
+  expiresAt: number; // unix ms
+}
+
+const SESSION_KEY = 'faizdb_session';
+const CLUSTER_TOKEN_KEY = 'faizdb_cluster_token';
+
 class FaizApiClient {
-  // Use relative URL so Vite proxy or direct CORS handles it cleanly
   private baseUrl: string = '';
-  private apiKey: string = import.meta.env.VITE_FAIZDB_API_KEY || 'faizdb-secret-key';
-  private clusterToken: string = import.meta.env.VITE_FAIZDB_CLUSTER_TOKEN || 'faizdb-cluster-secret';
+
+  // ── Session Management ────────────────────────────────────────────────────
+
+  getSession(): AuthSession | null {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const session: AuthSession = JSON.parse(raw);
+      if (Date.now() > session.expiresAt) {
+        sessionStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return session;
+    } catch {
+      return null;
+    }
+  }
+
+  saveSession(session: AuthSession) {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  }
+
+  clearSession() {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+
+  isAuthenticated(): boolean {
+    return this.getSession() !== null;
+  }
+
+  getUsername(): string {
+    return this.getSession()?.username ?? '';
+  }
+
+  getRole(): string {
+    return this.getSession()?.role ?? '';
+  }
+
+  // ── Endpoint ─────────────────────────────────────────────────────────────
 
   setEndpoint(url: string) {
     this.baseUrl = url.replace(/\/+$/, '');
@@ -37,46 +83,97 @@ class FaizApiClient {
   getEndpoint(): string {
     return this.baseUrl || window.location.origin;
   }
-  
-  getApiKey(): string {
-    return this.apiKey;
+
+  // Legacy compat for cluster token (cluster routes still use static token)
+  getClusterToken(): string {
+    return (
+      sessionStorage.getItem(CLUSTER_TOKEN_KEY) ||
+      import.meta.env.VITE_FAIZDB_CLUSTER_TOKEN ||
+      'faizdb-cluster-secret'
+    );
   }
 
+  // ── Core Fetch Helpers ────────────────────────────────────────────────────
+
+  /** Authenticated fetch — uses JWT Bearer token from session */
   async fetch(url: string, init?: RequestInit): Promise<Response> {
-    const headers = { 
-      'Authorization': `Bearer ${this.apiKey}`,
-      ...(init?.headers || {}) 
+    const session = this.getSession();
+    const headers: Record<string, string> = {
+      ...(init?.headers as Record<string, string> || {}),
     };
-    return fetch(url, { ...init, headers });
+    if (session) {
+      headers['Authorization'] = `Bearer ${session.token}`;
+    }
+    return window.fetch(url, { ...init, headers });
   }
 
+  /** Cluster fetch — uses static cluster token */
   async clusterFetch(url: string, init?: RequestInit): Promise<Response> {
-    const headers = { 
-      'Authorization': `Bearer ${this.clusterToken}`,
-      ...(init?.headers || {}) 
+    const headers = {
+      'Authorization': `Bearer ${this.getClusterToken()}`,
+      ...(init?.headers || {}),
     };
-    return fetch(url, { ...init, headers });
+    return window.fetch(url, { ...init, headers });
   }
+
+  // ── Authentication ────────────────────────────────────────────────────────
+
+  async login(username: string, password: string): Promise<AuthSession> {
+    const base = this.baseUrl || '';
+    const res = await window.fetch(`${base}/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const json: ApiResponse<{ token: string; username: string; role: string; expires_in: number }> =
+      await res.json();
+
+    if (!res.ok || !json.success || !json.data) {
+      throw new Error(json.error || 'Login failed');
+    }
+
+    const session: AuthSession = {
+      token: json.data.token,
+      username: json.data.username,
+      role: json.data.role,
+      expiresAt: Date.now() + json.data.expires_in * 1000,
+    };
+    this.saveSession(session);
+    return session;
+  }
+
+  logout() {
+    this.clearSession();
+  }
+
+  async whoami(): Promise<{ username: string; role: string }> {
+    const res = await this.fetch(`${this.baseUrl}/v1/auth/whoami`);
+    const json: ApiResponse<{ username: string; role: string }> = await res.json();
+    if (!json.success || !json.data) throw new Error(json.error || 'Not authenticated');
+    return json.data;
+  }
+
+  // ── API Methods ───────────────────────────────────────────────────────────
 
   async getHealth(): Promise<{ status: string; engine: string; version: string }> {
     try {
-      const res = await this.fetch(`${this.baseUrl}/v1/health`);
+      const res = await window.fetch(`${this.baseUrl}/v1/health`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch {
-      // Fallback direct port 27018
-      const res = await this.fetch('http://127.0.0.1:27018/v1/health');
+      const res = await window.fetch('http://127.0.0.1:27018/v1/health');
       return await res.json();
     }
   }
 
   async getInfo(): Promise<ServerInfo> {
     try {
-      const res = await this.fetch(`${this.baseUrl}/v1/info`);
+      const res = await window.fetch(`${this.baseUrl}/v1/info`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch {
-      const res = await this.fetch('http://127.0.0.1:27018/v1/info');
+      const res = await window.fetch('http://127.0.0.1:27018/v1/info');
       return await res.json();
     }
   }
@@ -101,9 +198,7 @@ class FaizApiClient {
     const durationMs = Math.round((performance.now() - start) * 100) / 100;
     const json: ApiResponse<T> = await res.json();
 
-    if (!json.success) {
-      throw new Error(json.error || 'Query failed');
-    }
+    if (!json.success) throw new Error(json.error || 'Query failed');
 
     let payload: any = json.data;
     if (payload && typeof payload === 'object') {

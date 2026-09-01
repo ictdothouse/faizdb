@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
+import { LoginPage } from './components/LoginPage';
 import { Overview } from './components/Overview';
 import { TableExplorer } from './components/TableExplorer';
 import { QueryConsole } from './components/QueryConsole';
@@ -17,6 +18,32 @@ import { Button } from './components/ui/Button';
 import { api } from './api/client';
 
 export const App: React.FC = () => {
+  // Auth gate — show login page when no valid session exists
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => api.isAuthenticated());
+
+  const handleLogin = () => setIsAuthenticated(true);
+  const handleLogout = () => {
+    api.logout();
+    setIsAuthenticated(false);
+  };
+
+  // Redirect to login if session expires mid-use
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!api.isAuthenticated()) {
+        setIsAuthenticated(false);
+      }
+    }, 30_000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
+  const currentUser = api.getUsername();
+  const currentRole = api.getRole();
+
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
   const [collections, setCollections] = useState<string[]>(['users', 'products']);
   const [selectedCollection, setSelectedCollection] = useState<string>('users');
@@ -171,6 +198,9 @@ export const App: React.FC = () => {
           isRefreshing={isRefreshing}
           theme={theme}
           onToggleTheme={toggleTheme}
+          username={currentUser}
+          role={currentRole}
+          onLogout={handleLogout}
         />
 
         <main className="flex-1 overflow-hidden bg-slate-50 dark:bg-zinc-950">

@@ -13,6 +13,9 @@ interface HeaderProps {
   isRefreshing: boolean;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  username?: string;
+  role?: string;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +27,9 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   theme,
   onToggleTheme,
+  username,
+  role,
+  onLogout,
 }) => {
   const titles: Record<NavTab, { title: string; desc: string }> = {
     overview: {
@@ -137,6 +143,35 @@ export const Header: React.FC<HeaderProps> = ({
             <Moon className="w-4 h-4 text-slate-700 hover:-rotate-12 transition-transform" />
           )}
         </button>
+
+        {/* User Session Pill */}
+        {username && (
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-zinc-800">
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">
+                {username.charAt(0).toUpperCase()}
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-xs font-semibold text-slate-700 dark:text-zinc-200 leading-none">{username}</p>
+                <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-0.5 capitalize">{role}</p>
+              </div>
+            </div>
+            {onLogout && (
+              <button
+                id="faizdb-logout-btn"
+                onClick={onLogout}
+                title="Sign Out"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );
