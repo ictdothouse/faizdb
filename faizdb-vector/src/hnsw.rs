@@ -393,6 +393,31 @@ impl HnswIndex {
             })
             .collect()
     }
+
+    /// Serialize the HNSW index graph to JSON bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
+        serde_json::to_vec(self).map_err(|e| format!("Failed to serialize HNSW index: {e}"))
+    }
+
+    /// Deserialize an HNSW index graph from JSON bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
+        serde_json::from_slice(bytes).map_err(|e| format!("Failed to deserialize HNSW index: {e}"))
+    }
+
+    /// Save the HNSW index graph to a disk file path.
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), String> {
+        if let Some(parent) = path.as_ref().parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let bytes = self.to_bytes()?;
+        std::fs::write(path, bytes).map_err(|e| format!("Failed to write HNSW index file: {e}"))
+    }
+
+    /// Load the HNSW index graph from a disk file path.
+    pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, String> {
+        let bytes = std::fs::read(path).map_err(|e| format!("Failed to read HNSW index file: {e}"))?;
+        Self::from_bytes(&bytes)
+    }
 }
 
 #[cfg(test)]
@@ -446,5 +471,29 @@ mod tests {
         let results = index.search(&query_vec, 5);
         assert_eq!(results[0].id, "doc_0");
         assert!(results[0].distance < 1e-5);
+    }
+
+    #[test]
+    fn test_hnsw_persistence_serialization() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test_index.hnsw");
+
+        let config = HnswConfig::new(3, DistanceMetric::Cosine);
+        let mut original = HnswIndex::new(config);
+        original.insert("vec1", vec![1.0, 0.0, 0.0]).unwrap();
+        original.insert("vec2", vec![0.0, 1.0, 0.0]).unwrap();
+
+        // Save to file
+        original.save_to_file(&file_path).unwrap();
+        assert!(file_path.exists());
+
+        // Reload from file
+        let restored = HnswIndex::load_from_file(&file_path).unwrap();
+        assert_eq!(restored.len(), 2);
+
+        // Verify search works identically on restored index
+        let res = restored.search(&[0.9, 0.1, 0.0], 1);
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].id, "vec1");
     }
 }
