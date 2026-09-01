@@ -56,8 +56,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/health", get(health_check))
         .route("/v1/info", get(server_info))
         .route("/v1/query", post(execute_query))
-        .route("/v1/collections/:name/insert", post(insert_document))
-        .route("/v1/collections/:name/stats", get(collection_stats))
+        .route("/v1/collections/{name}/insert", post(insert_document))
+        .route("/v1/collections/{name}/stats", get(collection_stats))
         .with_state(state)
 }
 

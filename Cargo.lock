@@ -612,6 +612,9 @@ name = "faizdb-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bson",
+ "bytes",
+ "chrono",
  "dashmap",
  "faizdb-core",
  "faizdb-graph",

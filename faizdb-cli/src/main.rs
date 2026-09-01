@@ -38,11 +38,14 @@ enum Commands {
         data_dir: PathBuf,
     },
 
-    /// Start the HTTP/REST server
+    /// Start the Dual-Protocol Server (MongoDB Wire Protocol 27017 + HTTP API 27018)
     Serve {
-        /// Port to bind
-        #[arg(short, long, default_value = "27018")]
-        port: u16,
+        /// MongoDB Wire Protocol Port (Drop-in replacement for MongoDB apps)
+        #[arg(short = 'w', long, default_value = "27017")]
+        wire_port: u16,
+        /// HTTP/REST API Port
+        #[arg(short = 'p', long, default_value = "27018")]
+        http_port: u16,
         /// Host address
         #[arg(short = 'H', long, default_value = "0.0.0.0")]
         host: String,
@@ -79,10 +82,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Some(Commands::Shell { data_dir }) => run_shell(&data_dir),
-        Some(Commands::Serve { port, host }) => {
-            let addr = format!("{host}:{port}");
-            println!("🔥 Starting FaizDB Server on http://{addr} ...");
-            faizdb_server::run_server(&addr).await?;
+        Some(Commands::Serve { wire_port, http_port, host }) => {
+            let wire_addr = format!("{host}:{wire_port}");
+            let http_addr = format!("{host}:{http_port}");
+            println!("╔══════════════════════════════════════════════════════════════════╗");
+            println!("║  🔥 FaizDB Server v{} Running Dual Protocols              ║", faizdb_core::VERSION);
+            println!("╠══════════════════════════════════════════════════════════════════╣");
+            println!("║  🍃 MongoDB Wire Protocol : mongodb://{:<26} ║", wire_addr);
+            println!("║  🌐 HTTP / REST API       : http://{:<29} ║", http_addr);
+            println!("║                                                                  ║");
+            println!("║  👉 Drop-in connection string:                                   ║");
+            println!("║     mongodb://127.0.0.1:{}                                   ║", wire_port);
+            println!("╚══════════════════════════════════════════════════════════════════╝");
+            faizdb_server::run_dual_server(&wire_addr, &http_addr).await?;
         }
         Some(Commands::Info) => print_info(),
         Some(Commands::Benchmark { count }) => run_benchmark(count),
