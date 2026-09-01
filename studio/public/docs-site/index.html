@@ -450,6 +450,7 @@
       <div class="sidebar-group">
         <div class="sidebar-title">Getting Started</div>
         <a href="#intro" class="sidebar-link active">🌟 Overview & Vision</a>
+        <a href="#advantages" class="sidebar-link">💎 Why FaizDB Beats Other DBs</a>
         <a href="#installation" class="sidebar-link">📦 1-Line Installation</a>
         <a href="#quickstart" class="sidebar-link">⚡ 60-Second Quickstart</a>
         <a href="#architecture" class="sidebar-link">🏛️ Architecture & Storage</a>
@@ -511,6 +512,108 @@
             <div class="feature-icon">🛡️</div>
             <div class="feature-title">Zero-Trust Enterprise Security</div>
             <div class="feature-desc">Default AES-256-GCM encryption, Argon2id password hashing, and Point-In-Time Disaster Recovery (PITR).</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Why FaizDB Beats Other Databases -->
+      <section id="advantages">
+        <h2>💎 Why FaizDB Beats Incumbent Databases</h2>
+        <p class="lead">
+          Traditional stacks force developers to manage 4 to 5 separate database servers (Postgres + Redis + MongoDB + Elasticsearch + Pinecone). FaizDB unifies them all into one ultra-compact, high-performance binary.
+        </p>
+
+        <!-- Comparison Table -->
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Legacy MongoDB</th>
+              <th>PostgreSQL + Extensions</th>
+              <th>Redis</th>
+              <th>🚀 FaizDB (Unified)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Core Language</strong></td>
+              <td>C++ (Memory vulnerability risks)</td>
+              <td>C (Manual memory management)</td>
+              <td>C</td>
+              <td><strong>100% Rust (Memory-Safe, 0 GC pauses)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Drop-in Wire Protocol</strong></td>
+              <td>Native</td>
+              <td>Postgres Wire</td>
+              <td>Redis RESP</td>
+              <td><strong>Native MongoDB Wire (Port 27017)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Max Document Size</strong></td>
+              <td>16 MB (Legacy constraint)</td>
+              <td>1 GB (Heavy disk overhead)</td>
+              <td>N/A</td>
+              <td><strong>256 MB (Zero-Allocation Byte Slices)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Vector Search (ANN)</strong></td>
+              <td>Add-on / Atlas Cloud only</td>
+              <td>Requires <code>pgvector</code> extension</td>
+              <td>Requires RedisSearch</td>
+              <td><strong>Native HNSW (Cosine, L2, Dot) &lt; 1ms</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Full-Text Search</strong></td>
+              <td>Basic Text Index</td>
+              <td>Requires <code>pg_trgm</code> / <code>tsvector</code></td>
+              <td>Requires plugin</td>
+              <td><strong>Native Okapi BM25 with Fuzzy Matching</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Graph &amp; GraphRAG</strong></td>
+              <td>External Graph DB required</td>
+              <td>Requires Apache AGE extension</td>
+              <td>Requires RedisGraph</td>
+              <td><strong>Native Knowledge Graph &amp; Traversal</strong></td>
+            </tr>
+            <tr>
+              <td><strong>In-Memory Cache (TTL)</strong></td>
+              <td>Slow periodic TTL sweeper</td>
+              <td>Requires external Redis</td>
+              <td>In-memory only</td>
+              <td><strong>Unified Database + $O(\log N)$ Min-Heap Cache</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Real-Time WebSockets</strong></td>
+              <td>Requires Change Stream cluster</td>
+              <td>Requires Supabase / LISTEN-NOTIFY</td>
+              <td>Pub/Sub only</td>
+              <td><strong>Native WebSocket Change Data Capture (CDC)</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Deep Dive for Postgres and Mongo Engineers -->
+        <div class="grid-2" style="margin-top: 2rem;">
+          <div class="feature-card" style="border-top: 3px solid #38bdf8;">
+            <div class="feature-title" style="font-size: 1.1rem;">🐘 Why PostgreSQL Engineers Love FaizDB</div>
+            <ul style="margin-left: 1.25rem; font-size: 0.875rem; color: var(--text-muted); line-height: 1.7; margin-top: 0.5rem;">
+              <li><strong>Zero "Extension Hell"</strong>: No more broken extensions when upgrading versions. Vector, Full-text BM25, and Graph are compiled natively.</li>
+              <li><strong>Zero VACUUM Overhead</strong>: LSM-Tree sequential compaction replaces table bloat and lock contentions.</li>
+              <li><strong>Native SQL Dialect</strong>: Write standard <code>SELECT * FROM table WHERE score &gt; 90</code> without painful JSONB operators.</li>
+              <li><strong>Lightweight Supabase Alternative</strong>: Get instant REST APIs and WebSockets without launching 15 separate Docker containers.</li>
+            </ul>
+          </div>
+
+          <div class="feature-card" style="border-top: 3px solid #10b981;">
+            <div class="feature-title" style="font-size: 1.1rem;">🍃 Why MongoDB Engineers Love FaizDB</div>
+            <ul style="margin-left: 1.25rem; font-size: 0.875rem; color: var(--text-muted); line-height: 1.7; margin-top: 0.5rem;">
+              <li><strong>Drop-in Zero Code Changes</strong>: Connect your existing PyMongo, Mongoose, or Prisma apps directly on port 27017.</li>
+              <li><strong>16x Larger Documents (256 MB)</strong>: Store full AI embeddings, PDF extracts, and video transcripts without cumbersome GridFS.</li>
+              <li><strong>High Throughput (320,000+ ops/sec)</strong>: Rust lock-free concurrency delivers 3x to 5x higher ingestion speed.</li>
+              <li><strong>Built-in Disaster Recovery</strong>: Non-blocking atomic snapshots with SHA-256 integrity verification.</li>
+            </ul>
           </div>
         </div>
       </section>
