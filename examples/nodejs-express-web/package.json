@@ -1,0 +1,16 @@
+{
+  "name": "faizdb-nodejs-demo",
+  "version": "1.0.0",
+  "description": "Fullstack Node.js Express Web Application powered by FaizDB (MongoDB Wire Protocol)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0"
+  },
+  "author": "Ahmad Faiz"
+}

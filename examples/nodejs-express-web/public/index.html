@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaizDB Enterprise SaaS — Node.js & Express Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d30;
+      --border: #23304d;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #6366f1;
+      --success: #10b981;
+      --amber: #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand { display: flex; align-items: center; gap: 1rem; }
+    .logo {
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; font-weight: bold;
+    }
+
+    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 2rem; }
+    @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+
+    .card-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; }
+
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 0.4rem; letter-spacing: 0.05em; }
+    input, select {
+      width: 100%; background: #0b0f19; border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.75rem 1rem; color: var(--text); font-size: 0.9rem; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+
+    button {
+      width: 100%; background: linear-gradient(135deg, var(--accent), #4f46e5);
+      color: white; border: none; padding: 0.85rem; border-radius: 8px;
+      font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th { text-align: left; padding: 0.75rem 1rem; color: var(--muted); border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; }
+    td { padding: 1rem; border-bottom: 1px solid rgba(35, 48, 77, 0.6); }
+
+    .badge { padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; font-family: 'JetBrains Mono'; }
+    .badge-enterprise { background: #4c1d95; color: #d8b4fe; }
+    .badge-pro { background: #1e3a8a; color: #93c5fd; }
+    .badge-starter { background: #064e3b; color: #6ee7b7; }
+
+    .analytics-banner {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .metric-card {
+      background: #0d1424;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">⚡</div>
+        <div>
+          <h2>Enterprise SaaS App (Node.js + Express)</h2>
+          <p style="font-size: 0.8rem; color: var(--muted);">Connected to FaizDB via Official MongoDB Wire Protocol (Port 27017)</p>
+        </div>
+      </div>
+      <div>
+        <span class="badge" style="background: #064e3b; color: #34d399; font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+          🍃 MongoDB Driver Connected
+        </span>
+      </div>
+    </header>
+
+    <!-- Aggregation Analytics Banner -->
+    <div class="analytics-banner" id="analytics-grid">
+      <div class="metric-card">
+        <div style="font-size: 0.75rem; color: var(--muted); text-transform: uppercase; font-weight: 700;">Loading Analytics Pipeline...</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Add Customer Form -->
+      <div class="card">
+        <div class="card-title">
+          <span>➕ Add Enterprise Customer</span>
+        </div>
+        <form id="customer-form">
+          <div class="form-group">
+            <label>Customer / Company Name</label>
+            <input type="text" id="cust_name" placeholder="e.g. Acme Corporation" required>
+          </div>
+          <div class="form-group">
+            <label>Contact Email</label>
+            <input type="email" id="cust_email" placeholder="e.g. ceo@acme.com" required>
+          </div>
+          <div class="form-group">
+            <label>Subscription Tier</label>
+            <select id="cust_plan">
+              <option value="Enterprise">Enterprise ($5,000/mo)</option>
+              <option value="Pro">Pro ($1,500/mo)</option>
+              <option value="Starter">Starter ($450/mo)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Annual Contract Value (USD)</label>
+            <input type="number" id="cust_rev" placeholder="e.g. 60000" required>
+          </div>
+          <button type="submit">💾 Save Customer (Mongo Driver)</button>
+        </form>
+      </div>
+
+      <!-- Customer List -->
+      <div class="card">
+        <div class="card-title">
+          <span>📊 Customer Records (FaizDB Collection)</span>
+          <span id="cust-count" style="font-size: 0.8rem; color: var(--muted); font-weight: normal;">(0 total)</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th>Tier</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody id="cust-tbody">
+            <tr><td colspan="3" style="text-align: center; color: var(--muted); padding: 2rem;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadData() {
+      // 1. Fetch Customers
+      const res = await fetch('/api/customers');
+      const json = await res.json();
+      const tbody = document.getElementById('cust-tbody');
+      const count = document.getElementById('cust-count');
+
+      if (json.success && json.data) {
+        count.textContent = `(${json.data.length} total)`;
+        if (json.data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--muted); padding: 2rem;">No customers found. Insert one!</td></tr>`;
+        } else {
+          tbody.innerHTML = json.data.map(c => `
+            <tr>
+              <td>
+                <div style="font-weight: 700;">${c.name}</div>
+                <div style="font-size: 0.75rem; color: var(--muted);">${c.email}</div>
+              </td>
+              <td>
+                <span class="badge ${c.plan === 'Enterprise' ? 'badge-enterprise' : c.plan === 'Pro' ? 'badge-pro' : 'badge-starter'}">
+                  ${c.plan}
+                </span>
+              </td>
+              <td style="font-family: 'JetBrains Mono'; font-weight: 800; color: #38bdf8;">
+                $${Number(c.revenue || 0).toLocaleString()}
+              </td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      // 2. Fetch Aggregation Analytics Pipeline
+      const aRes = await fetch('/api/analytics');
+      const aJson = await aRes.json();
+      const aGrid = document.getElementById('analytics-grid');
+      if (aJson.success && aJson.data) {
+        aGrid.innerHTML = aJson.data.map(item => `
+          <div class="metric-card">
+            <div style="font-size: 0.75rem; color: var(--muted); text-transform: uppercase; font-weight: 700;">${item._id} Tier Revenue</div>
+            <div style="font-size: 1.4rem; font-weight: 800; color: #10b981; font-family: 'JetBrains Mono'; margin-top: 0.25rem;">
+              $${Number(item.totalRevenue || 0).toLocaleString()}
+            </div>
+            <div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem;">${item.count} Active Contracts</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    document.getElementById('customer-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('cust_name').value,
+        email: document.getElementById('cust_email').value,
+        plan: document.getElementById('cust_plan').value,
+        revenue: Number(document.getElementById('cust_rev').value),
+      };
+
+      await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      document.getElementById('cust_name').value = '';
+      document.getElementById('cust_email').value = '';
+      document.getElementById('cust_rev').value = '';
+      loadData();
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
