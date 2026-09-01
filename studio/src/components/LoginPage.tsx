@@ -326,13 +326,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         {/* Top Section: Quick Value Pitch */}
         <div className="relative z-10 space-y-2 max-w-xl">
           <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400 font-bold">
-            The AI-Native Unified Database
+            The Universal High-Performance Database
           </span>
           <h2 className="text-3xl font-extrabold text-white tracking-tight leading-tight">
-            Drop-in MongoDB replacement with sub-millisecond Rust speed.
+            The sub-millisecond database for modern applications.
           </h2>
           <p className="text-zinc-400 text-sm leading-relaxed">
-            Consolidate your stack. Document storage, vector embeddings, graph traversal, and full-text search in a single memory-safe binary.
+            Engineered in 100% Rust for extreme concurrency and zero GC latency. A single universal engine for Web, Mobile, Real-Time Gaming, Enterprise, and AI Workloads.
           </p>
         </div>
 
@@ -369,10 +369,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             {/* Code Body */}
             <div className="p-4 font-mono text-xs space-y-2 text-zinc-300">
               <div className="flex items-center gap-2 text-emerald-400">
-                <span className="text-zinc-600"># Direct Drop-in with Mongoose, PyMongo, or MongoDB Compass:</span>
+                <span className="text-zinc-600"># Universal Wire Protocol (Port 27017) & HTTP REST (Port 27018):</span>
               </div>
               <p className="text-white bg-zinc-950 p-2.5 rounded border border-zinc-800/80 selection:bg-emerald-500/30">
-                MONGODB_URI=<span className="text-emerald-400">mongodb://127.0.0.1:27017</span>
+                FAIZDB_URI=<span className="text-emerald-400">mongodb://127.0.0.1:27017</span>
               </p>
               
               <div className="pt-2 text-[11px] text-zinc-400 grid grid-cols-2 gap-2">
