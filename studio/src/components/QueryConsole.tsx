@@ -23,8 +23,9 @@ export const QueryConsole: React.FC = () => {
   const templates = [
     { label: 'SQL Select', q: 'SELECT * FROM users' },
     { label: 'SQL Filter', q: 'SELECT * FROM users WHERE active = true' },
+    { label: 'Mongo Aggregate ($group)', q: 'db.users.aggregate([\n  { "$match": { "active": true } },\n  { "$group": { "_id": "$country", "count": { "$sum": 1 } } },\n  { "$sort": { "count": -1 } }\n])' },
     { label: 'Mongo Find', q: 'db.users.find({ "country": "Malaysia" })' },
-    { label: 'Mongo Insert', q: 'db.users.insert({ "name": "Faiz AI", "role": "Innovator", "active": true })' },
+    { label: 'Mongo Insert', q: 'db.users.insert({ "name": "Faiz AI", "role": "Innovator", "country": "Malaysia", "active": true })' },
     { label: 'FaizQL Vector', q: 'FIND users VECTOR NEAR [0.12, 0.85, 0.43, 0.67] TOP 5' },
     { label: 'SQL Count', q: 'SELECT COUNT(*) FROM users' },
   ];

@@ -93,6 +93,21 @@ export class FaizCollection<T extends Record<string, any> = Record<string, any>>
   }
 
   /**
+   * Complex Aggregation Pipeline ($match, $group, $sort, $project, $limit)
+   */
+  async aggregate<R = any>(pipeline: Record<string, any>[]): Promise<R[]> {
+    const res = await this.client.request<R[]>(
+      `/v1/collections/${this.name}/aggregate`,
+      'POST',
+      { pipeline }
+    );
+    if (!res.success || !res.data) {
+      throw new Error(res.error || 'Aggregation pipeline failed');
+    }
+    return res.data;
+  }
+
+  /**
    * Real-Time Change Stream Watcher for this collection
    */
   watch(callback: (event: ChangeEvent<T>) => void): () => void {

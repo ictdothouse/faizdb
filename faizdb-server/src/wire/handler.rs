@@ -104,6 +104,10 @@ fn dispatch_command(
         return handle_find(db, col_name, cmd);
     }
 
+    if let Ok(col_name) = cmd.get_str("aggregate") {
+        return handle_aggregate(db, col_name, cmd);
+    }
+
     if let Ok(col_name) = cmd.get_str("count") {
         return handle_count(db, col_name, cmd);
     }
@@ -244,6 +248,56 @@ fn handle_find(
             "id": 0i64, // 0 = complete cursor (no getMore needed)
             "ns": format!("{db_name}.{collection_name}"),
             "firstBatch": filtered
+        },
+        "ok": 1.0
+    }
+}
+
+fn handle_aggregate(
+    db: &Arc<DatabaseContext>,
+    collection_name: &str,
+    cmd: &BsonDocument,
+) -> BsonDocument {
+    let col = db.get_or_create_collection(collection_name);
+    let db_name = cmd.get_str("$db").unwrap_or("default");
+
+    let all_docs = col.find_all(None);
+
+    let result_docs = if let Ok(pipeline_array) = cmd.get_array("pipeline") {
+        // Convert BSON pipeline array to JSON value
+        let json_arr: Vec<serde_json::Value> = pipeline_array
+            .iter()
+            .filter_map(|item| {
+                if let Some(d) = item.as_document() {
+                    let faiz_doc = bson_to_faiz_document(d);
+                    serde_json::to_value(&faiz_doc.fields).ok()
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        match faizdb_query::parse_pipeline(&serde_json::Value::Array(json_arr)) {
+            Ok(stages) => faizdb_query::execute_pipeline(all_docs, &stages),
+            Err(e) => {
+                tracing::warn!("Aggregation pipeline parse error: {e}");
+                all_docs
+            }
+        }
+    } else {
+        all_docs
+    };
+
+    let bson_docs: Vec<BsonDocument> = result_docs
+        .into_iter()
+        .map(|d| faiz_document_to_bson(&d))
+        .collect();
+
+    doc! {
+        "cursor": doc! {
+            "id": 0i64,
+            "ns": format!("{db_name}.{collection_name}"),
+            "firstBatch": bson_docs
         },
         "ok": 1.0
     }
