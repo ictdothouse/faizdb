@@ -1,11 +1,13 @@
 //! Query Executor for evaluating parsed statements against collections and indexes.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
 use faizdb_core::document::collection::Collection;
 use faizdb_core::document::model::Document;
+use faizdb_core::stream::{ChangeEvent, ChangeStreamBus};
 use crate::ast::Statement;
 
 /// Query execution result
@@ -19,15 +21,17 @@ pub enum QueryResult {
     Success(String),
 }
 
-/// Execution environment holding database collections
+/// Execution environment holding database collections & Change Stream bus
 pub struct DatabaseContext {
     collections: DashMap<String, Arc<Collection>>,
+    bus: Arc<ChangeStreamBus>,
 }
 
 impl Default for DatabaseContext {
     fn default() -> Self {
         Self {
             collections: DashMap::new(),
+            bus: Arc::new(ChangeStreamBus::new()),
         }
     }
 }
@@ -35,6 +39,11 @@ impl Default for DatabaseContext {
 impl DatabaseContext {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Access the real-time Change Stream broadcast bus
+    pub fn change_stream_bus(&self) -> Arc<ChangeStreamBus> {
+        self.bus.clone()
     }
 
     /// Get or create a collection
@@ -71,8 +80,13 @@ impl DatabaseContext {
                 let col = self.get_or_create_collection(&collection);
                 let mut ids = Vec::with_capacity(documents.len());
                 for doc in documents {
+                    let doc_clone = doc.clone();
                     let id = col.insert(doc).map_err(|e| e.to_string())?;
-                    ids.push(id.as_str().to_string());
+                    let id_str = id.as_str().to_string();
+                    
+                    // Emit real-time change stream event
+                    self.bus.publish(ChangeEvent::insert(&collection, doc_clone));
+                    ids.push(id_str);
                 }
                 Ok(QueryResult::Inserted(ids))
             }
@@ -100,7 +114,9 @@ impl DatabaseContext {
 
                 let count = matching_ids.len() as u64;
                 for id in matching_ids {
-                    let _ = col.delete_by_id(&id);
+                    if col.delete_by_id(&id).is_ok() {
+                        self.bus.publish(ChangeEvent::delete(&collection, &id));
+                    }
                 }
                 Ok(QueryResult::Deleted(count))
             }
@@ -115,12 +131,19 @@ impl DatabaseContext {
                     .collect();
 
                 for id in matching_ids {
+                    let mut updates_map = BTreeMap::new();
+                    for (k, v) in &updates {
+                        updates_map.insert(k.clone(), v.clone());
+                    }
+
                     let res = col.update_by_id(&id, |doc| {
                         for (k, v) in &updates {
                             doc.set(k.clone(), v.clone());
                         }
                     });
                     if res.is_ok() {
+                        let updated_doc = col.find_by_id(&id).ok();
+                        self.bus.publish(ChangeEvent::update(&collection, &id, updates_map, updated_doc));
                         count += 1;
                     }
                 }
@@ -132,19 +155,20 @@ impl DatabaseContext {
             }
             Statement::DropCollection { name } => {
                 self.collections.remove(&name);
+                self.bus.publish(ChangeEvent::drop_collection(&name));
                 Ok(QueryResult::Success(format!("Collection '{name}' dropped")))
             }
             Statement::CreateIndex { collection, field, unique } => {
                 let col = self.get_or_create_collection(&collection);
                 col.create_index(faizdb_core::document::collection::IndexDef {
                     name: format!("idx_{field}"),
-                    fields: vec![(field, 1)],
+                    fields: vec![(field.clone(), 1)],
                     index_type: faizdb_core::document::collection::IndexType::BTree,
                     unique,
                     sparse: false,
                 })
                 .map_err(|e| e.to_string())?;
-                Ok(QueryResult::Success("Index created".into()))
+                Ok(QueryResult::Success(format!("Index on '{collection}.{field}' created")))
             }
         }
     }

@@ -32,12 +32,14 @@
 pub mod document;
 pub mod error;
 pub mod storage;
+pub mod stream;
 pub mod transaction;
 
 // Re-export commonly used types
 pub use document::{Document, DocumentId, Value};
 pub use error::{FaizError, FaizResult};
 pub use storage::engine::StorageEngine;
+pub use stream::{ChangeEvent, ChangeStreamBus, OperationType};
 
 /// The database version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

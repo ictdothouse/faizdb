@@ -33,6 +33,7 @@ axum = { version = "0.8", features = ["ws"] }
 tonic = "0.12"
 tower = "0.5"
 hyper = "1.5"
+futures-util = "0.3"
 
 # Crypto & Security
 ring = "0.17"

@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Table2,
   Terminal,
+  Radio,
   BrainCircuit,
   Network,
   ShieldCheck,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Badge } from './ui/Badge';
 
-export type NavTab = 'overview' | 'tables' | 'query' | 'vector' | 'graph' | 'security';
+export type NavTab = 'overview' | 'tables' | 'query' | 'stream' | 'vector' | 'graph' | 'security';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -37,9 +38,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'tables', label: 'Table Explorer', icon: <Table2 className="w-4 h-4" /> },
     { id: 'query', label: 'FaizQL Console', icon: <Terminal className="w-4 h-4" />, badge: 'Multi' },
-    { id: 'vector', label: 'AI Vector Search', icon: <BrainCircuit className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />, badge: 'HNSW' },
+    { id: 'stream', label: 'Live Streams', icon: <Radio className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />, badge: 'WS' },
+    { id: 'vector', label: 'AI Vector Search', icon: <BrainCircuit className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />, badge: 'HNSW' },
     { id: 'graph', label: 'Knowledge Graph', icon: <Network className="w-4 h-4 text-amber-600 dark:text-amber-400" />, badge: 'RAG' },
-    { id: 'security', label: 'Security Vault', icon: <ShieldCheck className="w-4 h-4 text-cyan-600 dark:text-cyan-400" /> },
+    { id: 'security', label: 'Security Vault', icon: <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> },
   ];
 
   return (

@@ -185,7 +185,9 @@ fn handle_insert(
 
     for bdoc in docs_to_insert {
         let faiz_doc = bson_to_faiz_document(&bdoc);
+        let doc_clone = faiz_doc.clone();
         if col.insert(faiz_doc).is_ok() {
+            db.change_stream_bus().publish(faizdb_core::stream::ChangeEvent::insert(collection_name, doc_clone));
             inserted_count += 1;
         }
     }
@@ -293,6 +295,7 @@ fn handle_delete(
 
                     for id in matching_ids {
                         if col.delete_by_id(&id).is_ok() {
+                            db.change_stream_bus().publish(faizdb_core::stream::ChangeEvent::delete(collection_name, &id));
                             deleted_count += 1;
                         }
                     }
@@ -348,6 +351,17 @@ fn handle_update(
                             }
                         });
                         if res.is_ok() {
+                            let mut updated_fields = std::collections::BTreeMap::new();
+                            for (k, v) in set_map {
+                                updated_fields.insert(k.clone(), bson_val_to_faiz(v));
+                            }
+                            let updated_doc = col.find_by_id(&id).ok();
+                            db.change_stream_bus().publish(faizdb_core::stream::ChangeEvent::update(
+                                collection_name,
+                                &id,
+                                updated_fields,
+                                updated_doc,
+                            ));
                             modified_count += 1;
                         }
                     }

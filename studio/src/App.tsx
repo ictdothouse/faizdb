@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { Overview } from './components/Overview';
 import { TableExplorer } from './components/TableExplorer';
 import { QueryConsole } from './components/QueryConsole';
+import { StreamMonitor } from './components/StreamMonitor';
 import { VectorExplorer } from './components/VectorExplorer';
 import { GraphExplorer } from './components/GraphExplorer';
 import { SecurityVault } from './components/SecurityVault';
@@ -192,6 +193,7 @@ export const App: React.FC = () => {
           )}
 
           {currentTab === 'query' && <QueryConsole />}
+          {currentTab === 'stream' && <StreamMonitor />}
           {currentTab === 'vector' && <VectorExplorer />}
           {currentTab === 'graph' && <GraphExplorer />}
           {currentTab === 'security' && <SecurityVault />}

@@ -2,15 +2,16 @@
 //!
 //! Provides:
 //! 1. **MongoDB Wire Protocol** (Port 27017) — drop-in replacement for MongoDB apps & tools.
-//! 2. **REST / HTTP API** (Port 27018) — for web clients, microservices, and direct queries.
+//! 2. **REST / HTTP & WebSocket Change Streams** (Port 27018) — for web clients, microservices, and reactive subscriptions.
 
 pub mod api;
 pub mod wire;
+pub mod stream;
 
 pub use api::{create_router, AppState};
 pub use wire::run_wire_server;
 
-/// Run the unified FaizDB server (MongoDB Wire Protocol on `wire_addr` + HTTP REST API on `http_addr`)
+/// Run the unified FaizDB server (MongoDB Wire Protocol on `wire_addr` + HTTP & WebSocket on `http_addr`)
 pub async fn run_dual_server(
     wire_addr: &str,
     http_addr: &str,
@@ -18,12 +19,12 @@ pub async fn run_dual_server(
     let db = std::sync::Arc::new(faizdb_query::DatabaseContext::new());
 
     let state = std::sync::Arc::new(AppState {
-        db: faizdb_query::DatabaseContext::new(),
+        db: db.clone(),
     });
 
     let http_router = create_router(state);
     let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
-    tracing::info!("🔥 FaizDB REST/HTTP API running on http://{http_addr}");
+    tracing::info!("🔥 FaizDB REST/HTTP & WebSocket Change Streams running on http://{http_addr}");
 
     let wire_addr_str = wire_addr.to_string();
     let db_for_wire = db.clone();
@@ -35,10 +36,10 @@ pub async fn run_dual_server(
         }
     });
 
-    // Run HTTP API
+    // Run HTTP & WebSocket API
     let http_handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(http_listener, http_router).await {
-            tracing::error!("HTTP server error: {e}");
+            tracing::error!("HTTP/WS server error: {e}");
         }
     });
 
@@ -46,10 +47,11 @@ pub async fn run_dual_server(
     Ok(())
 }
 
-/// Run only the HTTP server
+/// Run only the HTTP & WebSocket server
 pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let db = std::sync::Arc::new(faizdb_query::DatabaseContext::new());
     let state = std::sync::Arc::new(AppState {
-        db: faizdb_query::DatabaseContext::new(),
+        db,
     });
 
     let app = create_router(state);

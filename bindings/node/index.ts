@@ -34,6 +34,16 @@ export interface CollectionStats {
   index_count: number;
 }
 
+export interface ChangeEvent<T = any> {
+  resume_token: string;
+  timestamp: string;
+  collection: string;
+  operation_type: 'insert' | 'update' | 'delete' | 'replace' | 'drop';
+  document_id: string;
+  full_document?: T;
+  updated_fields?: Record<string, any>;
+}
+
 export class FaizCollection<T extends Record<string, any> = Record<string, any>> {
   constructor(
     private client: FaizClient,
@@ -83,6 +93,13 @@ export class FaizCollection<T extends Record<string, any> = Record<string, any>>
   }
 
   /**
+   * Real-Time Change Stream Watcher for this collection
+   */
+  watch(callback: (event: ChangeEvent<T>) => void): () => void {
+    return this.client.watchCollection<T>(this.name, callback);
+  }
+
+  /**
    * Get collection statistics
    */
   async stats(): Promise<CollectionStats> {
@@ -112,6 +129,42 @@ export class FaizClient {
   }
 
   /**
+   * Subscribe to global real-time change streams across all collections
+   */
+  watch(callback: (event: ChangeEvent) => void): () => void {
+    const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/v1/subscribe';
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (msg) => {
+      try {
+        const data = JSON.parse(msg.data.toString());
+        if (data.status === 'connected') return;
+        callback(data);
+      } catch {}
+    };
+
+    return () => ws.close();
+  }
+
+  /**
+   * Watch mutations on a specific collection
+   */
+  watchCollection<T = any>(collection: string, callback: (event: ChangeEvent<T>) => void): () => void {
+    const wsUrl = `${this.baseUrl.replace(/^http/, 'ws')}/v1/collections/${collection}/watch`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (msg) => {
+      try {
+        const data = JSON.parse(msg.data.toString());
+        if (data.status === 'connected') return;
+        callback(data);
+      } catch {}
+    };
+
+    return () => ws.close();
+  }
+
+  /**
    * Execute any FaizDB query string (SQL, MongoDB JSON, or FaizQL)
    */
   async query<T = any>(queryString: string): Promise<T> {
@@ -119,7 +172,6 @@ export class FaizClient {
     if (!res.success) {
       throw new Error(res.error || 'Query execution failed');
     }
-    // Unwrap inner QueryResult enum if present
     if (res.data && typeof res.data === 'object') {
       if ('Documents' in res.data) return res.data.Documents;
       if ('Count' in res.data) return res.data.Count;
@@ -140,7 +192,7 @@ export class FaizClient {
   }
 
   /**
-   * Internal HTTP request helper (uses standard fetch, works in Node, Bun, Deno, Browsers)
+   * Internal HTTP request helper
    */
   async request<T>(path: string, method: string, body?: any): Promise<QueryResponse<T>> {
     const url = `${this.baseUrl}${path}`;

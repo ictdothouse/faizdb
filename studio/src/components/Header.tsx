@@ -38,6 +38,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'FaizQL Multi-Dialect Console',
       desc: 'Execute SQL queries, MongoDB queries, and AI vector instructions with sub-ms execution',
     },
+    stream: {
+      title: 'Real-Time Change Stream Monitor',
+      desc: 'Live WebSocket Change Data Capture (CDC) events, resume tokens & reactive subscriptions',
+    },
     vector: {
       title: 'AI Vector Search Engine',
       desc: 'HNSW sub-millisecond similarity matching & embedding visualizer (up to 4096 dimensions)',
