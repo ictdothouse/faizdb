@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Rust](https://img.shields.io/badge/rust-2021_edition-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-2024_edition-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 [![Protocols](https://img.shields.io/badge/protocols-MongoDB_Wire_%7C_REST_%7C_WebSocket-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
