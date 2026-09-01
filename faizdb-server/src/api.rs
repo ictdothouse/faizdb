@@ -65,8 +65,18 @@ impl<T> ApiResponse<T> {
     }
 }
 
-/// Permissive CORS Middleware allowing all origins, methods and headers
+/// Restricted CORS Middleware allowing specific origins
 async fn cors_middleware(req: Request<Body>, next: Next) -> Response {
+    let origin = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+        
+    let allowed_origin_env = std::env::var("FAIZDB_ALLOWED_ORIGINS").unwrap_or_else(|_| "http://localhost:27020".to_string());
+    let allowed_origins: Vec<&str> = allowed_origin_env.split(',').collect();
+
     let is_options = req.method() == Method::OPTIONS;
     let mut response = if is_options {
         Response::builder()
@@ -78,18 +88,84 @@ async fn cors_middleware(req: Request<Body>, next: Next) -> Response {
     };
 
     let headers = response.headers_mut();
-    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    
+    // Set CORS origin dynamically based on allowed origins list
+    if allowed_origins.contains(&"*") || allowed_origins.contains(&origin.as_str()) {
+        if origin.is_empty() {
+             headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+        } else {
+            if let Ok(val) = HeaderValue::from_str(&origin) {
+                headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, val);
+            }
+        }
+    }
+
     headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS, PATCH"));
-    headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("*"));
+    headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Authorization, Content-Type, Accept"));
     headers.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("86400"));
+    
     response
+}
+
+/// Client Authentication Middleware (Validates Bearer token or query param for WS)
+async fn client_auth_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
+    let expected_token = std::env::var("FAIZDB_API_KEY").unwrap_or_else(|_| "faizdb-secret-key".to_string());
+    
+    let mut token_found = false;
+    // Check Authorization header
+    if let Some(auth_value) = req.headers().get(header::AUTHORIZATION) {
+        if let Ok(auth_str) = auth_value.to_str() {
+            if auth_str.starts_with("Bearer ") {
+                let token = auth_str.trim_start_matches("Bearer ");
+                if token == expected_token {
+                    token_found = true;
+                }
+            }
+        }
+    }
+    
+    // Check query params for WebSocket support
+    if !token_found {
+        if let Some(query) = req.uri().query() {
+            let query_token = format!("token={}", expected_token);
+            if query.contains(&query_token) {
+                token_found = true;
+            }
+        }
+    }
+    
+    if token_found {
+        Ok(next.run(req).await)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+/// Cluster Authentication Middleware (Validates RPC tokens)
+async fn cluster_auth_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
+    let expected_token = std::env::var("FAIZDB_CLUSTER_TOKEN").unwrap_or_else(|_| "faizdb-cluster-secret".to_string());
+    
+    if let Some(auth_value) = req.headers().get(header::AUTHORIZATION) {
+        if let Ok(auth_str) = auth_value.to_str() {
+            if auth_str.starts_with("Bearer ") {
+                let token = auth_str.trim_start_matches("Bearer ");
+                if token == expected_token {
+                    return Ok(next.run(req).await);
+                }
+            }
+        }
+    }
+    
+    Err(StatusCode::UNAUTHORIZED)
 }
 
 /// Create the Axum HTTP router with REST, WebSocket Change Streams & Cluster RPC
 pub fn create_router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let public_routes = Router::new()
         .route("/v1/health", get(health_check))
-        .route("/v1/info", get(server_info))
+        .route("/v1/info", get(server_info));
+
+    let client_routes = Router::new()
         .route("/v1/query", post(execute_query))
         .route("/v1/collections/{name}/documents", get(get_collection_documents).post(insert_document))
         .route("/v1/collections/{name}/documents/{id}", delete(delete_document))
@@ -101,16 +177,23 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
         .route("/v1/subscribe", get(ws_global_subscribe))
         .route("/v1/collections/{name}/watch", get(ws_collection_watch))
-        // Cluster & Raft Endpoints
+        .route("/v1/backup/create", post(backup_create))
+        .route("/v1/backup/list", get(backup_list))
+        .route("/v1/backup/restore", post(backup_restore))
+        .layer(middleware::from_fn(client_auth_middleware));
+
+    let cluster_routes = Router::new()
         .route("/v1/cluster/status", get(cluster_status))
         .route("/v1/cluster/join", post(cluster_join))
         .route("/v1/cluster/failover", post(cluster_trigger_failover))
         .route("/v1/cluster/raft/vote", post(raft_request_vote))
         .route("/v1/cluster/raft/append", post(raft_append_entries))
-        // Backup & Disaster Recovery Endpoints
-        .route("/v1/backup/create", post(backup_create))
-        .route("/v1/backup/list", get(backup_list))
-        .route("/v1/backup/restore", post(backup_restore))
+        .layer(middleware::from_fn(cluster_auth_middleware));
+
+    Router::new()
+        .merge(public_routes)
+        .merge(client_routes)
+        .merge(cluster_routes)
         .layer(middleware::from_fn(cors_middleware))
         .with_state(state)
 }

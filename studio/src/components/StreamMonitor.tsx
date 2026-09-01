@@ -50,7 +50,7 @@ export const StreamMonitor: React.FC = () => {
   const connectWebSocket = () => {
     try {
       const host = window.location.hostname || '127.0.0.1';
-      const wsUrl = `ws://${host}:27018/v1/subscribe`;
+      const wsUrl = `ws://${host}:27018/v1/subscribe?token=${api.getApiKey()}`;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

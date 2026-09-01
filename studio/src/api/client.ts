@@ -27,6 +27,8 @@ export interface CollectionStats {
 class FaizApiClient {
   // Use relative URL so Vite proxy or direct CORS handles it cleanly
   private baseUrl: string = '';
+  private apiKey: string = import.meta.env.VITE_FAIZDB_API_KEY || 'faizdb-secret-key';
+  private clusterToken: string = import.meta.env.VITE_FAIZDB_CLUSTER_TOKEN || 'faizdb-cluster-secret';
 
   setEndpoint(url: string) {
     this.baseUrl = url.replace(/\/+$/, '');
@@ -35,26 +37,46 @@ class FaizApiClient {
   getEndpoint(): string {
     return this.baseUrl || window.location.origin;
   }
+  
+  getApiKey(): string {
+    return this.apiKey;
+  }
+
+  async fetch(url: string, init?: RequestInit): Promise<Response> {
+    const headers = { 
+      'Authorization': `Bearer ${this.apiKey}`,
+      ...(init?.headers || {}) 
+    };
+    return fetch(url, { ...init, headers });
+  }
+
+  async clusterFetch(url: string, init?: RequestInit): Promise<Response> {
+    const headers = { 
+      'Authorization': `Bearer ${this.clusterToken}`,
+      ...(init?.headers || {}) 
+    };
+    return fetch(url, { ...init, headers });
+  }
 
   async getHealth(): Promise<{ status: string; engine: string; version: string }> {
     try {
-      const res = await fetch(`${this.baseUrl}/v1/health`);
+      const res = await this.fetch(`${this.baseUrl}/v1/health`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch {
       // Fallback direct port 27018
-      const res = await fetch('http://127.0.0.1:27018/v1/health');
+      const res = await this.fetch('http://127.0.0.1:27018/v1/health');
       return await res.json();
     }
   }
 
   async getInfo(): Promise<ServerInfo> {
     try {
-      const res = await fetch(`${this.baseUrl}/v1/info`);
+      const res = await this.fetch(`${this.baseUrl}/v1/info`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch {
-      const res = await fetch('http://127.0.0.1:27018/v1/info');
+      const res = await this.fetch('http://127.0.0.1:27018/v1/info');
       return await res.json();
     }
   }
@@ -63,13 +85,13 @@ class FaizApiClient {
     const start = performance.now();
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/v1/query`, {
+      res = await this.fetch(`${this.baseUrl}/v1/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: queryStr }),
       });
     } catch {
-      res = await fetch('http://127.0.0.1:27018/v1/query', {
+      res = await this.fetch('http://127.0.0.1:27018/v1/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: queryStr }),
@@ -99,13 +121,13 @@ class FaizApiClient {
   async insertDocument(collection: string, doc: Record<string, any>): Promise<string> {
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/v1/collections/${collection}/insert`, {
+      res = await this.fetch(`${this.baseUrl}/v1/collections/${collection}/insert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(doc),
       });
     } catch {
-      res = await fetch(`http://127.0.0.1:27018/v1/collections/${collection}/insert`, {
+      res = await this.fetch(`http://127.0.0.1:27018/v1/collections/${collection}/insert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(doc),

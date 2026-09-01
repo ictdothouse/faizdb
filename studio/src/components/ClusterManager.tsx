@@ -81,7 +81,7 @@ export const ClusterManager: React.FC = () => {
   const fetchClusterStatus = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${api.getEndpoint()}/v1/cluster/status`);
+      const res = await api.clusterFetch(`${api.getEndpoint()}/v1/cluster/status`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -99,7 +99,7 @@ export const ClusterManager: React.FC = () => {
   const handleSimulateFailover = async () => {
     setIsFailingOver(true);
     try {
-      await fetch(`${api.getEndpoint()}/v1/cluster/failover`, { method: 'POST' });
+      await api.clusterFetch(`${api.getEndpoint()}/v1/cluster/failover`, { method: 'POST' });
       setCurrentTerm((prev) => prev + 1);
 
       // Rotate leadership in UI
@@ -121,7 +121,7 @@ export const ClusterManager: React.FC = () => {
   const handleAddPeer = async () => {
     if (!newPeerId.trim() || !newPeerAddr.trim()) return;
     try {
-      await fetch(`${api.getEndpoint()}/v1/cluster/join`, {
+      await api.clusterFetch(`${api.getEndpoint()}/v1/cluster/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ peer_id: newPeerId, peer_address: newPeerAddr }),

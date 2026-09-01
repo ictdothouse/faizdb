@@ -119,7 +119,7 @@ export const CacheManager: React.FC = () => {
   const handleManualPurge = async () => {
     setIsPurging(true);
     try {
-      await fetch(`${api.getEndpoint()}/v1/collections/${collectionName}/ttl/purge`, { method: 'POST' });
+      await api.fetch(`${api.getEndpoint()}/v1/collections/${collectionName}/ttl/purge`, { method: 'POST' });
       setTotalPurged((prev) => prev + items.filter((i) => i.remaining_seconds <= 2).length);
       setItems((prev) => prev.filter((i) => i.remaining_seconds > 2));
     } catch (e) {

@@ -86,7 +86,7 @@ export const SearchExplorer: React.FC = () => {
     setLoading(true);
     const start = performance.now();
     try {
-      const res = await fetch(`${api.getEndpoint()}/v1/collections/${collectionName}/search`, {
+      const res = await api.fetch(`${api.getEndpoint()}/v1/collections/${collectionName}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query.trim(), fuzzy, top_k: 10 }),

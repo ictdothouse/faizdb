@@ -54,7 +54,7 @@ export const BackupManager: React.FC = () => {
   const fetchSnapshots = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${api.getEndpoint()}/v1/backup/list`);
+      const res = await api.fetch(`${api.getEndpoint()}/v1/backup/list`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -71,7 +71,7 @@ export const BackupManager: React.FC = () => {
   const handleCreateSnapshot = async () => {
     setIsCreating(true);
     try {
-      const res = await fetch(`${api.getEndpoint()}/v1/backup/create`, { method: 'POST' });
+      const res = await api.fetch(`${api.getEndpoint()}/v1/backup/create`, { method: 'POST' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -90,7 +90,7 @@ export const BackupManager: React.FC = () => {
     setIsRestoring(true);
     setRestoreSuccessMsg(null);
     try {
-      const res = await fetch(`${api.getEndpoint()}/v1/backup/restore`, {
+      const res = await api.fetch(`${api.getEndpoint()}/v1/backup/restore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
