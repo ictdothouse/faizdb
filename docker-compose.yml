@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # FaizDB Database Engine (Port 27017: MongoDB Wire, Port 27018: HTTP REST API)
+  faizdb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: faizdb-engine
+    ports:
+      - "27017:27017" # MongoDB Wire Protocol
+      - "27018:27018" # FaizDB REST / HTTP API
+    volumes:
+      - faizdb_data:/data
+    restart: unless-stopped
+
+  # FaizDB Web Management Studio (Port 5173 / Port 3000)
+  studio:
+    build:
+      context: ./studio
+      dockerfile: Dockerfile
+    container_name: faizdb-studio
+    ports:
+      - "3000:80"     # Open http://localhost:3000
+      - "5173:80"     # Open http://localhost:5173
+    depends_on:
+      - faizdb
+    restart: unless-stopped
+
+volumes:
+  faizdb_data:
+    driver: local

@@ -24,12 +24,12 @@ WORKDIR /app
 # Copy compiled binary from builder
 COPY --from=builder /usr/src/faizdb/target/release/faizdb /usr/local/bin/faizdb
 
-# Expose default HTTP/REST and wire protocol port
-EXPOSE 27018
+# Expose MongoDB Wire Protocol (27017) and HTTP/REST API (27018)
+EXPOSE 27017 27018
 
 # Data directory volume
 VOLUME ["/data"]
 
-# Default entrypoint starts the FaizDB server
+# Default entrypoint starts the FaizDB dual-protocol server
 ENTRYPOINT ["faizdb"]
-CMD ["serve", "--port", "27018", "--host", "0.0.0.0"]
+CMD ["serve", "--wire-port", "27017", "--http-port", "27018", "--host", "0.0.0.0"]
