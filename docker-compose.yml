@@ -16,13 +16,29 @@ services:
       FAIZDB_CLUSTER_TOKEN: ${FAIZDB_CLUSTER_TOKEN:-faizdb-cluster-secret}
       FAIZDB_ALLOWED_ORIGINS: ${FAIZDB_ALLOWED_ORIGINS:-http://localhost:27020}
 
+      # --- JWT Authentication ---
+      # Generate a strong secret: openssl rand -hex 64
+      FAIZDB_JWT_SECRET: ${FAIZDB_JWT_SECRET:-faizdb-jwt-secret-change-in-production}
+      FAIZDB_TOKEN_TTL_SECS: ${FAIZDB_TOKEN_TTL_SECS:-3600}    # 1 hour
+
+      # --- RBAC User Accounts ---
+      FAIZDB_ADMIN_USER: ${FAIZDB_ADMIN_USER:-admin}
+      FAIZDB_ADMIN_PASS: ${FAIZDB_ADMIN_PASS:-faizdb-admin-2026}
+      FAIZDB_RW_USER: ${FAIZDB_RW_USER:-}    # Optional ReadWrite user
+      FAIZDB_RW_PASS: ${FAIZDB_RW_PASS:-}
+      FAIZDB_RO_USER: ${FAIZDB_RO_USER:-}    # Optional ReadOnly user
+      FAIZDB_RO_PASS: ${FAIZDB_RO_PASS:-}
+
       # --- Rate Limiting ---
-      # Max requests per 10s for PUBLIC (anonymous) IPs.
-      # Internal / VPC / authenticated requests are EXEMPT — no limit.
-      # Increase this if you have legitimate high-traffic public endpoints.
       FAIZDB_RATE_LIMIT: ${FAIZDB_RATE_LIMIT:-100}
+      FAIZDB_BAN_STRIKES: ${FAIZDB_BAN_STRIKES:-3}
+
+      # --- Request Limits ---
+      FAIZDB_MAX_PAYLOAD_MB: ${FAIZDB_MAX_PAYLOAD_MB:-10}
+      FAIZDB_REQUEST_TIMEOUT_SECS: ${FAIZDB_REQUEST_TIMEOUT_SECS:-30}
 
       # --- Logging ---
+      FAIZDB_AUDIT_LOG: ${FAIZDB_AUDIT_LOG:-/data/logs/audit.jsonl}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - faizdb_data:/data

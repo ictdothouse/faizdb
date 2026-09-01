@@ -20,15 +20,40 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+use tower::ServiceBuilder;
+use tower_http::timeout::TimeoutLayer;
 
 use faizdb_core::cluster::{AppendEntriesArgs, RequestVoteArgs};
 use faizdb_core::document::model::Document;
 use faizdb_core::stream::ChangeEvent;
 use faizdb_query::{parse_query, DatabaseContext};
+use faizdb_security::auth::{AuthManager, Role, Claims};
+
+/// Injected into request extensions after JWT validation — available to all handlers.
+#[derive(Clone, Debug)]
+pub struct AuthenticatedUser {
+    pub username: String,
+    pub role: Role,
+}
 
 /// Shared server state
 pub struct AppState {
     pub db: Arc<DatabaseContext>,
+    pub auth: Arc<AuthManager>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub username: String,
+    pub role: String,
+    pub expires_in: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,39 +136,78 @@ async fn cors_middleware(req: Request<Body>, next: Next) -> Response {
     response
 }
 
-/// Client Authentication Middleware (Validates Bearer token or query param for WS)
-async fn client_auth_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
-    let expected_token = std::env::var("FAIZDB_API_KEY").unwrap_or_else(|_| "faizdb-secret-key".to_string());
-    
-    let mut token_found = false;
-    // Check Authorization header
-    if let Some(auth_value) = req.headers().get(header::AUTHORIZATION) {
-        if let Ok(auth_str) = auth_value.to_str() {
-            if auth_str.starts_with("Bearer ") {
-                let token = auth_str.trim_start_matches("Bearer ");
-                if token == expected_token {
-                    token_found = true;
-                }
-            }
+/// Client Authentication Middleware — validates JWT from Bearer token or ?token= query param.
+/// On success, injects `AuthenticatedUser` into request extensions for downstream handlers.
+async fn client_auth_middleware(
+    State(state): State<Arc<AppState>>,
+    mut req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    // 1. Extract raw token string (header or query param for WebSocket)
+    let raw_token = extract_bearer_token(&req)
+        .or_else(|| extract_query_token(&req));
+
+    let token = match raw_token {
+        Some(t) => t,
+        None => {
+            warn!("[Auth] Missing token — 401");
+            return Err(StatusCode::UNAUTHORIZED);
         }
-    }
-    
-    // Check query params for WebSocket support
-    if !token_found {
-        if let Some(query) = req.uri().query() {
-            let query_token = format!("token={}", expected_token);
-            if query.contains(&query_token) {
-                token_found = true;
-            }
+    };
+
+    // 2. Validate JWT and extract claims
+    match state.auth.verify_token(&token) {
+        Ok(claims) => {
+            req.extensions_mut().insert(AuthenticatedUser {
+                username: claims.sub.clone(),
+                role: claims.role,
+            });
+            info!("[Auth] Authenticated: {} ({:?})", claims.sub, claims.role);
+            Ok(next.run(req).await)
         }
-    }
-    
-    if token_found {
-        Ok(next.run(req).await)
-    } else {
-        Err(StatusCode::UNAUTHORIZED)
+        Err(e) => {
+            warn!("[Auth] JWT validation failed: {}", e);
+            Err(StatusCode::UNAUTHORIZED)
+        }
     }
 }
+
+/// RBAC Write Guard — only Admin and ReadWrite roles may mutate data.
+async fn rbac_write_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if let Some(user) = req.extensions().get::<AuthenticatedUser>() {
+        match user.role {
+            Role::Admin | Role::ReadWrite => return Ok(next.run(req).await),
+            Role::ReadOnly => {
+                warn!("[RBAC] ReadOnly user '{}' attempted write operation — 403", user.username);
+                return Err(StatusCode::FORBIDDEN);
+            }
+        }
+    }
+    // No user extension means auth middleware was bypassed — should not happen
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
+    req.headers()
+        .get(header::AUTHORIZATION)?
+        .to_str().ok()?
+        .strip_prefix("Bearer ")
+        .map(|t| t.trim().to_string())
+}
+
+fn extract_query_token(req: &Request<Body>) -> Option<String> {
+    let query = req.uri().query()?;
+    for pair in query.split('&') {
+        if let Some(val) = pair.strip_prefix("token=") {
+            return Some(val.to_string());
+        }
+    }
+    None
+}
+
 
 /// Cluster Authentication Middleware (Validates RPC tokens)
 async fn cluster_auth_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
@@ -416,26 +480,36 @@ async fn audit_middleware(req: Request<Body>, next: Next) -> Response {
 
 /// Create the Axum HTTP router with REST, WebSocket Change Streams & Cluster RPC
 pub fn create_router(state: Arc<AppState>) -> Router {
+    // Public routes — no auth required
     let public_routes = Router::new()
         .route("/v1/health", get(health_check))
-        .route("/v1/info", get(server_info));
+        .route("/v1/info", get(server_info))
+        .route("/v1/auth/login", post(auth_login));
 
-    let client_routes = Router::new()
-        .route("/v1/query", post(execute_query))
-        .route("/v1/collections/{name}/documents", get(get_collection_documents).post(insert_document))
-        .route("/v1/collections/{name}/documents/{id}", delete(delete_document))
-        .route("/v1/collections/{name}/insert", post(insert_document))
+    // Read-only routes — requires any valid JWT (Admin, ReadWrite, or ReadOnly)
+    let read_routes = Router::new()
+        .route("/v1/collections/{name}/documents", get(get_collection_documents))
         .route("/v1/collections/{name}/stats", get(collection_stats))
-        .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
         .route("/v1/collections/{name}/search", post(search_collection))
         .route("/v1/collections/{name}/ttl/stats", get(collection_ttl_stats))
-        .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
         .route("/v1/subscribe", get(ws_global_subscribe))
         .route("/v1/collections/{name}/watch", get(ws_collection_watch))
-        .route("/v1/backup/create", post(backup_create))
         .route("/v1/backup/list", get(backup_list))
+        .route("/v1/auth/whoami", get(auth_whoami))
+        .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
+
+    // Write routes — requires Admin or ReadWrite role
+    let write_routes = Router::new()
+        .route("/v1/query", post(execute_query))
+        .route("/v1/collections/{name}/documents", post(insert_document))
+        .route("/v1/collections/{name}/documents/{id}", delete(delete_document))
+        .route("/v1/collections/{name}/insert", post(insert_document))
+        .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
+        .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
+        .route("/v1/backup/create", post(backup_create))
         .route("/v1/backup/restore", post(backup_restore))
-        .layer(middleware::from_fn(client_auth_middleware));
+        .layer(middleware::from_fn(rbac_write_middleware))
+        .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
 
     let cluster_routes = Router::new()
         .route("/v1/cluster/status", get(cluster_status))
@@ -447,20 +521,91 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
     Router::new()
         .merge(public_routes)
-        .merge(client_routes)
+        .merge(read_routes)
+        .merge(write_routes)
         .merge(cluster_routes)
-        // Middleware execution order (outermost = first to run):
-        // 1. Request ID  → inject trace ID before everything else
-        // 2. Audit Log   → capture result after all processing
-        // 3. Rate Limit  → block abusive traffic early
-        // 4. Payload     → reject oversized bodies before auth parsing
-        // 5. CORS        → apply headers on every response
-        .layer(middleware::from_fn(cors_middleware))
-        .layer(middleware::from_fn(payload_size_middleware))
-        .layer(middleware::from_fn(rate_limit_middleware))
-        .layer(middleware::from_fn(audit_middleware))
-        .layer(middleware::from_fn(request_id_middleware))
+        // Global middleware (outermost = first to execute on every request)
+        .layer(
+            ServiceBuilder::new()
+                // 1. Connection timeout — kills idle/slow clients after 30s (Slowloris protection)
+                .layer(TimeoutLayer::new(Duration::from_secs(
+                    std::env::var("FAIZDB_REQUEST_TIMEOUT_SECS")
+                        .ok().and_then(|v| v.parse().ok()).unwrap_or(30)
+                )))
+                // 2. Request ID — inject trace ID
+                .layer(middleware::from_fn(request_id_middleware))
+                // 3. Audit Log — capture security events
+                .layer(middleware::from_fn(audit_middleware))
+                // 4. Rate Limit + Blocklist
+                .layer(middleware::from_fn(rate_limit_middleware))
+                // 5. Payload Size Limiter
+                .layer(middleware::from_fn(payload_size_middleware))
+                // 6. CORS
+                .layer(middleware::from_fn(cors_middleware))
+        )
         .with_state(state)
+}
+
+/// POST /v1/auth/login — exchange credentials for a short-lived JWT
+async fn auth_login(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<LoginRequest>,
+) -> impl IntoResponse {
+    // In-memory user store seeded from environment variables.
+    // In production, this should be backed by a persistent users collection.
+    let admin_user = std::env::var("FAIZDB_ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
+    let admin_pass = std::env::var("FAIZDB_ADMIN_PASS").unwrap_or_else(|_| "faizdb-admin-2026".to_string());
+    let rw_user = std::env::var("FAIZDB_RW_USER").unwrap_or_default();
+    let rw_pass = std::env::var("FAIZDB_RW_PASS").unwrap_or_default();
+    let ro_user = std::env::var("FAIZDB_RO_USER").unwrap_or_default();
+    let ro_pass = std::env::var("FAIZDB_RO_PASS").unwrap_or_default();
+
+    let role = if payload.username == admin_user && payload.password == admin_pass {
+        Some(Role::Admin)
+    } else if !rw_user.is_empty() && payload.username == rw_user && payload.password == rw_pass {
+        Some(Role::ReadWrite)
+    } else if !ro_user.is_empty() && payload.username == ro_user && payload.password == ro_pass {
+        Some(Role::ReadOnly)
+    } else {
+        None
+    };
+
+    match role {
+        Some(r) => {
+            let expires_in: u64 = std::env::var("FAIZDB_TOKEN_TTL_SECS")
+                .ok().and_then(|v| v.parse().ok()).unwrap_or(3600);
+            match state.auth.generate_token(&payload.username, r, expires_in) {
+                Ok(token) => {
+                    info!("[Auth] Login success: {} ({:?})", payload.username, r);
+                    (
+                        StatusCode::OK,
+                        Json(ApiResponse::ok(LoginResponse {
+                            token,
+                            username: payload.username,
+                            role: format!("{:?}", r),
+                            expires_in,
+                        }))
+                    ).into_response()
+                }
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::err(e))).into_response(),
+            }
+        }
+        None => {
+            warn!("[Auth] Login failed for user: {}", payload.username);
+            (StatusCode::UNAUTHORIZED, Json(ApiResponse::<()>::err("Invalid username or password"))).into_response()
+        }
+    }
+}
+
+/// GET /v1/auth/whoami — returns the currently authenticated user info
+async fn auth_whoami(req: axum::extract::Request) -> impl IntoResponse {
+    match req.extensions().get::<AuthenticatedUser>() {
+        Some(user) => Json(ApiResponse::ok(serde_json::json!({
+            "username": user.username,
+            "role": format!("{:?}", user.role),
+        }))).into_response(),
+        None => (StatusCode::UNAUTHORIZED, Json(ApiResponse::<()>::err("Not authenticated"))).into_response(),
+    }
 }
 
 async fn health_check() -> impl IntoResponse {

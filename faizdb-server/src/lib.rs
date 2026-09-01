@@ -18,8 +18,14 @@ pub async fn run_dual_server(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let db = std::sync::Arc::new(faizdb_query::DatabaseContext::new());
 
+    // Initialise AuthManager with JWT secret from env
+    let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
+        .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
+    let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(jwt_secret.as_bytes()));
+
     let state = std::sync::Arc::new(AppState {
         db: db.clone(),
+        auth,
     });
 
     let http_router = create_router(state);
@@ -36,10 +42,13 @@ pub async fn run_dual_server(
         }
     });
 
+    // Run HTTP & WebSocket API with graceful shutdown on CTRL+C / SIGTERM
     let http_handle = tokio::spawn(async move {
-        if let Err(e) = axum::serve(http_listener, http_router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await {
-            tracing::error!("HTTP/WS server error: {e}");
-        }
+        let service = http_router.into_make_service_with_connect_info::<std::net::SocketAddr>();
+        axum::serve(http_listener, service)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .unwrap_or_else(|e| tracing::error!("HTTP/WS server error: {e}"));
     });
 
     let _ = tokio::try_join!(wire_handle, http_handle)?;
@@ -49,14 +58,41 @@ pub async fn run_dual_server(
 /// Run only the HTTP & WebSocket server
 pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     let db = std::sync::Arc::new(faizdb_query::DatabaseContext::new());
-    let state = std::sync::Arc::new(AppState {
-        db,
-    });
 
+    let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
+        .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
+    let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(jwt_secret.as_bytes()));
+
+    let state = std::sync::Arc::new(AppState { db, auth });
     let app = create_router(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("🔥 FaizDB Server running on http://{addr}");
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     Ok(())
+}
+
+/// Graceful shutdown signal handler — listens for CTRL+C (cross-platform) and SIGTERM (Linux/Docker).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.expect("Failed to install CTRL+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => { tracing::info!("🛑 FaizDB received CTRL+C — initiating graceful shutdown..."); }
+        _ = terminate => { tracing::info!("🛑 FaizDB received SIGTERM — initiating graceful shutdown..."); }
+    }
 }
