@@ -280,6 +280,7 @@ Key Studio Workspaces:
 ## 📚 Comprehensive Documentation
 
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
+* [🧪 Testing & Benchmarks Guide](docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, test run results, and validation instructions.
 * [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, and Geo-Replication.
 * [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python, and Go.
 * [⚔️ Competitive Analysis & Architectural Matrix](docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
