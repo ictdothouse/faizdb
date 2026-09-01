@@ -6,7 +6,7 @@
 //! ## Key Capabilities
 //! - **HNSW (Hierarchical Navigable Small World)** indexing for sub-millisecond similarity search
 //! - Multiple metrics: **Cosine Distance**, **Euclidean (L2)**, **Dot Product**, **Manhattan**
-//! - High dimensional support (up to 4096 dimensions: OpenAI, Gemini, Claude, LLaMA embeddings)
+//! - High dimensional support (up to 4096 dimensions for standard text & multimodal embeddings)
 //! - Thread-safe vector index management
 
 pub mod distance;

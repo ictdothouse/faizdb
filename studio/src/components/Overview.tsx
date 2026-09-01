@@ -201,7 +201,7 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
                 <Badge variant="success">Built-in</Badge>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                Sub-millisecond similarity search for OpenAI, Gemini & LLaMA embeddings.
+                Sub-millisecond high-dimensional similarity search (up to 4096 dimensions).
               </p>
             </div>
 

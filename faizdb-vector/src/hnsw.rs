@@ -14,7 +14,7 @@ use crate::distance::DistanceMetric;
 /// Configuration for the HNSW index
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HnswConfig {
-    /// Dimension of the vectors (e.g. 1536 for OpenAI, 768 for Gemini/BERT)
+    /// Dimension of the vectors (e.g. 128, 768, 1536, up to 4096)
     pub dimensions: usize,
     /// Distance metric to compare vectors
     pub metric: DistanceMetric,
