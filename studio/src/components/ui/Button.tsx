@@ -19,16 +19,21 @@ export const Button: React.FC<ButtonProps> = ({
     'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40';
 
   const variants = {
-    primary: 'bg-emerald-500 text-zinc-950 hover:bg-emerald-400 font-semibold shadow-glow',
-    secondary: 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700 border border-zinc-700/60',
-    outline: 'bg-transparent text-zinc-300 hover:bg-zinc-900 border border-zinc-700',
-    ghost: 'bg-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50',
-    danger: 'bg-rose-600 text-white hover:bg-rose-500',
+    primary:
+      'bg-emerald-600 dark:bg-emerald-500 text-white dark:text-zinc-950 hover:bg-emerald-700 dark:hover:bg-emerald-400 font-semibold shadow-sm',
+    secondary:
+      'bg-muted text-foreground hover:bg-zinc-200 dark:hover:bg-zinc-800 border border-border',
+    outline:
+      'bg-card text-foreground hover:bg-muted border border-border shadow-xs',
+    ghost:
+      'bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted/80',
+    danger:
+      'bg-rose-600 text-white hover:bg-rose-700',
   };
 
   const sizes = {
-    sm: 'text-xs px-2.5 py-1.5 gap-1.5',
-    md: 'text-sm px-3.5 py-2 gap-2',
+    sm: 'text-xs px-3 py-1.5 gap-1.5',
+    md: 'text-sm px-4 py-2 gap-2',
     lg: 'text-base px-5 py-2.5 gap-2.5',
   };
 

@@ -37,7 +37,7 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
       label: 'Throughput (Insert)',
       value: '323,424 ops/s',
       sub: 'LSM-Tree Parallel Write Path',
-      icon: <Zap className="w-4 h-4 text-emerald-400" />,
+      icon: <Zap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
       badge: 'Benchmarked',
       badgeVariant: 'success' as const,
     },
@@ -45,7 +45,7 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
       label: 'Throughput (Read)',
       value: '671,327 ops/s',
       sub: 'BTreeMap MemTable + Bloom',
-      icon: <Activity className="w-4 h-4 text-cyan-400" />,
+      icon: <Activity className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
       badge: 'Sub-ms',
       badgeVariant: 'info' as const,
     },
@@ -53,7 +53,7 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
       label: 'Total Documents',
       value: stats.totalDocs.toLocaleString(),
       sub: `Across ${stats.collectionCount} Collections`,
-      icon: <Database className="w-4 h-4 text-amber-400" />,
+      icon: <Database className="w-4 h-4 text-amber-600 dark:text-amber-400" />,
       badge: 'In Memory + WAL',
       badgeVariant: 'warning' as const,
     },
@@ -61,7 +61,7 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
       label: 'Security & Encryption',
       value: 'AES-256-GCM',
       sub: 'Zero-Trust Data At Rest',
-      icon: <ShieldCheck className="w-4 h-4 text-emerald-400" />,
+      icon: <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
       badge: 'Encrypted',
       badgeVariant: 'success' as const,
     },
@@ -92,20 +92,20 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
         {metricCards.map((m, idx) => (
           <div
             key={idx}
-            className="glass-panel p-4 rounded-xl border border-zinc-800/80 hover:border-zinc-700/80 transition-all shadow-sm"
+            className="glass-panel p-5 rounded-xl border border-border transition-all hover:shadow-md"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+              <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider font-semibold">
                 {m.label}
               </span>
-              <div className="p-1.5 rounded-lg bg-zinc-800/60 border border-zinc-700/40">
+              <div className="p-1.5 rounded-lg bg-muted border border-border">
                 {m.icon}
               </div>
             </div>
-            <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
+            <div className="text-2xl font-bold text-foreground font-mono tracking-tight">
               {m.value}
             </div>
-            <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
+            <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
               <span>{m.sub}</span>
               <Badge variant={m.badgeVariant}>{m.badge}</Badge>
             </div>
@@ -116,11 +116,11 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
       {/* Engine Architecture & Storage Flow */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Storage Engine Status */}
-        <div className="lg:col-span-2 glass-panel p-5 rounded-xl border border-zinc-800 space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+        <div className="lg:col-span-2 glass-panel p-5 rounded-xl border border-border space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
-              <HardDrive className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-semibold text-zinc-100">
+              <HardDrive className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="text-sm font-semibold text-foreground">
                 Hybrid LSM-Tree Storage Engine Architecture
               </h3>
             </div>
@@ -128,52 +128,52 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="p-3 rounded-lg bg-zinc-900/90 border border-zinc-800 space-y-1.5">
+            <div className="p-3.5 rounded-lg bg-muted/60 border border-border space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-zinc-300 font-mono">1. WAL Log</span>
+                <span className="font-semibold text-foreground font-mono">1. WAL Log</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
               </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Sequential write-ahead log with CRC32 integrity verification.
               </p>
-              <div className="text-[10px] font-mono text-emerald-400 pt-1">
+              <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 pt-1 font-semibold">
                 Zero Data Loss
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-zinc-900/90 border border-zinc-800 space-y-1.5">
+            <div className="p-3.5 rounded-lg bg-muted/60 border border-border space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-zinc-300 font-mono">2. MemTable</span>
+                <span className="font-semibold text-foreground font-mono">2. MemTable</span>
                 <span className="w-2 h-2 rounded-full bg-cyan-500" />
               </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 In-memory sorted buffer (BTreeMap + RwLock) for lock-free reads.
               </p>
-              <div className="text-[10px] font-mono text-cyan-400 pt-1">
+              <div className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 pt-1 font-semibold">
                 O(log N) Lookup
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-zinc-900/90 border border-zinc-800 space-y-1.5">
+            <div className="p-3.5 rounded-lg bg-muted/60 border border-border space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-zinc-300 font-mono">3. SSTable</span>
+                <span className="font-semibold text-foreground font-mono">3. SSTable</span>
                 <span className="w-2 h-2 rounded-full bg-amber-500" />
               </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Immutable disk tables with Bloom filters & background compaction.
               </p>
-              <div className="text-[10px] font-mono text-amber-400 pt-1">
+              <div className="text-[10px] font-mono text-amber-600 dark:text-amber-400 pt-1 font-semibold">
                 Leveled Merge
               </div>
             </div>
           </div>
 
-          <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-between text-xs">
+          <div className="p-3 rounded-lg bg-muted/40 border border-border flex items-center justify-between text-xs">
             <div className="flex items-center gap-3">
-              <Layers className="w-4 h-4 text-zinc-400" />
+              <Layers className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="font-medium text-zinc-200">Max Document Size Limit</p>
-                <p className="text-[11px] text-zinc-400">
+                <p className="font-medium text-foreground">Max Document Size Limit</p>
+                <p className="text-[11px] text-muted-foreground">
                   FaizDB eliminates MongoDB's 16MB ceiling (up to 256MB per document).
                 </p>
               </div>
@@ -183,54 +183,54 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
         </div>
 
         {/* Quick Actions & AI Features */}
-        <div className="glass-panel p-5 rounded-xl border border-zinc-800 space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
-            <Cpu className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">AI-Native Engines</h3>
+        <div className="glass-panel p-5 rounded-xl border border-border space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-border">
+            <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-sm font-semibold text-foreground">AI-Native Engines</h3>
           </div>
 
           <div className="space-y-2.5">
             <div
               onClick={() => onNavigateToTab('vector')}
-              className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/50 hover:bg-zinc-800/40 cursor-pointer transition-all space-y-1"
+              className="p-3 rounded-lg bg-muted/40 border border-border hover:border-emerald-500/50 hover:bg-muted/80 cursor-pointer transition-all space-y-1"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-400">
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                   HNSW Vector Index
                 </span>
                 <Badge variant="success">Built-in</Badge>
               </div>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-muted-foreground">
                 Sub-millisecond similarity search for OpenAI, Gemini & LLaMA embeddings.
               </p>
             </div>
 
             <div
               onClick={() => onNavigateToTab('graph')}
-              className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-amber-500/50 hover:bg-zinc-800/40 cursor-pointer transition-all space-y-1"
+              className="p-3 rounded-lg bg-muted/40 border border-border hover:border-amber-500/50 hover:bg-muted/80 cursor-pointer transition-all space-y-1"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-amber-400">
+                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
                   GraphRAG Engine
                 </span>
                 <Badge variant="warning">Traversal</Badge>
               </div>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-muted-foreground">
                 Knowledge graph relationships & BFS context retrieval for AI reasoning.
               </p>
             </div>
 
             <div
               onClick={() => onNavigateToTab('query')}
-              className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-cyan-500/50 hover:bg-zinc-800/40 cursor-pointer transition-all space-y-1"
+              className="p-3 rounded-lg bg-muted/40 border border-border hover:border-cyan-500/50 hover:bg-muted/80 cursor-pointer transition-all space-y-1"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-cyan-400">
+                <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">
                   FaizQL Multi-Dialect
                 </span>
                 <Badge variant="info">SQL + Mongo</Badge>
               </div>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-muted-foreground">
                 Seamlessly execute SQL statements or MongoDB JSON commands in one engine.
               </p>
             </div>
@@ -239,9 +239,9 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
       </div>
 
       {/* Connection Endpoints */}
-      <div className="glass-panel p-5 rounded-xl border border-zinc-800 space-y-3">
-        <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-emerald-400" />
+      <div className="glass-panel p-5 rounded-xl border border-border space-y-3">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <Terminal className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           <span>Quick Connection URIs for Developers & Applications</span>
         </h3>
 
@@ -249,23 +249,23 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
           {connectionStrings.map((conn) => (
             <div
               key={conn.id}
-              className="p-3 rounded-lg bg-zinc-900/90 border border-zinc-800 space-y-1.5 flex flex-col justify-between"
+              className="p-3.5 rounded-lg bg-muted/50 border border-border space-y-2 flex flex-col justify-between"
             >
               <div>
-                <p className="text-[11px] font-medium text-zinc-300">{conn.label}</p>
-                <p className="text-xs font-mono text-emerald-400 bg-zinc-950 p-1.5 rounded border border-zinc-800/60 mt-1 truncate">
+                <p className="text-[11px] font-medium text-foreground">{conn.label}</p>
+                <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400 bg-background p-2 rounded border border-border mt-1.5 truncate select-all">
                   {conn.code}
                 </p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full mt-2 text-[11px] py-1"
+                className="w-full mt-2 text-[11px] py-1 bg-card hover:bg-muted"
                 onClick={() => copyToClipboard(conn.code, conn.id)}
               >
                 {copied === conn.id ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
                     <span>Copied!</span>
                   </>
                 ) : (

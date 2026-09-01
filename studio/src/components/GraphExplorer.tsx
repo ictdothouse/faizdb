@@ -4,9 +4,7 @@ import {
   Share2,
   Play,
   RotateCcw,
-  Sparkles,
   Info,
-  ChevronRight,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -34,7 +32,6 @@ export const GraphExplorer: React.FC = () => {
   const [activePath, setActivePath] = useState<string[]>([]);
   const [isTraversing, setIsTraversing] = useState<boolean>(false);
 
-  // Sample Knowledge Graph nodes
   const nodes: GraphNode[] = [
     {
       id: 'faizdb_core',
@@ -42,7 +39,7 @@ export const GraphExplorer: React.FC = () => {
       type: 'Core System',
       x: 350,
       y: 180,
-      color: '#10b981', // Emerald
+      color: '#10b981',
       properties: { creator: 'Ahmad Faiz', version: '0.1.0', language: 'Rust' },
     },
     {
@@ -51,7 +48,7 @@ export const GraphExplorer: React.FC = () => {
       type: 'Storage Engine',
       x: 200,
       y: 90,
-      color: '#06b6d4', // Cyan
+      color: '#06b6d4',
       properties: { memtable: 'BTreeMap', sstable: 'BloomFilter', wal: 'CRC32' },
     },
     {
@@ -60,7 +57,7 @@ export const GraphExplorer: React.FC = () => {
       type: 'AI Engine',
       x: 500,
       y: 90,
-      color: '#8b5cf6', // Purple
+      color: '#8b5cf6',
       properties: { metric: 'Cosine', max_m: 16, ef_construction: 200 },
     },
     {
@@ -69,7 +66,7 @@ export const GraphExplorer: React.FC = () => {
       type: 'Protocol',
       x: 180,
       y: 280,
-      color: '#f59e0b', // Amber
+      color: '#f59e0b',
       properties: { port: 27017, opcode: 'OP_MSG 2013', drop_in: true },
     },
     {
@@ -78,7 +75,7 @@ export const GraphExplorer: React.FC = () => {
       type: 'AI Engine',
       x: 520,
       y: 280,
-      color: '#ec4899', // Pink
+      color: '#ec4899',
       properties: { traversal: 'BFS', use_case: 'AI Deep Reasoning' },
     },
   ];
@@ -111,21 +108,21 @@ export const GraphExplorer: React.FC = () => {
       {/* Interactive Graph Canvas Area */}
       <div className="flex-1 flex flex-col p-4 space-y-4">
         {/* Canvas Toolbar */}
-        <div className="glass-panel p-3.5 rounded-xl border border-zinc-800 flex items-center justify-between">
+        <div className="glass-panel p-3.5 rounded-xl border border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Network className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-semibold text-zinc-100 font-mono">
+            <Network className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-semibold text-foreground font-mono">
               Knowledge Graph & GraphRAG Traversal Canvas
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 mr-2">
+            <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground mr-2">
               <span>Depth:</span>
               <select
                 value={traversalDepth}
                 onChange={(e) => setTraversalDepth(Number(e.target.value))}
-                className="bg-zinc-900 border border-zinc-700 rounded px-2 py-0.5 text-zinc-100 text-xs"
+                className="bg-background border border-border rounded px-2 py-0.5 text-foreground text-xs"
               >
                 <option value={1}>1-Hop</option>
                 <option value={2}>2-Hops</option>
@@ -150,7 +147,7 @@ export const GraphExplorer: React.FC = () => {
         </div>
 
         {/* SVG Interactive Canvas */}
-        <div className="glass-panel flex-1 rounded-xl border border-zinc-800 relative bg-zinc-950/80 overflow-hidden flex items-center justify-center">
+        <div className="glass-panel flex-1 rounded-xl border border-border relative bg-card overflow-hidden flex items-center justify-center">
           <svg className="w-full h-full min-h-[420px]" viewBox="0 0 700 360">
             {/* Draw Edges */}
             {edges.map((edge, idx) => {
@@ -169,26 +166,24 @@ export const GraphExplorer: React.FC = () => {
                     y1={source.y}
                     x2={target.x}
                     y2={target.y}
-                    stroke={isHighlighted ? '#10b981' : '#27272a'}
+                    stroke={isHighlighted ? '#10b981' : '#cbd5e1'}
                     strokeWidth={isHighlighted ? 3 : 1.5}
                     strokeDasharray={isHighlighted ? '4,4' : undefined}
-                    className="transition-all duration-300"
+                    className="transition-all duration-300 dark:stroke-zinc-700"
                   />
-                  {/* Edge Label */}
                   <rect
-                    x={midX - 35}
-                    y={midY - 8}
-                    width={70}
-                    height={16}
+                    x={midX - 38}
+                    y={midY - 9}
+                    width={76}
+                    height={18}
                     rx={4}
-                    fill="#09090b"
-                    stroke="#27272a"
+                    className="fill-card stroke-border"
                   />
                   <text
                     x={midX}
                     y={midY + 3}
                     textAnchor="middle"
-                    fill={isHighlighted ? '#34d399' : '#71717a'}
+                    fill={isHighlighted ? '#059669' : '#64748b'}
                     fontSize="8"
                     fontFamily="monospace"
                     fontWeight="600"
@@ -211,7 +206,6 @@ export const GraphExplorer: React.FC = () => {
                   className="cursor-pointer group"
                   onClick={() => setSelectedNode(node)}
                 >
-                  {/* Outer glow ring if selected */}
                   {(isSelected || isPathActive) && (
                     <circle
                       r="34"
@@ -223,20 +217,17 @@ export const GraphExplorer: React.FC = () => {
                     />
                   )}
 
-                  {/* Node Circle */}
                   <circle
                     r="26"
-                    fill="#121215"
+                    className="fill-card shadow-sm"
                     stroke={node.color}
                     strokeWidth={isSelected ? 3 : 2}
-                    className="transition-transform group-hover:scale-110"
                   />
 
-                  {/* Icon or Type symbol */}
                   <text
                     textAnchor="middle"
                     y="4"
-                    fill="#fafafa"
+                    fill={node.color}
                     fontSize="10"
                     fontFamily="monospace"
                     fontWeight="bold"
@@ -244,14 +235,12 @@ export const GraphExplorer: React.FC = () => {
                     {node.type.slice(0, 3).toUpperCase()}
                   </text>
 
-                  {/* Label under node */}
                   <text
                     textAnchor="middle"
                     y="42"
-                    fill="#e4e4e7"
+                    className="fill-foreground font-semibold"
                     fontSize="11"
                     fontFamily="sans-serif"
-                    fontWeight="600"
                   >
                     {node.label}
                   </text>
@@ -261,8 +250,8 @@ export const GraphExplorer: React.FC = () => {
           </svg>
 
           {/* Legend badge */}
-          <div className="absolute bottom-3 left-3 bg-zinc-900/90 border border-zinc-800 rounded-lg p-2 text-[10px] font-mono text-zinc-400 space-y-1">
-            <p className="text-zinc-200 font-semibold">GraphRAG Engine</p>
+          <div className="absolute bottom-3 left-3 bg-card/90 border border-border rounded-lg p-2.5 text-[10px] font-mono text-muted-foreground space-y-1 shadow-sm">
+            <p className="text-foreground font-semibold">GraphRAG Engine</p>
             <p>• Click any node to inspect properties</p>
             <p>• Run "Simulate GraphRAG" to animate traversal</p>
           </div>
@@ -273,49 +262,49 @@ export const GraphExplorer: React.FC = () => {
       <div className="w-80 border-l border-border bg-sidebar p-4 flex flex-col justify-between overflow-y-auto">
         <div className="space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-border">
-            <Info className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">Vertex Inspector</h3>
+            <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-sm font-semibold text-foreground">Vertex Inspector</h3>
           </div>
 
           {selectedNode ? (
             <div className="space-y-3">
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
                   Node Identifier
                 </span>
-                <p className="text-sm font-mono font-bold text-emerald-400">
+                <p className="text-sm font-mono font-bold text-emerald-700 dark:text-emerald-400">
                   {selectedNode.id}
                 </p>
               </div>
 
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
                   Type & Category
                 </span>
-                <p className="text-xs font-semibold text-zinc-200 mt-0.5">
+                <p className="text-xs font-semibold text-foreground mt-0.5">
                   <Badge variant="info">{selectedNode.type}</Badge>
                 </p>
               </div>
 
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
                   Document Properties (JSON)
                 </span>
-                <pre className="mt-1 bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 font-mono text-[11px] text-emerald-300 overflow-x-auto leading-relaxed">
+                <pre className="mt-1 bg-muted/40 p-3 rounded-lg border border-border font-mono text-[11px] text-foreground overflow-x-auto leading-relaxed shadow-xs">
                   {JSON.stringify(selectedNode.properties, null, 2)}
                 </pre>
               </div>
             </div>
           ) : (
-            <div className="py-12 text-center text-zinc-500 text-xs space-y-2">
-              <Share2 className="w-8 h-8 mx-auto stroke-1 text-zinc-600" />
+            <div className="py-12 text-center text-muted-foreground text-xs space-y-2">
+              <Share2 className="w-8 h-8 mx-auto stroke-1 text-muted-foreground/60" />
               <p>Click on any graph node to inspect its document schema and connected edges.</p>
             </div>
           )}
         </div>
 
-        <div className="pt-4 border-t border-border/80 text-[11px] text-zinc-400 font-mono space-y-1">
-          <p className="text-zinc-200 font-semibold">GraphRAG AI Traversal</p>
+        <div className="pt-4 border-t border-border text-[11px] text-muted-foreground font-mono space-y-1">
+          <p className="text-foreground font-semibold">GraphRAG AI Traversal</p>
           <p>Enables LLM agents to perform multi-hop contextual reasoning over interconnected relational graphs.</p>
         </div>
       </div>

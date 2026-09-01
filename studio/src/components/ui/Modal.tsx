@@ -36,19 +36,19 @@ export const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
       {/* Modal Dialog Box */}
       <div
-        className={`relative w-full ${maxWidth} glass-panel bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl p-6 z-10 animate-in fade-in zoom-in-95 duration-150`}
+        className={`relative w-full ${maxWidth} glass-panel bg-card border border-border rounded-xl shadow-2xl p-6 z-10 animate-in fade-in zoom-in-95 duration-150`}
       >
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-zinc-800">
-          <h3 className="text-lg font-semibold text-zinc-100">{title}</h3>
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-border">
+          <h3 className="text-base font-semibold text-foreground">{title}</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <X className="w-5 h-5" />
           </button>

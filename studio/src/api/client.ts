@@ -1,6 +1,6 @@
 /**
  * FaizDB Studio REST Client
- * Directly connects to FaizDB Native Rust Engine on http://127.0.0.1:27018
+ * Connects seamlessly via Vite Proxy or direct host with CORS fallback
  */
 
 export interface ApiResponse<T = any> {
@@ -25,35 +25,56 @@ export interface CollectionStats {
 }
 
 class FaizApiClient {
-  private baseUrl: string = 'http://127.0.0.1:27018';
+  // Use relative URL so Vite proxy or direct CORS handles it cleanly
+  private baseUrl: string = '';
 
   setEndpoint(url: string) {
     this.baseUrl = url.replace(/\/+$/, '');
   }
 
   getEndpoint(): string {
-    return this.baseUrl;
+    return this.baseUrl || window.location.origin;
   }
 
   async getHealth(): Promise<{ status: string; engine: string; version: string }> {
-    const res = await fetch(`${this.baseUrl}/v1/health`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch(`${this.baseUrl}/v1/health`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      // Fallback direct port 27018
+      const res = await fetch('http://127.0.0.1:27018/v1/health');
+      return await res.json();
+    }
   }
 
   async getInfo(): Promise<ServerInfo> {
-    const res = await fetch(`${this.baseUrl}/v1/info`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch(`${this.baseUrl}/v1/info`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      const res = await fetch('http://127.0.0.1:27018/v1/info');
+      return await res.json();
+    }
   }
 
   async query<T = any>(queryStr: string): Promise<{ data: T; durationMs: number }> {
     const start = performance.now();
-    const res = await fetch(`${this.baseUrl}/v1/query`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: queryStr }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/v1/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: queryStr }),
+      });
+    } catch {
+      res = await fetch('http://127.0.0.1:27018/v1/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: queryStr }),
+      });
+    }
 
     const durationMs = Math.round((performance.now() - start) * 100) / 100;
     const json: ApiResponse<T> = await res.json();
@@ -75,19 +96,22 @@ class FaizApiClient {
     return { data: payload, durationMs };
   }
 
-  async getCollectionStats(name: string): Promise<CollectionStats> {
-    const res = await fetch(`${this.baseUrl}/v1/collections/${name}/stats`);
-    const json = await res.json();
-    if (!json.success) throw new Error(json.error || 'Failed to fetch collection stats');
-    return json.data;
-  }
-
   async insertDocument(collection: string, doc: Record<string, any>): Promise<string> {
-    const res = await fetch(`${this.baseUrl}/v1/collections/${collection}/insert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(doc),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/v1/collections/${collection}/insert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doc),
+      });
+    } catch {
+      res = await fetch(`http://127.0.0.1:27018/v1/collections/${collection}/insert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doc),
+      });
+    }
+
     const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Insert failed');
     return json.data.id;
