@@ -101,6 +101,26 @@ faizdb/
 └── tests/              # 🧪 Comprehensive Automated Test Suites
 ```
 
+## 📦 Universal 1-Line Installation
+
+Install FaizDB on your server, PC, or Mac with a single command:
+
+### 🐧 Linux & 🍎 macOS (Apple Silicon & Intel)
+```bash
+curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.sh | bash
+```
+
+### 🪟 Windows (PowerShell)
+```powershell
+iwr -useb https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.ps1 | iex
+```
+
+### 🐳 Docker & Docker Compose
+```bash
+docker compose up -d
+```
+*For detailed setup and Linux systemd production service instructions, see [docs/INSTALLATION.md](docs/INSTALLATION.md).*
+
 ---
 
 ## 🚀 Quick Start Guide
