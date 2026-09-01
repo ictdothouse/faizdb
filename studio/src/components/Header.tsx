@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Terminal, Plus, Shield, Zap } from 'lucide-react';
+import { RefreshCw, Terminal, Plus, Shield, Zap, Sun, Moon } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { NavTab } from './Sidebar';
@@ -11,6 +11,8 @@ interface HeaderProps {
   onOpenInsertModal: () => void;
   onQuickQuery: () => void;
   isRefreshing: boolean;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenInsertModal,
   onQuickQuery,
   isRefreshing,
+  theme,
+  onToggleTheme,
 }) => {
   const titles: Record<NavTab, { title: string; desc: string }> = {
     overview: {
@@ -90,6 +94,19 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Open Query</span>
           </Button>
         )}
+
+        {/* Light / Dark Mode Toggle */}
+        <button
+          onClick={onToggleTheme}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          className="p-2 rounded-lg border border-border bg-card hover:bg-zinc-200 dark:hover:bg-zinc-800 text-foreground transition-all flex items-center justify-center"
+        >
+          {theme === 'dark' ? (
+            <Sun className="w-4 h-4 text-amber-400 hover:rotate-45 transition-transform" />
+          ) : (
+            <Moon className="w-4 h-4 text-zinc-600 dark:text-zinc-300 hover:-rotate-12 transition-transform" />
+          )}
+        </button>
       </div>
     </header>
   );

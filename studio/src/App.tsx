@@ -19,6 +19,10 @@ export const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [loadingDocs, setLoadingDocs] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('faizdb_theme');
+    return saved === 'dark' ? 'dark' : 'light'; // Light mode is default!
+  });
 
   // Modals state
   const [isInsertModalOpen, setIsInsertModalOpen] = useState<boolean>(false);
@@ -28,6 +32,21 @@ export const App: React.FC = () => {
   );
   const [newColName, setNewColName] = useState<string>('');
   const [modalError, setModalError] = useState<string | null>(null);
+
+  // Sync theme class to <html> element
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('faizdb_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   // Fetch initial connection and data
   useEffect(() => {
@@ -150,6 +169,8 @@ export const App: React.FC = () => {
           onOpenInsertModal={() => setIsInsertModalOpen(true)}
           onQuickQuery={() => setCurrentTab('query')}
           isRefreshing={isRefreshing}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
 
         <main className="flex-1 overflow-hidden bg-background">

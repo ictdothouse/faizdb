@@ -3,11 +3,33 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --background: 0 0% 98%; /* #fafafa */
+    --foreground: 240 10% 10%; /* #18181b */
+    --card: 0 0% 100%; /* #ffffff */
+    --card-foreground: 240 10% 10%;
+    --border: 240 5.9% 88%; /* #e4e4e7 */
+    --input: 240 5.9% 92%;
+    --sidebar: 0 0% 96%; /* #f4f4f5 */
+    --sidebar-border: 240 5.9% 88%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%; /* #09090b */
+    --foreground: 0 0% 98%; /* #fafafa */
+    --card: 240 10% 6.5%; /* #121215 */
+    --card-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%; /* #27272a */
+    --input: 240 3.7% 12%;
+    --sidebar: 240 10% 4.5%; /* #0c0c0e */
+    --sidebar-border: 240 5.9% 13%; /* #1f1f23 */
+  }
+
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-200;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
@@ -19,23 +41,23 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(120, 120, 120, 0.25);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: rgba(120, 120, 120, 0.45);
 }
 
 /* Glassmorphism utility */
 .glass-panel {
-  background: rgba(18, 18, 21, 0.85);
+  background: hsl(var(--card) / 0.85);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid hsl(var(--border));
 }
 
 .table-cell-hover {
@@ -43,5 +65,5 @@
 }
 
 .table-cell-hover:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(120, 120, 120, 0.05);
 }
