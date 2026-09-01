@@ -36,10 +36,32 @@ pub struct AuthenticatedUser {
     pub role: Role,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupScheduleConfig {
+    pub enabled: bool,
+    pub frequency_minutes: u64,
+    pub retention_days: u32,
+    pub passphrase: Option<String>,
+    pub last_run: Option<String>,
+}
+
+impl Default for BackupScheduleConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            frequency_minutes: 1440, // 24 Hours
+            retention_days: 7,       // 7 Days
+            passphrase: None,
+            last_run: None,
+        }
+    }
+}
+
 /// Shared server state
 pub struct AppState {
     pub db: Arc<DatabaseContext>,
     pub auth: Arc<AuthManager>,
+    pub backup_schedule: Arc<std::sync::RwLock<BackupScheduleConfig>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -523,6 +545,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/indexes", post(create_collection_index))
         .route("/v1/collections/{name}/indexes/{field}", delete(drop_collection_index))
         .route("/v1/collections/{name}/insert", post(insert_document))
+        .route("/v1/collections/{name}/import", post(import_collection_data))
         .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
         .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
         .route("/v1/transaction/begin", post(transaction_begin))
@@ -532,11 +555,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .layer(middleware::from_fn(rbac_write_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
 
-    // Admin-only routes — strictly requires Admin role (Audit Trail, Backup Restore, Token Generator)
+    // Admin-only routes — strictly requires Admin role (Audit Trail, Backup Restore, Token Generator, Backup Schedule)
     let admin_routes = Router::new()
         .route("/v1/audit/logs", get(get_audit_logs))
         .route("/v1/auth/token", post(generate_token_handler))
         .route("/v1/backup/restore", post(backup_restore))
+        .route("/v1/backup/schedule", get(get_backup_schedule).post(update_backup_schedule))
         .layer(middleware::from_fn(rbac_admin_middleware))
         .layer(middleware::from_fn_with_state(state.clone(), client_auth_middleware));
 
@@ -922,6 +946,86 @@ async fn transaction_commit() -> impl IntoResponse {
     )
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ImportDataRequest {
+    pub documents: Option<Vec<serde_json::Value>>,
+    pub csv: Option<String>,
+}
+
+async fn import_collection_data(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(payload): Json<ImportDataRequest>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let mut docs_to_insert = Vec::new();
+
+    if let Some(json_docs) = payload.documents {
+        for val in json_docs {
+            if let Some(doc) = Document::from_json_value(val) {
+                docs_to_insert.push(doc);
+            }
+        }
+    } else if let Some(csv_str) = payload.csv {
+        let mut lines = csv_str.lines();
+        if let Some(header_line) = lines.next() {
+            let headers: Vec<&str> = header_line.split(',').map(|s| s.trim()).collect();
+            for line in lines {
+                let trimmed = line.trim();
+                if trimmed.is_empty() { continue; }
+                let values: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
+                let mut map = serde_json::Map::new();
+                for (i, &header) in headers.iter().enumerate() {
+                    let raw_val = values.get(i).copied().unwrap_or("");
+                    if let Ok(b) = raw_val.parse::<bool>() {
+                        map.insert(header.to_string(), serde_json::Value::Bool(b));
+                    } else if let Ok(n) = raw_val.parse::<i64>() {
+                        map.insert(header.to_string(), serde_json::json!(n));
+                    } else if let Ok(f) = raw_val.parse::<f64>() {
+                        map.insert(header.to_string(), serde_json::json!(f));
+                    } else {
+                        map.insert(header.to_string(), serde_json::Value::String(raw_val.to_string()));
+                    }
+                }
+                if let Some(doc) = Document::from_json_value(serde_json::Value::Object(map)) {
+                    docs_to_insert.push(doc);
+                }
+            }
+        }
+    }
+
+    if docs_to_insert.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(ApiResponse::err("No valid documents or CSV rows found to import")));
+    }
+
+    let mut inserted_ids = Vec::with_capacity(docs_to_insert.len());
+    let mut errors = Vec::new();
+
+    for doc in docs_to_insert {
+        let doc_clone = doc.clone();
+        match col.insert(doc) {
+            Ok(id) => {
+                let id_str = id.as_str().to_string();
+                state.db.change_stream_bus().publish(ChangeEvent::insert(&name, doc_clone));
+                inserted_ids.push(id_str);
+            }
+            Err(e) => {
+                errors.push(e.to_string());
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "imported_count": inserted_ids.len(),
+            "inserted_ids": inserted_ids,
+            "failed_count": errors.len(),
+            "errors": if errors.is_empty() { None } else { Some(errors) }
+        })))
+    )
+}
+
 async fn transaction_rollback() -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -930,6 +1034,22 @@ async fn transaction_rollback() -> impl IntoResponse {
             "message": "Transaction rolled back, write-buffer discarded",
         }))),
     )
+}
+
+async fn get_backup_schedule(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let config = state.backup_schedule.read().unwrap().clone();
+    Json(ApiResponse::ok(config))
+}
+
+async fn update_backup_schedule(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BackupScheduleConfig>,
+) -> impl IntoResponse {
+    let mut config = state.backup_schedule.write().unwrap();
+    *config = payload.clone();
+    Json(ApiResponse::ok(payload))
 }
 
 async fn collection_ttl_purge(

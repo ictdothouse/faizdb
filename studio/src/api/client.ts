@@ -287,6 +287,51 @@ class FaizApiClient {
     return json.data || [];
   }
 
+  async importData(collection: string, payload: { documents?: any[]; csv?: string }): Promise<{
+    imported_count: number;
+    inserted_ids: string[];
+    failed_count: number;
+    errors?: string[];
+  }> {
+    const res = await this.fetch(`${this.baseUrl}/v1/collections/${collection}/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Import failed');
+    return json.data;
+  }
+
+  async getBackupSchedule(): Promise<{
+    enabled: boolean;
+    frequency_minutes: number;
+    retention_days: number;
+    passphrase?: string;
+    last_run?: string;
+  }> {
+    const res = await this.fetch(`${this.baseUrl}/v1/backup/schedule`);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to fetch backup schedule');
+    return json.data;
+  }
+
+  async updateBackupSchedule(config: {
+    enabled: boolean;
+    frequency_minutes: number;
+    retention_days: number;
+    passphrase?: string;
+  }): Promise<any> {
+    const res = await this.fetch(`${this.baseUrl}/v1/backup/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to update backup schedule');
+    return json.data;
+  }
+
   async restoreBackup(filename?: string, passphrase?: string): Promise<any> {
     const res = await this.fetch(`${this.baseUrl}/v1/backup/restore`, {
       method: 'POST',

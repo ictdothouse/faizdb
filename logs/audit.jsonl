@@ -94,3 +94,15 @@
 {"timestamp":"2026-09-01T08:03:29.551497286+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/auth/login","status":200,"request_id":"5bb4aef1-5ac4-4ce3-845a-2500fac2531c","engine":"FaizDB"}
 {"timestamp":"2026-09-01T08:03:29.678862883+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/transaction/begin","status":200,"request_id":"a152dc85-513d-4a20-bbbf-2a8048a76a9e","engine":"FaizDB"}
 izDB"}
+{"timestamp":"2026-09-01T08:46:17.558943361+00:00","event":"auth_failure","ip":"127.0.0.1","path":"/v1/auth/login","status":401,"request_id":"a3c98ae0-b753-4833-ab55-e17e34b7e3cb","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:17.613715810+00:00","event":"auth_failure","ip":"127.0.0.1","path":"/v1/collections/products/import","status":401,"request_id":"41d2dc88-246e-40bc-ab66-1505f3499261","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:30.388819903+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/auth/login","status":200,"request_id":"b664c243-31ca-49fc-b9d2-7e22e67451e0","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:30.430176867+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/collections/products/import","status":200,"request_id":"4f217d62-a6d2-45b2-b75d-31ad6738c381","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:30.439768451+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/collections/products/import","status":200,"request_id":"3063ffa9-8534-4c43-85b4-aca4469977ca","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:30.456409139+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/query","status":200,"request_id":"8a10e8b5-e0cc-49f1-8307-e6555f2920ce","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:30.477913282+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/backup/schedule","status":200,"request_id":"1b4d66d3-e267-4efc-9378-44240500e639","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:39.163846967+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/auth/login","status":200,"request_id":"9c6fe8b7-0f5f-48ce-be7c-55ece4ed4df7","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:39.185041043+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/collections/products/import","status":200,"request_id":"bebfaec7-c33f-419e-a61d-71749d1ee629","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:39.191855948+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/collections/products/import","status":200,"request_id":"5b781591-0230-40d3-871d-0bc32da9987d","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:39.200525802+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/query","status":200,"request_id":"6a6e6992-2cde-4439-a3e6-3f22286e6aa6","engine":"FaizDB"}
+{"timestamp":"2026-09-01T08:46:39.207257990+00:00","event":"write_operation","ip":"127.0.0.1","path":"/v1/backup/schedule","status":200,"request_id":"2e5aa4ba-78dc-4325-a714-a864f741061c","engine":"FaizDB"}

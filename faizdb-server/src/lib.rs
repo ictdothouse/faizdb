@@ -26,6 +26,7 @@ pub async fn run_dual_server(
     let state = std::sync::Arc::new(AppState {
         db: db.clone(),
         auth,
+        backup_schedule: std::sync::Arc::new(std::sync::RwLock::new(api::BackupScheduleConfig::default())),
     });
 
     let http_router = create_router(state);
@@ -63,7 +64,11 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
     let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(jwt_secret.as_bytes()));
 
-    let state = std::sync::Arc::new(AppState { db, auth });
+    let state = std::sync::Arc::new(AppState {
+        db,
+        auth,
+        backup_schedule: std::sync::Arc::new(std::sync::RwLock::new(api::BackupScheduleConfig::default())),
+    });
     let app = create_router(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("🔥 FaizDB Server running on http://{addr}");

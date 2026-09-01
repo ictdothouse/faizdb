@@ -13,6 +13,10 @@ import {
   AlertTriangle,
   Lock,
   Key,
+  Clock,
+  Settings,
+  Calendar,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -55,8 +59,24 @@ export const BackupManager: React.FC = () => {
   const [restoreSuccessMsg, setRestoreSuccessMsg] = useState<string | null>(null);
   const [restoreErrorMsg, setRestoreErrorMsg] = useState<string | null>(null);
 
+  // Automated Backup Schedule State
+  const [scheduleConfig, setScheduleConfig] = useState<{
+    enabled: boolean;
+    frequency_minutes: number;
+    retention_days: number;
+    passphrase?: string;
+  }>({
+    enabled: false,
+    frequency_minutes: 1440,
+    retention_days: 7,
+    passphrase: '',
+  });
+  const [scheduleSaving, setScheduleSaving] = useState<boolean>(false);
+  const [scheduleSavedMsg, setScheduleSavedMsg] = useState<boolean>(false);
+
   useEffect(() => {
     fetchSnapshots();
+    fetchSchedule();
   }, []);
 
   const fetchSnapshots = async () => {
@@ -70,6 +90,41 @@ export const BackupManager: React.FC = () => {
       console.warn('Fetch snapshots error:', e);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchSchedule = async () => {
+    try {
+      const config = await api.getBackupSchedule();
+      if (config) {
+        setScheduleConfig({
+          enabled: config.enabled ?? false,
+          frequency_minutes: config.frequency_minutes ?? 1440,
+          retention_days: config.retention_days ?? 7,
+          passphrase: config.passphrase ?? '',
+        });
+      }
+    } catch (e) {
+      console.warn('Fetch schedule error:', e);
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    setScheduleSaving(true);
+    setScheduleSavedMsg(false);
+    try {
+      await api.updateBackupSchedule({
+        enabled: scheduleConfig.enabled,
+        frequency_minutes: Number(scheduleConfig.frequency_minutes),
+        retention_days: Number(scheduleConfig.retention_days),
+        passphrase: scheduleConfig.passphrase?.trim() || undefined,
+      });
+      setScheduleSavedMsg(true);
+      setTimeout(() => setScheduleSavedMsg(false), 3000);
+    } catch (e) {
+      console.warn('Save schedule error:', e);
+    } finally {
+      setScheduleSaving(false);
     }
   };
 
@@ -136,6 +191,87 @@ export const BackupManager: React.FC = () => {
           <Button variant="primary" size="sm" onClick={() => setCreateModalOpen(true)}>
             <Plus className="w-3.5 h-3.5" />
             <span>Create Snapshot</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Automated Backup Policy Card (SOC2 / ISO 27001 Compliance) */}
+      <div className="p-5 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4 font-mono text-xs">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-zinc-800">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-emerald-500" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
+              Automated Snapshot Schedule & Retention Policy (SOC2 / ISO 27001)
+            </h3>
+          </div>
+          {scheduleSavedMsg ? (
+            <Badge variant="success" className="animate-pulse">Policy Updated & Active</Badge>
+          ) : scheduleConfig.enabled ? (
+            <Badge variant="success">Schedule Active</Badge>
+          ) : (
+            <Badge variant="default">Schedule Disabled</Badge>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-slate-500 dark:text-zinc-400 font-bold block">Status</label>
+            <button
+              onClick={() => setScheduleConfig((p) => ({ ...p, enabled: !p.enabled }))}
+              className={`w-full py-2 px-3 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                scheduleConfig.enabled
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                  : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{scheduleConfig.enabled ? 'Enabled (Auto-Run)' : 'Disabled'}</span>
+            </button>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-slate-500 dark:text-zinc-400 font-bold block">Frequency</label>
+            <select
+              value={scheduleConfig.frequency_minutes}
+              onChange={(e) => setScheduleConfig((p) => ({ ...p, frequency_minutes: Number(e.target.value) }))}
+              className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-zinc-100"
+            >
+              <option value="60">Hourly (Every 60 mins)</option>
+              <option value="1440">Daily (Every 24 hours)</option>
+              <option value="10080">Weekly (Every 7 days)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-slate-500 dark:text-zinc-400 font-bold block">Retention Policy</label>
+            <select
+              value={scheduleConfig.retention_days}
+              onChange={(e) => setScheduleConfig((p) => ({ ...p, retention_days: Number(e.target.value) }))}
+              className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-zinc-100"
+            >
+              <option value="7">Keep last 7 days</option>
+              <option value="14">Keep last 14 days</option>
+              <option value="30">Keep last 30 days</option>
+              <option value="90">Keep last 90 days</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-slate-500 dark:text-zinc-400 font-bold block">Auto-Encryption</label>
+            <input
+              type="password"
+              placeholder="Optional AES Passphrase"
+              value={scheduleConfig.passphrase || ''}
+              onChange={(e) => setScheduleConfig((p) => ({ ...p, passphrase: e.target.value }))}
+              className="w-full bg-slate-50 dark:bg-zinc-950 border border-slate-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-zinc-100"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <Button variant="primary" size="sm" onClick={handleSaveSchedule} loading={scheduleSaving}>
+            <Settings className="w-3.5 h-3.5" />
+            <span>Save Automated Policy</span>
           </Button>
         </div>
       </div>
