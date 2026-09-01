@@ -15,6 +15,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
+use faizdb_core::cluster::{AppendEntriesArgs, RequestVoteArgs};
 use faizdb_core::document::model::Document;
 use faizdb_core::stream::ChangeEvent;
 use faizdb_query::{parse_query, DatabaseContext};
@@ -27,6 +28,12 @@ pub struct AppState {
 #[derive(Debug, Deserialize)]
 pub struct QueryRequest {
     pub query: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JoinClusterRequest {
+    pub peer_id: String,
+    pub peer_address: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -56,7 +63,7 @@ impl<T> ApiResponse<T> {
     }
 }
 
-/// Create the Axum HTTP router with REST and WebSocket Change Streams
+/// Create the Axum HTTP router with REST, WebSocket Change Streams & Cluster RPC
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/v1/health", get(health_check))
@@ -66,6 +73,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/stats", get(collection_stats))
         .route("/v1/subscribe", get(ws_global_subscribe))
         .route("/v1/collections/{name}/watch", get(ws_collection_watch))
+        // Cluster & Raft Endpoints
+        .route("/v1/cluster/status", get(cluster_status))
+        .route("/v1/cluster/join", post(cluster_join))
+        .route("/v1/cluster/failover", post(cluster_trigger_failover))
+        .route("/v1/cluster/raft/vote", post(raft_request_vote))
+        .route("/v1/cluster/raft/append", post(raft_append_entries))
         .with_state(state)
 }
 
@@ -82,7 +95,7 @@ async fn server_info() -> impl IntoResponse {
         "name": "FaizDB Server",
         "version": env!("CARGO_PKG_VERSION"),
         "creator": "Ahmad Faiz",
-        "features": ["document", "vector", "graph", "acid", "faizql", "change_streams", "websockets"]
+        "features": ["document", "vector", "graph", "acid", "faizql", "change_streams", "websockets", "raft_clustering", "auto_sharding"]
     }))
 }
 
@@ -138,6 +151,61 @@ async fn collection_stats(
     })))
 }
 
+/// Cluster Status Handler: `/v1/cluster/status`
+async fn cluster_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let node_info = state.db.raft().get_info();
+    let shard_dist = state.db.shards().get_distribution();
+    Json(ApiResponse::ok(serde_json::json!({
+        "node": node_info,
+        "shards": shard_dist,
+        "consensus": "Raft v1.0",
+        "virtual_slots": 16384,
+    })))
+}
+
+/// Dynamic Cluster Join Handler: `/v1/cluster/join`
+async fn cluster_join(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<JoinClusterRequest>,
+) -> impl IntoResponse {
+    state.db.raft().add_peer(payload.peer_id.clone(), payload.peer_address.clone());
+    state.db.shards().register_node(payload.peer_id.clone(), payload.peer_address.clone());
+    Json(ApiResponse::ok(serde_json::json!({
+        "message": format!("Peer '{}' joined cluster successfully", payload.peer_id),
+        "peer_id": payload.peer_id,
+        "peer_address": payload.peer_address,
+    })))
+}
+
+/// Simulate Failover Handler: `/v1/cluster/failover`
+async fn cluster_trigger_failover(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    state.db.raft().trigger_election();
+    let info = state.db.raft().get_info();
+    Json(ApiResponse::ok(serde_json::json!({
+        "message": "Election timeout triggered. Node promoted to new Leader",
+        "new_term": info.term,
+        "is_leader": info.is_leader,
+    })))
+}
+
+/// Raft RequestVote RPC Handler: `/v1/cluster/raft/vote`
+async fn raft_request_vote(
+    State(state): State<Arc<AppState>>,
+    Json(args): Json<RequestVoteArgs>,
+) -> impl IntoResponse {
+    let reply = state.db.raft().handle_request_vote(args);
+    Json(reply)
+}
+
+/// Raft AppendEntries RPC Handler: `/v1/cluster/raft/append`
+async fn raft_append_entries(
+    State(state): State<Arc<AppState>>,
+    Json(args): Json<AppendEntriesArgs>,
+) -> impl IntoResponse {
+    let reply = state.db.raft().handle_append_entries(args);
+    Json(reply)
+}
+
 /// WebSocket Change Stream: `/v1/subscribe`
 async fn ws_global_subscribe(
     ws: WebSocketUpgrade,
@@ -172,7 +240,6 @@ async fn handle_change_stream_socket(
         db.change_stream_bus().subscriber_count()
     );
 
-    // Initial greeting
     let welcome = serde_json::json!({
         "status": "connected",
         "stream": "faizdb-change-streams-v1",

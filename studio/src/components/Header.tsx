@@ -42,6 +42,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Real-Time Change Stream Monitor',
       desc: 'Live WebSocket Change Data Capture (CDC) events, resume tokens & reactive subscriptions',
     },
+    cluster: {
+      title: 'Distributed Cluster & Sharding Manager',
+      desc: 'Raft consensus multi-node topology, automated failover & 16,384 virtual hash slots',
+    },
     vector: {
       title: 'AI Vector Search Engine',
       desc: 'HNSW sub-millisecond similarity matching & embedding visualizer (up to 4096 dimensions)',

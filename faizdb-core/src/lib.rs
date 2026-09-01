@@ -29,6 +29,7 @@
 //! - **Crash-safe** — WAL ensures no data loss on unexpected shutdown
 //! - **Embeddable** — can be linked as a library or run as a server
 
+pub mod cluster;
 pub mod document;
 pub mod error;
 pub mod storage;
@@ -36,6 +37,7 @@ pub mod stream;
 pub mod transaction;
 
 // Re-export commonly used types
+pub use cluster::{RaftNode, NodeRole, ShardRouter, ShardDistribution};
 pub use document::{Document, DocumentId, Value};
 pub use error::{FaizError, FaizResult};
 pub use storage::engine::StorageEngine;

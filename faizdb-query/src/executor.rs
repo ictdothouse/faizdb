@@ -21,17 +21,25 @@ pub enum QueryResult {
     Success(String),
 }
 
-/// Execution environment holding database collections & Change Stream bus
+/// Execution environment holding database collections, Change Stream bus, Raft consensus & ShardRouter
 pub struct DatabaseContext {
     collections: DashMap<String, Arc<Collection>>,
     bus: Arc<ChangeStreamBus>,
+    raft: Arc<faizdb_core::cluster::RaftNode>,
+    shards: Arc<faizdb_core::cluster::ShardRouter>,
 }
 
 impl Default for DatabaseContext {
     fn default() -> Self {
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
+        let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
+        shards.register_node("node_1", "127.0.0.1:27018");
+
         Self {
             collections: DashMap::new(),
             bus: Arc::new(ChangeStreamBus::new()),
+            raft,
+            shards,
         }
     }
 }
@@ -41,9 +49,32 @@ impl DatabaseContext {
         Self::default()
     }
 
+    pub fn with_node(node_id: &str, address: &str) -> Self {
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new(node_id, address));
+        let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
+        shards.register_node(node_id, address);
+
+        Self {
+            collections: DashMap::new(),
+            bus: Arc::new(ChangeStreamBus::new()),
+            raft,
+            shards,
+        }
+    }
+
     /// Access the real-time Change Stream broadcast bus
     pub fn change_stream_bus(&self) -> Arc<ChangeStreamBus> {
         self.bus.clone()
+    }
+
+    /// Access the Raft consensus engine
+    pub fn raft(&self) -> Arc<faizdb_core::cluster::RaftNode> {
+        self.raft.clone()
+    }
+
+    /// Access the auto-sharding router
+    pub fn shards(&self) -> Arc<faizdb_core::cluster::ShardRouter> {
+        self.shards.clone()
     }
 
     /// Get or create a collection
