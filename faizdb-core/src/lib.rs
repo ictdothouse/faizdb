@@ -36,6 +36,7 @@ pub mod search;
 pub mod storage;
 pub mod stream;
 pub mod transaction;
+pub mod ttl;
 
 // Re-export commonly used types
 pub use cluster::{RaftNode, NodeRole, ShardRouter, ShardDistribution};
@@ -44,6 +45,7 @@ pub use error::{FaizError, FaizResult};
 pub use search::{InvertedIndex, SearchResult};
 pub use storage::engine::StorageEngine;
 pub use stream::{ChangeEvent, ChangeStreamBus, OperationType};
+pub use ttl::{TtlManager, TtlStats};
 
 /// The database version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

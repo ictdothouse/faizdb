@@ -7,6 +7,7 @@ import { QueryConsole } from './components/QueryConsole';
 import { StreamMonitor } from './components/StreamMonitor';
 import { ClusterManager } from './components/ClusterManager';
 import { SearchExplorer } from './components/SearchExplorer';
+import { CacheManager } from './components/CacheManager';
 import { VectorExplorer } from './components/VectorExplorer';
 import { GraphExplorer } from './components/GraphExplorer';
 import { SecurityVault } from './components/SecurityVault';
@@ -198,6 +199,7 @@ export const App: React.FC = () => {
           {currentTab === 'stream' && <StreamMonitor />}
           {currentTab === 'cluster' && <ClusterManager />}
           {currentTab === 'search' && <SearchExplorer />}
+          {currentTab === 'cache' && <CacheManager />}
           {currentTab === 'vector' && <VectorExplorer />}
           {currentTab === 'graph' && <GraphExplorer />}
           {currentTab === 'security' && <SecurityVault />}

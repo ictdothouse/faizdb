@@ -73,6 +73,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/stats", get(collection_stats))
         .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
         .route("/v1/collections/{name}/search", post(search_collection))
+        .route("/v1/collections/{name}/ttl/stats", get(collection_ttl_stats))
+        .route("/v1/collections/{name}/ttl/purge", post(collection_ttl_purge))
         .route("/v1/subscribe", get(ws_global_subscribe))
         .route("/v1/collections/{name}/watch", get(ws_collection_watch))
         // Cluster & Raft Endpoints
@@ -210,6 +212,27 @@ async fn search_collection(
         .collect();
 
     Json(ApiResponse::ok(output))
+}
+
+async fn collection_ttl_stats(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let stats = col.ttl_stats();
+    Json(ApiResponse::ok(stats))
+}
+
+async fn collection_ttl_purge(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let purged_ids = col.purge_expired();
+    Json(ApiResponse::ok(serde_json::json!({
+        "purged_count": purged_ids.len(),
+        "purged_ids": purged_ids,
+    })))
 }
 
 /// Cluster Status Handler: `/v1/cluster/status`

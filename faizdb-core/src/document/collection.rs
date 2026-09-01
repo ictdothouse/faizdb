@@ -115,6 +115,9 @@ pub struct Collection {
 
     /// Native Full-Text Inverted Index (BM25)
     text_index: crate::search::InvertedIndex,
+
+    /// Time-To-Live (TTL) & Auto-Expiry Cache Scheduler
+    ttl: crate::ttl::TtlManager,
 }
 
 impl Collection {
@@ -131,6 +134,7 @@ impl Collection {
             doc_count: AtomicU64::new(0),
             total_size: AtomicU64::new(0),
             text_index: crate::search::InvertedIndex::new(),
+            ttl: crate::ttl::TtlManager::new(),
         }
     }
 
@@ -144,6 +148,7 @@ impl Collection {
             doc_count: AtomicU64::new(0),
             total_size: AtomicU64::new(0),
             text_index: crate::search::InvertedIndex::new(),
+            ttl: crate::ttl::TtlManager::new(),
         }
     }
 
@@ -203,6 +208,15 @@ impl Collection {
         let doc_text = extract_doc_text(&doc);
         self.text_index.index_document(&id_str, &doc_text);
 
+        // Register TTL expiration if specified in document (_ttl or ttl in seconds)
+        if let Some(ttl_val) = doc.get("_ttl").or_else(|| doc.get("ttl")) {
+            if let Some(secs) = ttl_val.as_i64() {
+                if secs > 0 {
+                    self.ttl.set_expiry(&id_str, secs as u64);
+                }
+            }
+        }
+
         // Insert into primary store
         self.documents.insert(id_str, doc);
         self.doc_count.fetch_add(1, Ordering::Relaxed);
@@ -225,8 +239,16 @@ impl Collection {
         Ok(ids)
     }
 
-    /// Find a document by its ID.
+    /// Find a document by its ID (with lazy TTL evaluation).
     pub fn find_by_id(&self, id: &str) -> FaizResult<Document> {
+        if self.ttl.is_expired(id, crate::ttl::current_time_ms()) {
+            let _ = self.delete_by_id(id);
+            return Err(FaizError::DocumentNotFound {
+                collection: self.config.name.clone(),
+                id: id.to_string(),
+            });
+        }
+
         self.documents
             .get(id)
             .map(|entry| entry.value().clone())
@@ -255,6 +277,7 @@ impl Collection {
         limit: Option<usize>,
         skip: Option<usize>,
     ) -> FaizResult<Vec<Document>> {
+        self.purge_expired();
         let skip = skip.unwrap_or(0);
         let limit = limit.unwrap_or(usize::MAX);
 
@@ -279,8 +302,9 @@ impl Collection {
         Ok(results)
     }
 
-    /// Find all documents in the collection.
+    /// Find all documents in the collection (auto-purging expired TTL keys).
     pub fn find_all(&self, limit: Option<usize>) -> Vec<Document> {
+        self.purge_expired();
         let limit = limit.unwrap_or(usize::MAX);
         self.documents
             .iter()
@@ -384,6 +408,25 @@ impl Collection {
         }
 
         out
+    }
+
+    /// Purge all expired TTL documents across the collection
+    pub fn purge_expired(&self) -> Vec<String> {
+        let expired_ids = self.ttl.purge_expired(crate::ttl::current_time_ms());
+        for id in &expired_ids {
+            if let Some((_, doc)) = self.documents.remove(id) {
+                self.doc_count.fetch_sub(1, Ordering::Relaxed);
+                self.total_size.fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
+                self.update_indexes_delete(&doc);
+                self.text_index.remove_document(id);
+            }
+        }
+        expired_ids
+    }
+
+    /// Access TTL statistics
+    pub fn ttl_stats(&self) -> crate::ttl::TtlStats {
+        self.ttl.get_stats()
     }
 
     /// Delete all documents matching a filter.

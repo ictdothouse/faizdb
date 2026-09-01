@@ -50,6 +50,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Full-Text Search Engine (Okapi BM25)',
       desc: 'Inverted index, statistical relevance ranking, stop-word elimination & fuzzy typo matching',
     },
+    cache: {
+      title: 'Time-To-Live (TTL) & Cache Engine',
+      desc: 'High-speed Redis-like auto-expiring in-memory keys, OTP tokens, and continuous Min-Heap sweeper',
+    },
     vector: {
       title: 'AI Vector Search Engine',
       desc: 'HNSW sub-millisecond similarity matching & embedding visualizer (up to 4096 dimensions)',

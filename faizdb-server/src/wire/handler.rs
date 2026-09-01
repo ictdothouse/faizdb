@@ -226,7 +226,17 @@ fn handle_find(
                 }
                 // Check exact field matches
                 for (k, v) in filter {
-                    if let Some(val) = d.get_nested(k) {
+                    if k == "_id" {
+                        let id_str = d.id.as_str();
+                        let matches_id = match v {
+                            bson::Bson::String(s) => s.as_str() == id_str,
+                            bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                            _ => false,
+                        };
+                        if !matches_id {
+                            return false;
+                        }
+                    } else if let Some(val) = d.get_nested(k) {
                         let b_val = faiz_val_to_bson(val);
                         if &b_val != v {
                             return false;
