@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 27020, // Dedicated FaizDB Studio Port
     host: '0.0.0.0',
     proxy: {
       '/v1': {
