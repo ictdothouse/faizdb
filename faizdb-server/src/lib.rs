@@ -11,7 +11,7 @@ pub mod wire;
 pub mod grpc;
 pub mod stream;
 
-pub use api::{create_router, AppState};
+pub use api::{create_router, middleware::AppState, BackupScheduleConfig};
 pub use wire::{run_wire_server, run_postgres_server};
 pub use grpc::run_grpc_server;
 
@@ -35,7 +35,7 @@ pub async fn run_multi_protocol_server(
     let state = std::sync::Arc::new(AppState {
         db: db.clone(),
         auth,
-        backup_schedule: std::sync::Arc::new(std::sync::RwLock::new(api::BackupScheduleConfig::default())),
+        backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(api::BackupScheduleConfig::default())),
         geo_replication,
     });
 

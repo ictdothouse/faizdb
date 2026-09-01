@@ -11,7 +11,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use crate::error::{FaizError, FaizResult};
 use crate::storage::memtable::{MemEntry, MemTable};
@@ -230,7 +232,7 @@ impl StorageEngine {
 
         // Step 2: Check immutable MemTables (newest first)
         {
-            let immutables = self.immutable_memtables.read().unwrap();
+            let immutables = self.immutable_memtables.read();
             for mt in immutables.iter().rev() {
                 if let Some(entry) = mt.get(key) {
                     return match entry {
@@ -243,7 +245,7 @@ impl StorageEngine {
 
         // Step 3: Check SSTables (newest first)
         {
-            let sstables = self.sstables.read().unwrap();
+            let sstables = self.sstables.read();
             for sst in sstables.iter() {
                 if let Some(entry) = sst.get(key)? {
                     return match entry {
@@ -289,7 +291,7 @@ impl StorageEngine {
 
         // Scan SSTables (oldest first, so newer values overwrite)
         {
-            let sstables = self.sstables.read().unwrap();
+            let sstables = self.sstables.read();
             for sst in sstables.iter().rev() {
                 for entry_result in sst.iter()? {
                     let (key, entry) = entry_result?;
@@ -309,7 +311,7 @@ impl StorageEngine {
 
         // Scan immutable MemTables
         {
-            let immutables = self.immutable_memtables.read().unwrap();
+            let immutables = self.immutable_memtables.read();
             for mt in immutables.iter() {
                 for (key, entry) in mt.prefix_scan(prefix) {
                     match entry {
@@ -353,11 +355,11 @@ impl StorageEngine {
 
     /// Get storage engine statistics
     pub fn stats(&self) -> StorageStats {
-        let sstables = self.sstables.read().unwrap();
+        let sstables = self.sstables.read();
         StorageStats {
             memtable_size: self.active_memtable.size(),
             memtable_entries: self.active_memtable.entry_count(),
-            immutable_memtables: self.immutable_memtables.read().unwrap().len(),
+            immutable_memtables: self.immutable_memtables.read().len(),
             sstable_count: sstables.len(),
             total_sstable_entries: sstables.iter().map(|s| s.entry_count()).sum(),
         }
@@ -429,7 +431,7 @@ impl StorageEngine {
 
         // Add to SSTable list (at the beginning = newest)
         {
-            let mut sstables = self.sstables.write().unwrap();
+            let mut sstables = self.sstables.write();
             sstables.insert(0, reader);
         }
 

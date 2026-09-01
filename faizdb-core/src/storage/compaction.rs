@@ -42,54 +42,86 @@ impl Default for CompactionConfig {
 
 /// Merge multiple sorted SSTable iterators into a single sorted stream.
 ///
-/// This is the core of compaction — it takes entries from multiple SSTables
-/// and produces a single sorted output where:
-/// - For duplicate keys, only the newest entry is kept
-/// - Tombstones are removed (if all levels agree the key is deleted)
+/// Uses a **streaming k-way merge** (min-heap over per-table iterators) so that
+/// memory usage is bounded to `O(k)` (one entry per input table at any time)
+/// regardless of total dataset size. This replaces the previous approach that
+/// loaded every entry into RAM, which could OOM on large multi-GB compactions.
+///
+/// Merge semantics:
+/// - For duplicate keys, the entry from the **highest-indexed** table wins (newest data).
+/// - Tombstones are propagated unless `drop_tombstones` is `true`.
 pub fn merge_sstables(
     input_paths: &[PathBuf],
     output_path: &Path,
     drop_tombstones: bool,
 ) -> FaizResult<PathBuf> {
-    // Collect all entries from all input SSTables
-    let mut all_entries: Vec<(Vec<u8>, MemEntry, usize)> = Vec::new();
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
 
-    for (table_idx, path) in input_paths.iter().enumerate() {
-        let reader = SSTableReader::open(path)?;
-        for entry_result in reader.iter()? {
-            let (key, entry) = entry_result?;
-            all_entries.push((key, entry, table_idx));
+    // ── Heap entry ──────────────────────────────────────────────────────────
+    // Ascending key order; equal keys resolved by descending table_idx (newest wins).
+    #[derive(Eq, PartialEq)]
+    struct HeapEntry {
+        key: Vec<u8>,
+        entry: MemEntry,
+        table_idx: usize,
+    }
+    impl Ord for HeapEntry {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.key.cmp(&other.key)
+                .then_with(|| other.table_idx.cmp(&self.table_idx))
+        }
+    }
+    impl PartialOrd for HeapEntry {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+    }
+
+    // Open iterators for all input SSTables
+    let mut readers: Vec<SSTableReader> = input_paths
+        .iter()
+        .map(SSTableReader::open)
+        .collect::<FaizResult<_>>()?;
+
+    let mut iterators: Vec<Box<dyn Iterator<Item = FaizResult<(Vec<u8>, MemEntry)>>>> = readers
+        .iter_mut()
+        .map(|r| -> Box<dyn Iterator<Item = FaizResult<(Vec<u8>, MemEntry)>>> {
+            Box::new(r.iter().unwrap_or_else(|_| Box::new(std::iter::empty())))
+        })
+        .collect();
+
+    // Seed the heap — one entry per iterator
+    let mut heap: BinaryHeap<Reverse<HeapEntry>> = BinaryHeap::new();
+    for (table_idx, iter) in iterators.iter_mut().enumerate() {
+        if let Some(result) = iter.next() {
+            let (key, entry) = result?;
+            heap.push(Reverse(HeapEntry { key, entry, table_idx }));
         }
     }
 
-    // Sort by key, then by table index (newer tables have higher index)
-    all_entries.sort_by(|a, b| {
-        a.0.cmp(&b.0).then_with(|| b.2.cmp(&a.2)) // Same key: higher index (newer) first
-    });
+    // Streaming merge: write directly as we pop from the heap
+    let mut writer = SSTableWriter::new(output_path, 0)?;
+    let mut last_written_key: Option<Vec<u8>> = None;
 
-    // Deduplicate: for same key, keep only the first (newest) entry
-    let mut deduped: Vec<(Vec<u8>, MemEntry)> = Vec::new();
-    let mut last_key: Option<Vec<u8>> = None;
-
-    for (key, entry, _) in all_entries {
-        if last_key.as_ref() == Some(&key) {
-            continue; // Skip older version of same key
+    while let Some(Reverse(HeapEntry { key, entry, table_idx })) = heap.pop() {
+        // Advance the iterator that produced this entry
+        if let Some(result) = iterators[table_idx].next() {
+            let (next_key, next_entry) = result?;
+            heap.push(Reverse(HeapEntry { key: next_key, entry: next_entry, table_idx }));
         }
 
-        // Optionally drop tombstones
-        if drop_tombstones && entry.is_tombstone() {
-            last_key = Some(key);
+        // Skip stale copies of the same key (already written the newest version)
+        if last_written_key.as_ref() == Some(&key) {
             continue;
         }
 
-        last_key = Some(key.clone());
-        deduped.push((key, entry));
-    }
+        // Optionally drop tombstones (only safe during full-level compaction)
+        if drop_tombstones && entry.is_tombstone() {
+            last_written_key = Some(key);
+            continue;
+        }
 
-    // Write merged output
-    let mut writer = SSTableWriter::new(output_path, deduped.len())?;
-    for (key, entry) in &deduped {
-        writer.write_entry(key, entry)?;
+        writer.write_entry(&key, &entry)?;
+        last_written_key = Some(key);
     }
 
     writer.finish()
