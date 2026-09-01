@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaizDB Documentation — The AI-Native NoSQL Database Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-sidebar: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --primary: #f59e0b;
+      --primary-dark: #d97706;
+      --primary-subtle: #fef3c7;
+      --accent: #0284c7;
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      --card-bg: #ffffff;
+      --card-border: #e2e8f0;
+    }
+
+    html.dark {
+      --bg: #090d16;
+      --bg-sidebar: #0f172a;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #fbbf24;
+      --primary-dark: #f59e0b;
+      --primary-subtle: #451a03;
+      --accent: #38bdf8;
+      --code-bg: #030712;
+      --code-text: #f3f4f6;
+      --card-bg: #0f172a;
+      --card-border: #1e293b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    /* Top Navbar */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      height: 4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+    }
+    html.dark nav {
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 1.25rem;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #f59e0b, #ea580c);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .nav-tools {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 2.2rem 0.45rem 0.85rem;
+      font-size: 0.85rem;
+      color: var(--text);
+      outline: none;
+      width: 240px;
+      transition: all 0.2s;
+    }
+    .search-input:focus {
+      border-color: var(--primary);
+      width: 300px;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+    }
+
+    .kbd {
+      position: absolute;
+      right: 8px;
+      background: var(--border);
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+
+    .theme-toggle, .github-link {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .theme-toggle:hover, .github-link:hover {
+      background: var(--bg-sidebar);
+    }
+
+    /* Layout */
+    .docs-layout {
+      display: flex;
+      flex: 1;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Left Sidebar */
+    aside.sidebar {
+      width: 280px;
+      position: sticky;
+      top: 4rem;
+      height: calc(100vh - 4rem);
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--bg-sidebar);
+      padding: 1.5rem 1rem;
+    }
+
+    .sidebar-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .sidebar-title {
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      padding: 0 0.75rem;
+    }
+
+    .sidebar-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.75rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .sidebar-link:hover {
+      color: var(--text);
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .sidebar-link.active {
+      color: var(--primary-dark);
+      background: var(--primary-subtle);
+      font-weight: 700;
+    }
+    html.dark .sidebar-link.active {
+      color: var(--primary);
+    }
+
+    /* Content Area */
+    main.content {
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 900px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 900px) {
+      .docs-layout { flex-direction: column; }
+      aside.sidebar { width: 100%; height: auto; position: static; }
+      main.content { padding: 1.5rem; }
+    }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+      line-height: 1.2;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      margin-bottom: 1.2rem;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    .lead {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+
+    /* Code Blocks */
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin: 1.25rem 0;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
+
+    .code-header {
+      background: rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 0.5rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: #94a3b8;
+    }
+
+    .btn-copy {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #f8fafc;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-copy:hover {
+      background: var(--primary);
+      color: white;
+    }
+
+    pre {
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      color: var(--code-text);
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--primary-dark);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+    html.dark code {
+      color: var(--primary);
+    }
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    /* Cards & Features */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+    }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-title {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .feature-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: var(--bg-sidebar);
+      border-bottom: 2px solid var(--border);
+      font-weight: 700;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Callout Note */
+    .callout {
+      border-left: 4px solid var(--primary);
+      background: var(--primary-subtle);
+      padding: 1rem 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+    }
+    html.dark .callout {
+      background: rgba(245, 158, 11, 0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <nav>
+    <a href="#" class="nav-brand">
+      <div class="brand-logo">🔥</div>
+      <span>FaizDB Docs</span>
+    </a>
+
+    <div class="nav-tools">
+      <div class="search-box">
+        <input type="text" id="docs-search" class="search-input" placeholder="Search documentation...">
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">Dark</span>
+      </button>
+
+      <a href="https://github.com/ictdothouse/faizdb" target="_blank" class="github-link">
+        ⭐ GitHub (main)
+      </a>
+    </div>
+  </nav>
+
+  <!-- Docs Layout -->
+  <div class="docs-layout">
+    <!-- Left Navigation Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-group">
+        <div class="sidebar-title">Getting Started</div>
+        <a href="#intro" class="sidebar-link active">🌟 Overview & Vision</a>
+        <a href="#installation" class="sidebar-link">📦 1-Line Installation</a>
+        <a href="#quickstart" class="sidebar-link">⚡ 60-Second Quickstart</a>
+        <a href="#architecture" class="sidebar-link">🏛️ Architecture & Storage</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-title">Protocols & Dialects</div>
+        <a href="#mongo-wire" class="sidebar-link">🍃 MongoDB Wire (Port 27017)</a>
+        <a href="#rest-api" class="sidebar-link">🌐 HTTP REST API (Port 27018)</a>
+        <a href="#websockets" class="sidebar-link">📡 WebSocket Change Streams</a>
+        <a href="#query-console" class="sidebar-link">🧠 Multi-Dialect Query Engine</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-title">Enterprise Engines</div>
+        <a href="#aggregations" class="sidebar-link">📊 Aggregation Pipeline</a>
+        <a href="#search-engine" class="sidebar-link">🔍 Full-Text BM25 & Fuzzy</a>
+        <a href="#ttl-cache" class="sidebar-link">⏳ TTL & In-Memory Cache</a>
+        <a href="#raft-cluster" class="sidebar-link">🌐 Raft Consensus & Shards</a>
+        <a href="#backup-restore" class="sidebar-link">💾 Backup & Disaster Recovery</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-title">Client Libraries & SDKs</div>
+        <a href="#sdk-python" class="sidebar-link">🐍 Python (PyMongo)</a>
+        <a href="#sdk-node" class="sidebar-link">⚡ Node.js & TypeScript</a>
+        <a href="#sdk-php" class="sidebar-link">🐘 PHP Applications</a>
+        <a href="#sdk-static-web" class="sidebar-link">🌍 Pure Static HTML/JS Web</a>
+        <a href="#sdk-mobile-tv" class="sidebar-link">📱 Mobile & Smart TV</a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content">
+      <!-- Section 1: Intro -->
+      <section id="intro">
+        <h1>FaizDB Documentation</h1>
+        <p class="lead">
+          FaizDB is an enterprise-grade, distributed, AI-native NoSQL database engine written in 100% memory-safe Rust. Fast as SQLite, flexible as MongoDB, and intelligent with native Vector & Knowledge Graph search.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-icon">🍃</div>
+            <div class="feature-title">Drop-in MongoDB Wire Protocol</div>
+            <div class="feature-desc">Connect PyMongo, Mongoose, Prisma, or PHP on Port 27017 without modifying existing application code.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🚀</div>
+            <div class="feature-title">320,000+ Writes / Sec</div>
+            <div class="feature-desc">Ultra-high throughput LSM-Tree storage with zero garbage collection lag spikes.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">AI-Native Vector & GraphRAG</div>
+            <div class="feature-desc">Sub-millisecond HNSW vector matching (up to 4096 dimensions) and native multi-hop graph traversal.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">Zero-Trust Enterprise Security</div>
+            <div class="feature-desc">Default AES-256-GCM encryption, Argon2id password hashing, and Point-In-Time Disaster Recovery (PITR).</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Installation -->
+      <section id="installation">
+        <h2>📦 1-Line Universal Installation</h2>
+        <p>Install FaizDB across any operating system using our automated one-line bootstrappers:</p>
+
+        <h3>🐧 Linux (Ubuntu, Debian, CentOS, RHEL, Arch) & 🍎 macOS (Apple Silicon & Intel)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.sh | bash</code></pre>
+        </div>
+
+        <h3>🪟 Windows (PowerShell)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>powershell</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>iwr -useb https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.ps1 | iex</code></pre>
+        </div>
+
+        <h3>🐳 Docker & Kubernetes</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>git clone https://github.com/ictdothouse/faizdb.git
+cd faizdb
+docker compose up -d</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 3: Quickstart -->
+      <section id="quickstart">
+        <h2>⚡ 60-Second Quickstart</h2>
+        <p>Launch the FaizDB Dual-Protocol Daemon in one command:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Start MongoDB Wire on 27017 and REST/WebSockets on 27018
+faizdb serve --wire-port 27017 --http-port 27018</code></pre>
+        </div>
+
+        <p>Open an interactive multi-dialect REPL shell:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>faizdb shell</code></pre>
+        </div>
+
+        <p>Inside the shell, execute queries in <strong>SQL</strong>, <strong>MongoDB Syntax</strong>, or <strong>FaizQL</strong>:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql / mongo</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>-- SQL Syntax:
+INSERT INTO users {"name": "Ahmad Faiz", "role": "Architect", "score": 9800};
+SELECT * FROM users WHERE score >= 9000;
+
+-- MongoDB Syntax:
+db.users.insert({"name": "Cyber Specialist", "role": "Security", "score": 9200});
+db.users.find({"role": "Security"});</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 4: MongoDB Wire Protocol -->
+      <section id="mongo-wire">
+        <h2>🍃 MongoDB Wire Protocol Integration (Port 27017)</h2>
+        <p>FaizDB listens natively on standard port <code>27017</code>. You can connect any existing MongoDB tool or driver directly.</p>
+
+        <h3>Python (`pymongo`)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from pymongo import MongoClient
+
+# Drop-in connection to FaizDB (Zero Code Changes)
+client = MongoClient("mongodb://127.0.0.1:27017")
+db = client["enterprise_db"]
+col = db["analytics"]
+
+# Insert Document
+col.insert_one({"device": "sensor-01", "temp": 36.4, "status": "nominal"})
+
+# Query Document
+record = col.find_one({"device": "sensor-01"})
+print("Found Record:", record)</code></pre>
+        </div>
+
+        <h3>Node.js / TypeScript (`mongodb` / `mongoose`)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>typescript</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import { MongoClient } from 'mongodb';
+
+const client = new MongoClient('mongodb://127.0.0.1:27017');
+await client.connect();
+const collection = client.db('app_db').collection('users');
+
+await collection.insertOne({ name: 'Faiz Aziz', tier: 'Enterprise', _ttl: 60 });
+console.log('Saved with 60-second auto-expiry TTL!');</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 5: Aggregation Pipeline -->
+      <section id="aggregations">
+        <h2>📊 Complex Aggregation & Analytics Pipeline Engine</h2>
+        <p>FaizDB includes a full-featured in-memory Aggregation Pipeline supporting <code>$match</code>, <code>$group</code>, <code>$project</code>, <code>$sort</code>, <code>$limit</code>, and <code>$skip</code>.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>python aggregation</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>pipeline = [
+    { "$match": { "revenue": { "$gt": 0 } } },
+    { "$group": { 
+        "_id": "$plan", 
+        "totalRevenue": { "$sum": "$revenue" },
+        "avgRevenue": { "$avg": "$revenue" },
+        "customerCount": { "$sum": 1 }
+    }},
+    { "$sort": { "totalRevenue": -1 } }
+]
+
+results = list(col.aggregate(pipeline))
+print("Financial Aggregation Report:", results)</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 6: Full-Text Search BM25 -->
+      <section id="search-engine">
+        <h2>🔍 Full-Text Search Engine (Okapi BM25 & Fuzzy Typo Tolerance)</h2>
+        <p>FaizDB automatically builds an inverted index for text fields with statistical relevance scoring ($k_1=1.2, b=0.75$) and Levenshtein distance typo tolerance.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>http post /v1/collections/{name}/search</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>curl -X POST http://localhost:27018/v1/collections/articles/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "quantm compyter",
+    "fuzzy": true,
+    "top_k": 5
+  }'</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 7: TTL Cache Engine -->
+      <section id="ttl-cache">
+        <h2>⏳ Time-To-Live (TTL) & High-Speed Cache Engine</h2>
+        <p>Use FaizDB simultaneously as your primary database and your high-speed Redis replacement for OTP tokens, user sessions, and rate limiters.</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>json document with _ttl</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>// Document expires and purges automatically in 15 seconds:
+{
+  "_id": "otp_user_992",
+  "code": "849201",
+  "_ttl": 15
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section 8: Backup & Disaster Recovery -->
+      <section id="backup-restore">
+        <h2>💾 Backup, Snapshot & Point-In-Time Disaster Recovery (PITR)</h2>
+        <p>Generate non-blocking online snapshots with cryptographic checksum integrity verification:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash cli</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Create Atomic Consistent Snapshot:
+faizdb backup --output ./backups/faizdb_snapshot_2026.json
+
+# Restore Database Instantaneously:
+faizdb restore --input ./backups/faizdb_snapshot_2026.json</code></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- JavaScript for Search, Theme Toggle, and Copy Buttons -->
+  <script>
+    // Theme Toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.classList.toggle('dark');
+      document.getElementById('theme-icon').textContent = isDark ? '☀️' : '🌙';
+      document.getElementById('theme-text').textContent = isDark ? 'Light' : 'Dark';
+      localStorage.setItem('faizdb-theme', isDark ? 'dark' : 'light');
+    }
+
+    // Load persisted theme
+    if (localStorage.getItem('faizdb-theme') === 'dark' || (!('faizdb-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+      document.getElementById('theme-icon').textContent = '☀️';
+      document.getElementById('theme-text').textContent = 'Light';
+    }
+
+    // Copy to clipboard
+    function copyCode(btn) {
+      const code = btn.closest('.code-block').querySelector('pre code').innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = 'Copied! ✓';
+        btn.style.background = '#10b981';
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.style.background = '';
+        }, 2000);
+      });
+    }
+
+    // Keyboard shortcut Cmd+K / Ctrl+K
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('docs-search').focus();
+      }
+    });
+
+    // Instant Search Filter
+    document.getElementById('docs-search').addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      document.querySelectorAll('main.content section').forEach(sec => {
+        const text = sec.innerText.toLowerCase();
+        sec.style.display = text.includes(q) ? 'block' : 'none';
+      });
+    });
+  </script>
+</body>
+</html>

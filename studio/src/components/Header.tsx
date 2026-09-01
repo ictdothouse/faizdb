@@ -101,6 +101,16 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Refresh</span>
         </Button>
 
+        <a
+          href="/docs-site/index.html"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-semibold text-slate-700 dark:text-zinc-300 transition-all cursor-pointer text-decoration-none"
+          title="Open Documentation & Knowledge Base"
+        >
+          <span>📖 Docs</span>
+        </a>
+
         {currentTab === 'tables' && (
           <Button variant="primary" size="sm" onClick={onOpenInsertModal}>
             <Plus className="w-3.5 h-3.5" />
