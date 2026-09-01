@@ -18,7 +18,8 @@ use axum::{
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 use faizdb_core::cluster::{AppendEntriesArgs, RequestVoteArgs};
 use faizdb_core::document::model::Document;
@@ -162,7 +163,54 @@ async fn cluster_auth_middleware(req: Request<Body>, next: Next) -> Result<Respo
     Err(StatusCode::UNAUTHORIZED)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enterprise Security Middleware Stack
+// All checks happen in microseconds with zero blocking I/O on the request path.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// [1] REQUEST ID — Injects a unique trace ID into every request & response.
+/// Zero cost: one UUID v4 generated per request (~100ns), no I/O.
+async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Response {
+    let request_id = Uuid::new_v4().to_string();
+    req.extensions_mut().insert(request_id.clone());
+    let mut response = next.run(req).await;
+    if let Ok(val) = HeaderValue::from_str(&request_id) {
+        response.headers_mut().insert("x-faizdb-request-id", val);
+    }
+    response
+}
+
+/// [2] PAYLOAD SIZE LIMITER — Rejects oversized request bodies before parsing.
+/// Zero cost: reads Content-Length header only, never touches the body bytes.
+/// Default: 10MB. Override with FAIZDB_MAX_PAYLOAD_MB env var.
+async fn payload_size_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
+    let max_mb: u64 = std::env::var("FAIZDB_MAX_PAYLOAD_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let max_bytes = max_mb * 1024 * 1024;
+
+    if let Some(content_length) = req.headers().get(header::CONTENT_LENGTH) {
+        if let Ok(length_str) = content_length.to_str() {
+            if let Ok(length) = length_str.parse::<u64>() {
+                if length > max_bytes {
+                    warn!("[PayloadLimit] Request body {} bytes exceeds {}MB limit", length, max_mb);
+                    return Err(StatusCode::PAYLOAD_TOO_LARGE);
+                }
+            }
+        }
+    }
+    Ok(next.run(req).await)
+}
+
+// Persistent blocklist: IPs permanently banned after repeated violations.
+// Stored in memory — survives for the lifetime of the server process.
+static BLOCKLIST: std::sync::OnceLock<DashMap<String, u32>> = std::sync::OnceLock::new();
 static RATE_LIMITER: std::sync::OnceLock<DashMap<String, (u64, Instant)>> = std::sync::OnceLock::new();
+
+fn get_blocklist() -> &'static DashMap<String, u32> {
+    BLOCKLIST.get_or_init(DashMap::new)
+}
 
 fn get_rate_limiter() -> &'static DashMap<String, (u64, Instant)> {
     RATE_LIMITER.get_or_init(DashMap::new)
@@ -235,7 +283,16 @@ async fn rate_limit_middleware(
         }
     }
 
-    // --- 4. Public anonymous throttle: 100 req / 10s sliding window ---
+    // --- 3b. Persistent Blocklist: ban IPs that repeatedly violate rate limits ---
+    {
+        let blocklist = get_blocklist();
+        if blocklist.contains_key(&ip) {
+            warn!("[Blocklist] Permanently blocked IP {} attempted access", ip);
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
+    // --- 4. Public anonymous throttle: sliding window rate limit ---
     {
         let limiter = get_rate_limiter();
         let mut entry = limiter.entry(ip.clone()).or_insert((0, Instant::now()));
@@ -246,17 +303,35 @@ async fn rate_limit_middleware(
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(100);
+        // Strike threshold: 3 window violations → permanent ban
+        let strike_threshold: u32 = std::env::var("FAIZDB_BAN_STRIKES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3);
 
         if now.duration_since(entry.1) > window {
-            // New window — reset counter
             entry.0 = 1;
             entry.1 = now;
         } else {
             entry.0 += 1;
             if entry.0 > limit {
-                tracing::warn!(
-                    "[RateLimit] Public IP {} exceeded {} req/10s — blocked (429)",
-                    ip, limit
+                // Increment strike counter and potentially ban
+                let mut strikes = get_blocklist().entry(ip.clone()).or_insert(0);
+                *strikes += 1;
+                let current_strikes = *strikes;
+                drop(strikes);
+
+                if current_strikes >= strike_threshold {
+                    warn!(
+                        "[Blocklist] IP {} hit {} strikes — permanently banned",
+                        ip, current_strikes
+                    );
+                    return Err(StatusCode::FORBIDDEN);
+                }
+
+                warn!(
+                    "[RateLimit] IP {} exceeded limit — strike {}/{} (429)",
+                    ip, current_strikes, strike_threshold
                 );
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
@@ -264,6 +339,79 @@ async fn rate_limit_middleware(
     }
 
     Ok(next.run(req).await)
+}
+
+/// [4] ASYNC AUDIT LOGGER — Logs security events to a dedicated audit log file.
+/// Zero cost on request path: spawns a background task to write, never blocks.
+/// Log format: JSON-Lines (machine-readable, compatible with log aggregators like ELK/Loki).
+pub fn audit_log(event: &str, ip: &str, path: &str, status: u16, request_id: Option<&str>) {
+    let log_entry = serde_json::json!({
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "event": event,
+        "ip": ip,
+        "path": path,
+        "status": status,
+        "request_id": request_id.unwrap_or("-"),
+        "engine": "FaizDB"
+    });
+    let line = format!("{}
+", log_entry);
+    // Spawn async so audit write never blocks the response path
+    tokio::spawn(async move {
+        let log_path = std::env::var("FAIZDB_AUDIT_LOG")
+            .unwrap_or_else(|_| "./logs/audit.jsonl".to_string());
+        let log_dir = std::path::Path::new(&log_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let _ = tokio::fs::create_dir_all(log_dir).await;
+        use tokio::io::AsyncWriteExt;
+        if let Ok(mut file) = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .await
+        {
+            let _ = file.write_all(line.as_bytes()).await;
+        }
+    });
+}
+
+async fn audit_middleware(req: Request<Body>, next: Next) -> Response {
+    let ip = req.headers()
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or("-").trim().to_string())
+        .or_else(|| {
+            req.extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|ci| ci.0.ip().to_string())
+        })
+        .unwrap_or_else(|| "-".to_string());
+
+    let path = req.uri().path().to_string();
+    let request_id = req.extensions()
+        .get::<String>()
+        .cloned()
+        .unwrap_or_else(|| "-".to_string());
+
+    let method = req.method().clone();
+    let response = next.run(req).await;
+    let status = response.status().as_u16();
+
+    // Only audit security-relevant events to keep log volume low
+    let is_write = matches!(method, Method::POST | Method::DELETE | Method::PUT | Method::PATCH);
+    let is_error = status >= 400;
+    if is_write || is_error {
+        let event = if status == 401 { "auth_failure" }
+            else if status == 403 { "access_denied" }
+            else if status == 429 { "rate_limited" }
+            else if status == 413 { "payload_too_large" }
+            else if is_write { "write_operation" }
+            else { "error" };
+        audit_log(event, &ip, &path, status, Some(&request_id));
+    }
+
+    response
 }
 
 /// Create the Axum HTTP router with REST, WebSocket Change Streams & Cluster RPC
@@ -301,8 +449,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .merge(public_routes)
         .merge(client_routes)
         .merge(cluster_routes)
+        // Middleware execution order (outermost = first to run):
+        // 1. Request ID  → inject trace ID before everything else
+        // 2. Audit Log   → capture result after all processing
+        // 3. Rate Limit  → block abusive traffic early
+        // 4. Payload     → reject oversized bodies before auth parsing
+        // 5. CORS        → apply headers on every response
         .layer(middleware::from_fn(cors_middleware))
+        .layer(middleware::from_fn(payload_size_middleware))
         .layer(middleware::from_fn(rate_limit_middleware))
+        .layer(middleware::from_fn(audit_middleware))
+        .layer(middleware::from_fn(request_id_middleware))
         .with_state(state)
 }
 
