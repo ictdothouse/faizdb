@@ -89,10 +89,12 @@ Transmits and applies incoming CRDT `ReplicationDelta` batches across regions.
 
 ## 🔐 3. Authentication & RBAC
 
-FaizDB enforces Zero-Trust Role-Based Access Control (RBAC) with HMAC-SHA256 JWT tokens.
+FaizDB enforces Zero-Trust Role-Based Access Control (RBAC) with **EdDSA (Ed25519)** asymmetric JWT tokens (2026 industry standard).
+* Immune to timing attacks and HMAC key brute-forcing.
+* Supply standard PEM keys via `FAIZDB_JWT_PRIVATE_KEY` and `FAIZDB_JWT_PUBLIC_KEY` in production, or let FaizDB auto-generate ephemeral keys during local testing.
 
 ### 1. `POST /v1/auth/login`
-Authenticates a user and returns a signed JWT token.
+Authenticates a user and returns a signed Ed25519 JWT token.
 * **Request:**
   ```json
   {
@@ -105,16 +107,20 @@ Authenticates a user and returns a signed JWT token.
   {
     "success": true,
     "data": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "token": "eyJhbGciOiJFZERTQSI...eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJBZG1pbiJ9...",
       "username": "admin",
       "role": "Admin",
-      "expires_in": 2592000
+      "expires_in": 3600
     }
   }
   ```
 
-### 2. `POST /v1/auth/token` (Admin only)
-Generates custom API service tokens with granular role scoping (`Admin`, `ReadWrite`, `ReadOnly`).
+### 2. `GET /v1/auth/whoami`
+Returns claims and permissions of the currently authenticated JWT bearer token.
+* **Header:** `Authorization: Bearer <TOKEN>`
+
+### 3. `POST /v1/auth/token` (Admin only)
+Generates custom service account API tokens with granular role scoping (`Admin`, `ReadWrite`, `ReadOnly`) and custom expiration windows.
 
 ---
 

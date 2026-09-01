@@ -50,15 +50,20 @@ Executed directly on the Release Binary (`opt-level=3` + Fat LTO):
 
 ---
 
-## 2. Running Rust Unit Tests
+## 2. Running Rust Unit & Integration Tests
 
-Execute the following command from the workspace root:
+Execute the following commands from the workspace root:
 
 ```bash
-# Run all 84 unit tests across all workspace crates:
+# Run all unit and integration tests across the workspace:
 cargo test --workspace
 
-# Run tests for a specific crate (e.g., CRDTs & Geo-Replication):
+# Run dedicated integration test suites:
+cargo test -p faizdb-server --test test_auth_flow      # EdDSA JWT & Argon2id Auth Flow
+cargo test -p faizdb-server --test test_document_crud   # High-Volume Document CRUD & WAL Crash Safety
+cargo test -p faizdb-server --test test_vector_search   # HNSW Vector Indexing & Distance Metrics
+
+# Run tests for a specific module (e.g., CRDTs & Geo-Replication):
 cargo test -p faizdb-core -- cluster::crdt
 ```
 

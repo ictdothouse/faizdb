@@ -38,13 +38,14 @@ main();
 
 ---
 
-## 🐍 2. Python SDK (`pip install .`)
+## 🐍 2. Python SDK (`pip install .` / `pyproject.toml`)
 
-### Installation
+### Installation (Requires Python >= 3.11)
 ```bash
 cd bindings/python
 pip install -e .
 ```
+Supported with modern PEP 517/518 build standards (`pyproject.toml`).
 
 ### gRPC Client Usage (Port 50051)
 ```python

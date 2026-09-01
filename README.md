@@ -2,9 +2,10 @@
 
 <div align="center">
 
-[![Rust](https://img.shields.io/badge/rust-2024_edition-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.88+_|__edition_2024-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge&logo=githubactions)](https://github.com/ictdothouse/faizdb/actions)
+[![Security](https://img.shields.io/badge/security-EdDSA_Ed25519_%7C_AES--256--GCM-red.svg?style=for-the-badge)](SECURITY.md)
 [![Protocols](https://img.shields.io/badge/gateways-Mongo_%7C_PostgreSQL_%7C_gRPC_%7C_REST-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 [![Architecture](https://img.shields.io/badge/consensus-Raft_%7C_CRDT_Geo_Replication-purple.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 
@@ -101,19 +102,23 @@ Conducted on standard hardware (Rust Release Build with Link-Time Optimization):
 
 ```
 faizdb/
+├── .github/workflows/  # 🤖 Automated CI/CD Pipeline (fmt, clippy, test, cargo-audit, MSRV)
 ├── proto/              # ⚡ Official Protocol Buffers v3 Schema (faizdb.proto)
-├── bindings/           # 📦 Polyglot SDKs: Python (pip), Node.js (npm), Go, and PHP
-├── faizdb-core/        # 🌲 LSM-Tree, MemTable, SSTable, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs
-├── faizdb-vector/      # 🎯 HNSW Multi-Layer Vector Index (Cosine, L2, Dot Product)
+├── bindings/           # 📦 Polyglot SDKs: Python (pyproject.toml), Node.js (npm), Go, and PHP
+├── faizdb-core/        # 🌲 LSM-Tree, MemTable, Streaming Compaction, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs
+├── faizdb-vector/      # 🎯 HNSW Multi-Layer Vector Index with Persistence (Cosine, L2, Dot Product)
 ├── faizdb-graph/       # 🕸️ Knowledge Graph, Multi-Hop Traversal & GraphRAG Engine
 ├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, FaizQL) & Cost Optimizer
-├── faizdb-security/    # 🔒 Zero-Trust AES-256-GCM Encryption, Argon2id & JWT RBAC
-├── faizdb-server/      # 🌐 Multi-Protocol Server (MongoDB 27017, Postgres 5432, gRPC 50051, REST 27018)
+├── faizdb-security/    # 🔒 Zero-Trust AES-256-GCM Encryption, Argon2id & EdDSA (Ed25519) JWT RBAC
+├── faizdb-server/      # 🌐 Modular Multi-Protocol Server (MongoDB 27017, Postgres 5432, gRPC 50051, REST 27018)
 ├── faizdb-cli/         # 💻 Production CLI, Interactive REPL Shell, Backup & Restore Tools
 ├── studio/             # 🎛️ Modern Web Management Studio (React + Vite + TailwindCSS)
 ├── docs/               # 📚 Comprehensive Guides, Competitive Analysis & API References
 ├── docs-site/          # 🌐 Interactive Web Documentation Portal
-└── tests/              # 🧪 Integration & End-to-End Test Suites (84/84 Passed)
+├── CHANGELOG.md        # 📋 Keep a Changelog Version History
+├── SECURITY.md         # 🛡️ Responsible Disclosure Policy
+├── CONTRIBUTING.md     # 🤝 Open Source Contribution Guide
+└── tests/              # 🧪 Integration & End-to-End Test Suites (Rust & Python)
 ```
 
 ---
@@ -281,11 +286,14 @@ Key Studio Workspaces:
 
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
 * [🤖 AI, LLM & Real-Time Gaming Use Cases](docs/USE_CASES_AND_SOLUTIONS.md) — Semantic caching (cut 70% LLM tokens), Agentic 3-tier memory, GraphRAG, PyTorch training streaming, and real-time multiplayer gaming.
-* [🧪 Testing & Benchmarks Guide](docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, test run results, and validation instructions.
-* [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, and Geo-Replication.
-* [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python, and Go.
+* [🧪 Testing & Benchmarks Guide](docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, Rust integration tests, and validation instructions.
+* [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, EdDSA JWT auth, and Geo-Replication.
+* [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python (`pyproject.toml`), and Go.
 * [⚔️ Competitive Analysis & Architectural Matrix](docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
 * [☸️ Kubernetes HA Cluster Guide](k8s/README.md) — 3-Node StatefulSet architecture with automated persistence and zero-downtime rolling upgrades.
+* [📋 Changelog](CHANGELOG.md) — Version history and release notes.
+* [🛡️ Security Policy](SECURITY.md) — Vulnerability reporting and responsible disclosure.
+* [🤝 Contributing Guide](CONTRIBUTING.md) — Development setup, branch guidelines, and code of conduct.
 
 ---
 
@@ -304,7 +312,10 @@ Key Studio Workspaces:
 - [x] Distributed Raft Consensus Engine & 16,384 Virtual Hash Slots Auto-Sharding
 - [x] Bulk CSV / JSON Array Ingestion Engine (`/v1/collections/:name/import`)
 - [x] Automated Snapshot Scheduler & Retention Policy (SOC2 / ISO 27001)
-- [x] Official SDKs for TypeScript/Node.js, Python (`setup.py`), and Go
+- [x] Official SDKs for TypeScript/Node.js, Python (`pyproject.toml` / PEP 517), and Go
+- [x] Streaming k-Way BinaryHeap Compaction ($O(k)$ memory bounded)
+- [x] Native HNSW Vector Index Serialization & Persistence
+- [x] EdDSA (Ed25519) Asymmetric Cryptography JWT Authentication
 - [x] Kubernetes 3-Node High-Availability StatefulSet Deployment Template
 - [x] Full-Text Search Engine with Okapi BM25 & Levenshtein Fuzzy Typo Tolerance
 - [x] Time-To-Live (TTL) Auto-Expiry & High-Speed In-Memory Cache Engine

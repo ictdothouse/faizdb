@@ -708,7 +708,7 @@ client.execute_query("""
           <div class="feature-card">
             <div class="feature-icon">🛡️</div>
             <div class="feature-title">Zero-Trust Enterprise Security</div>
-            <div class="feature-desc">Military-grade AES-256-GCM AEAD encryption at rest and in-transit (TLS 1.3), Argon2id key derivation, and signed JWT Role-Based Access Control (RBAC).</div>
+            <div class="feature-desc">Military-grade AES-256-GCM AEAD encryption at rest and in-transit (TLS 1.3), Argon2id key derivation, and signed EdDSA (Ed25519) Role-Based Access Control (RBAC).</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">⚡</div>
@@ -737,8 +737,8 @@ client.execute_query("""
           </div>
           <div class="feature-card">
             <div class="feature-icon">🤖</div>
-            <div class="feature-title">AI-Native Vector HNSW Index</div>
-            <div class="feature-desc">Hierarchical Navigable Small World (HNSW) vector indexing supporting 4096 dimensions with Cosine, Euclidean (L2), and Dot Product distances.</div>
+            <div class="feature-title">🤖 AI-Native Vector HNSW Index</div>
+            <div class="feature-desc">Hierarchical Navigable Small World (HNSW) vector indexing supporting 4096 dimensions (Cosine, L2, Dot Product) with automated disk serialization and persistence.</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🕸️</div>
@@ -765,8 +765,8 @@ client.execute_query("""
             <div class="feature-desc">State-of-the-art memory-hard key derivation function ($m=65536, t=3, p=4$) that resists GPU/ASIC brute-force cracking.</div>
           </div>
           <div class="feature-card">
-            <div class="feature-title">👥 Granular RBAC & JWT Tokens</div>
-            <div class="feature-desc">Three discrete permission tiers: <code>Admin</code> (full cluster & audit control), <code>ReadWrite</code> (CRUD operations), and <code>ReadOnly</code> (analytics queries).</div>
+            <div class="feature-title">👥 Granular RBAC & EdDSA (Ed25519) Tokens</div>
+            <div class="feature-desc">Asymmetric Ed25519 signing (2026 standard) immune to timing attacks and HMAC key brute-forcing. Three permission tiers: <code>Admin</code>, <code>ReadWrite</code>, and <code>ReadOnly</code>.</div>
           </div>
           <div class="feature-card">
             <div class="feature-title">📝 Immutable Security Audit Logs</div>
