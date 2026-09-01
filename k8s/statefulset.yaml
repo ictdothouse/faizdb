@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: faizdb-cluster
+  labels:
+    app: faizdb
+    tier: database
+spec:
+  serviceName: "faizdb-headless"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: faizdb
+  template:
+    metadata:
+      labels:
+        app: faizdb
+        tier: database
+    spec:
+      containers:
+        - name: faizdb-engine
+          image: ictdothouse/faizdb:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+              name: wire-protocol
+            - containerPort: 27018
+              name: http-rest
+          env:
+            - name: FAIZDB_WIRE_PORT
+              value: "27017"
+            - name: FAIZDB_HTTP_PORT
+              value: "27018"
+            - name: FAIZDB_DATA_DIR
+              value: "/data/faizdb"
+            - name: FAIZDB_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: faizdb-credentials
+                  key: admin-user
+            - name: FAIZDB_ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: faizdb-credentials
+                  key: admin-password
+            - name: FAIZDB_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: faizdb-credentials
+                  key: jwt-secret
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "4000m"
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 27018
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: 27018
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          volumeMounts:
+            - name: faizdb-storage
+              mountPath: /data/faizdb
+  volumeClaimTemplates:
+    - metadata:
+        name: faizdb-storage
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: faizdb-service
+  labels:
+    app: faizdb
+spec:
+  type: ClusterIP
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: wire-protocol
+    - port: 27018
+      targetPort: 27018
+      name: http-rest
+  selector:
+    app: faizdb
