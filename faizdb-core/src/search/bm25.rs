@@ -1,11 +1,10 @@
 //! Inverted Index & Okapi BM25 Full-Text Search Engine.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::document::model::DocumentId;
 use super::tokenizer::{levenshtein_distance, tokenize};
 
 /// Parameters for the Okapi BM25 scoring algorithm

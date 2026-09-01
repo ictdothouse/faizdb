@@ -10,14 +10,14 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use faizdb_query::DatabaseContext;
-use faizdb_core::stream::ChangeEvent;
 
 /// Subscription command from client
 #[derive(Debug, Deserialize)]
 struct ClientCommand {
+    #[allow(dead_code)]
     action: Option<String>,
     collection: Option<String>,
 }
@@ -55,7 +55,7 @@ async fn handle_socket(
 ) {
     let (mut sender, mut receiver) = socket.split();
     let mut rx = db.change_stream_bus().subscribe();
-    let mut target_collection = initial_collection.unwrap_or_else(|| "*".to_string());
+    let target_collection = initial_collection.unwrap_or_else(|| "*".to_string());
 
     info!(
         "New WebSocket subscriber connected for collection '{}' (Total: {})",

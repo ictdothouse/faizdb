@@ -27,7 +27,7 @@ use faizdb_core::cluster::{AppendEntriesArgs, RequestVoteArgs};
 use faizdb_core::document::model::Document;
 use faizdb_core::stream::ChangeEvent;
 use faizdb_query::{parse_query, DatabaseContext};
-use faizdb_security::auth::{AuthManager, Role, Claims};
+use faizdb_security::auth::{AuthManager, Role};
 
 /// Injected into request extensions after JWT validation — available to all handlers.
 #[derive(Clone, Debug)]
@@ -596,10 +596,13 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .layer(
             ServiceBuilder::new()
                 // 1. Connection timeout — kills idle/slow clients after 30s (Slowloris protection)
-                .layer(TimeoutLayer::new(Duration::from_secs(
-                    std::env::var("FAIZDB_REQUEST_TIMEOUT_SECS")
-                        .ok().and_then(|v| v.parse().ok()).unwrap_or(30)
-                )))
+                .layer(TimeoutLayer::with_status_code(
+                    StatusCode::REQUEST_TIMEOUT,
+                    Duration::from_secs(
+                        std::env::var("FAIZDB_REQUEST_TIMEOUT_SECS")
+                            .ok().and_then(|v| v.parse().ok()).unwrap_or(30)
+                    ),
+                ))
                 // 2. Request ID — inject trace ID
                 .layer(middleware::from_fn(request_id_middleware))
                 // 3. Audit Log — capture security events
@@ -1168,7 +1171,7 @@ async fn backup_create(
         data.push((name, docs));
     }
 
-    let mut archive = faizdb_core::backup::build_snapshot(&data);
+    let archive = faizdb_core::backup::build_snapshot(&data);
     let passphrase = body.and_then(|b| b.0.passphrase).filter(|p| !p.trim().is_empty());
 
     let filename = if passphrase.is_some() {

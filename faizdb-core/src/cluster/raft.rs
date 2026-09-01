@@ -82,6 +82,7 @@ struct RaftState {
     voted_for: Option<String>,
     log: Vec<LogEntry>,
     commit_index: LogIndex,
+    #[allow(dead_code)]
     last_applied: LogIndex,
     role: NodeRole,
     leader_id: Option<String>,

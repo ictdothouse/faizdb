@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
 use faizdb_core::document::collection::Collection;
-use faizdb_core::document::model::{Document, Value};
+use faizdb_core::document::model::Document;
 use faizdb_core::stream::{ChangeEvent, ChangeStreamBus};
 use crate::ast::{ExplainPlan, FilterExpr, Operator, Statement};
 
@@ -163,7 +163,7 @@ impl DatabaseContext {
                         }))
                     }
                     other => {
-                        let res = self.execute(other)?;
+                        let _res = self.execute(other)?;
                         let execution_time_us = start.elapsed().as_micros() as u64;
                         Ok(QueryResult::Explain(ExplainPlan {
                             plan_type: "DirectExecution".into(),
