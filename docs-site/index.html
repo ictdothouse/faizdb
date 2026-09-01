@@ -550,11 +550,11 @@
               <td><strong>Native MongoDB Wire (Port 27017)</strong></td>
             </tr>
             <tr>
-              <td><strong>Max Document Size</strong></td>
-              <td>16 MB (Legacy constraint)</td>
-              <td>1 GB (Heavy disk overhead)</td>
+              <td><strong>Document Memory & Payload</strong></td>
+              <td>16 MB hard ceiling</td>
+              <td>1 GB (TOAST disk overhead)</td>
               <td>N/A</td>
-              <td><strong>256 MB (Zero-Allocation Byte Slices)</strong></td>
+              <td><strong>Zero-Copy Byte Slices (16MB Safe Default, AI Scalable)</strong></td>
             </tr>
             <tr>
               <td><strong>Vector Search (ANN)</strong></td>

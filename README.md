@@ -60,15 +60,15 @@
 
 | Capability | Legacy MongoDB | PostgreSQL + Plugins | Redis | 🚀 **FaizDB (Unified)** |
 |:---|:---:|:---:|:---:|:---:|
-| **Language & Safety** | C++ (Memory leak risks) | C (Manual memory) | C | **100% Rust (Zero memory-safety vulnerabilities)** |
+| **Language & Engine Core** | C++ (Memory leak risks, GC jitter) | C (Manual memory management) | C (No strict type safety) | **100% Safe Rust (Zero memory leaks, No GC pauses, Borrow-Checker verified)** |
 | **Drop-in Wire Compatibility** | Native | Emulated/Foreign | No | **Native MongoDB Wire (Port 27017)** |
-| **Max Document Size** | 16 MB limit | 1 GB (heavy disk overhead) | N/A | **256 MB (Zero-allocation chunked stream)** |
+| **Document Memory & Payload** | 16 MB hard ceiling (C++ buffer bloat) | 1 GB (TOAST out-of-line disk overhead) | N/A | **Zero-Copy Byte Slices (Safe 16MB default, scalable for AI Context)** |
 | **AI Vector Search (ANN)** | Add-on / Atlas Cloud only | Requires `pgvector` extension | Requires RedisSearch | **Native HNSW (Cosine, L2, Dot) < 1ms** |
 | **Graph & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Native Knowledge Graph & BFS/DFS Traversal** |
 | **Full-Text Search Engine** | Basic text index | `tsvector` (Complex) | Requires plugin | **Native Okapi BM25 with Fuzzy Typo Tolerance** |
 | **In-Memory Cache (TTL)** | TTL index (slow sweeper) | Unsuitable for sub-ms cache | In-memory only | **Unified Cache + Persistence (Min-Heap $O(\log N)$)** |
 | **Consensus & Sharding** | Complex ConfigDB + Mongos | Citus (Third-party) | Redis Cluster | **Embedded Raft Consensus + 16,384 Virtual Hash Slots** |
-| **Disaster Recovery (PITR)** | `mongodump` | `pg_dump` / WAL-G | RDB / AOF | **Atomic Non-blocking Snapshots with SHA/CRC32 Checksum** |
+| **Disaster Recovery (PITR)** | `mongodump` | `pg_dump` / WAL-G | RDB / AOF | **Atomic Non-blocking Snapshots with AES-256 / SHA Checksum** |
 
 ---
 

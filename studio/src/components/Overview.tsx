@@ -172,13 +172,13 @@ export const Overview: React.FC<OverviewProps> = ({ stats, onNavigateToTab }) =>
             <div className="flex items-center gap-3">
               <Layers className="w-4 h-4 text-slate-500 dark:text-zinc-400" />
               <div>
-                <p className="font-medium text-slate-900 dark:text-zinc-100">Max Document Size Limit</p>
+                <p className="font-medium text-slate-900 dark:text-zinc-100">Zero-Copy Memory Slicing</p>
                 <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                  FaizDB eliminates MongoDB's 16MB ceiling (up to 256MB per document).
+                  Rust-powered zero-allocation buffer with 16MB default guardrails (AI Context expandable).
                 </p>
               </div>
             </div>
-            <Badge variant="info">256 MB Max</Badge>
+            <Badge variant="success">Zero-Copy Stream</Badge>
           </div>
         </div>
 
