@@ -29,6 +29,7 @@
 //! - **Crash-safe** — WAL ensures no data loss on unexpected shutdown
 //! - **Embeddable** — can be linked as a library or run as a server
 
+pub mod backup;
 pub mod cluster;
 pub mod document;
 pub mod error;
@@ -39,6 +40,7 @@ pub mod transaction;
 pub mod ttl;
 
 // Re-export commonly used types
+pub use backup::{build_snapshot, load_and_verify_snapshot, save_snapshot_file, SnapshotArchive, SnapshotManifest};
 pub use cluster::{RaftNode, NodeRole, ShardRouter, ShardDistribution};
 pub use document::{Document, DocumentId, Value};
 pub use error::{FaizError, FaizResult};

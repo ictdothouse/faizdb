@@ -85,6 +85,19 @@ impl DatabaseContext {
             .clone()
     }
 
+    /// List all collection names
+    pub fn list_collections(&self) -> Vec<String> {
+        self.collections.iter().map(|e| e.key().clone()).collect()
+    }
+
+    /// Get all collections with instances
+    pub fn all_collections(&self) -> Vec<(String, Arc<Collection>)> {
+        self.collections
+            .iter()
+            .map(|e| (e.key().clone(), e.value().clone()))
+            .collect()
+    }
+
     /// Execute an AST statement
     pub fn execute(&self, stmt: Statement) -> Result<QueryResult, String> {
         match stmt {

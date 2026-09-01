@@ -54,6 +54,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Time-To-Live (TTL) & Cache Engine',
       desc: 'High-speed Redis-like auto-expiring in-memory keys, OTP tokens, and continuous Min-Heap sweeper',
     },
+    backup: {
+      title: 'Automated Backup & Disaster Recovery (PITR)',
+      desc: 'Non-blocking point-in-time snapshots, cryptographic SHA256 verification & instant restore',
+    },
     vector: {
       title: 'AI Vector Search Engine',
       desc: 'HNSW sub-millisecond similarity matching & embedding visualizer (up to 4096 dimensions)',

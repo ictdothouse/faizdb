@@ -83,6 +83,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/cluster/failover", post(cluster_trigger_failover))
         .route("/v1/cluster/raft/vote", post(raft_request_vote))
         .route("/v1/cluster/raft/append", post(raft_append_entries))
+        // Backup & Disaster Recovery Endpoints
+        .route("/v1/backup/create", post(backup_create))
+        .route("/v1/backup/list", get(backup_list))
+        .route("/v1/backup/restore", post(backup_restore))
         .with_state(state)
 }
 
@@ -233,6 +237,105 @@ async fn collection_ttl_purge(
         "purged_count": purged_ids.len(),
         "purged_ids": purged_ids,
     })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RestoreBackupRequest {
+    pub filename: Option<String>,
+}
+
+/// Create a new atomic consistent snapshot
+async fn backup_create(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let collections = state.db.all_collections();
+    let mut data = Vec::new();
+    for (name, col) in collections {
+        let docs = col.find_all(None);
+        data.push((name, docs));
+    }
+
+    let archive = faizdb_core::backup::build_snapshot(&data);
+    let filename = format!("faizdb_snapshot_{}.json", chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    let path = std::path::PathBuf::from("./backups").join(&filename);
+
+    match faizdb_core::backup::save_snapshot_file(&archive, &path) {
+        Ok(_) => (StatusCode::CREATED, Json(ApiResponse::ok(archive.manifest))),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e))),
+    }
+}
+
+/// List all available snapshot files
+async fn backup_list() -> impl IntoResponse {
+    let backup_dir = std::path::Path::new("./backups");
+    if !backup_dir.exists() {
+        return Json(ApiResponse::ok(Vec::<faizdb_core::backup::SnapshotManifest>::new()));
+    }
+
+    let mut manifests = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(backup_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Ok(archive) = faizdb_core::backup::load_and_verify_snapshot(&path) {
+                    manifests.push(archive.manifest);
+                }
+            }
+        }
+    }
+
+    manifests.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Json(ApiResponse::ok(manifests))
+}
+
+/// Restore database from snapshot
+async fn backup_restore(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RestoreBackupRequest>,
+) -> impl IntoResponse {
+    let backup_dir = std::path::Path::new("./backups");
+    let target_file = match payload.filename {
+        Some(name) => backup_dir.join(name),
+        None => {
+            // Find latest
+            let mut latest: Option<(std::path::PathBuf, String)> = None;
+            if let Ok(entries) = std::fs::read_dir(backup_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        let name = path.to_string_lossy().to_string();
+                        if latest.as_ref().map_or(true, |l| name > l.1) {
+                            latest = Some((path, name));
+                        }
+                    }
+                }
+            }
+            match latest {
+                Some((p, _)) => p,
+                None => return (StatusCode::NOT_FOUND, Json(ApiResponse::err("No backup snapshots found to restore"))),
+            }
+        }
+    };
+
+    match faizdb_core::backup::load_and_verify_snapshot(&target_file) {
+        Ok(archive) => {
+            let mut restored_count = 0;
+            for (col_name, doc_vals) in archive.collections_data {
+                let col = state.db.get_or_create_collection(&col_name);
+                for val in doc_vals {
+                    if let Some(doc) = faizdb_core::document::model::Document::from_json_value(val) {
+                        if col.insert(doc).is_ok() {
+                            restored_count += 1;
+                        }
+                    }
+                }
+            }
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                "message": "Database snapshot successfully verified and restored",
+                "checksum": archive.manifest.checksum,
+                "restored_documents": restored_count,
+            }))))
+        }
+        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Restore verification failed: {e}")))),
+    }
 }
 
 /// Cluster Status Handler: `/v1/cluster/status`

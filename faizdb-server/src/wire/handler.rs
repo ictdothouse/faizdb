@@ -113,7 +113,7 @@ fn dispatch_command(
     }
 
     if let Ok(col_name) = cmd.get_str("delete") {
-        return handle_delete(db, col_name, cmd);
+        return handle_delete(db, col_name, cmd, msg);
     }
 
     if let Ok(col_name) = cmd.get_str("update") {
@@ -330,20 +330,43 @@ fn handle_delete(
     db: &Arc<DatabaseContext>,
     collection_name: &str,
     cmd: &BsonDocument,
+    msg: &OpMsg,
 ) -> BsonDocument {
     let col = db.get_or_create_collection(collection_name);
     let mut deleted_count = 0;
 
+    let mut all_deletes = Vec::new();
     if let Ok(deletes) = cmd.get_array("deletes") {
         for item in deletes {
             if let Some(del_doc) = item.as_document() {
-                if let Ok(q) = del_doc.get_document("q") {
+                all_deletes.push(del_doc.clone());
+            }
+        }
+    }
+    let seq_deletes = msg.document_sequence("deletes");
+    all_deletes.extend(seq_deletes);
+
+    for del_doc in all_deletes {
+        if let Ok(q) = del_doc.get_document("q") {
                     let matching_ids: Vec<String> = col
                         .find_all(None)
                         .into_iter()
                         .filter(|d| {
+                            if q.is_empty() {
+                                return true;
+                            }
                             for (k, v) in q {
-                                if let Some(val) = d.get_nested(k) {
+                                if k == "_id" {
+                                    let id_str = d.id.as_str();
+                                    let matches_id = match v {
+                                        bson::Bson::String(s) => s.as_str() == id_str,
+                                        bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                                        _ => false,
+                                    };
+                                    if !matches_id {
+                                        return false;
+                                    }
+                                } else if let Some(val) = d.get_nested(k) {
                                     let b_val = faiz_val_to_bson(val);
                                     if &b_val != v {
                                         return false;
@@ -364,9 +387,7 @@ fn handle_delete(
                         }
                     }
                 }
-            }
         }
-    }
 
     doc! {
         "n": deleted_count,

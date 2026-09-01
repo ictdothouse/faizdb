@@ -66,6 +66,20 @@ enum Commands {
 
     /// Run GraphRAG Knowledge Graph demo
     GraphDemo,
+
+    /// Create an atomic consistent snapshot backup archive
+    Backup {
+        /// Destination snapshot file path (e.g. ./backups/faizdb_dump.json)
+        #[arg(short, long, default_value = "./backups/faizdb_snapshot.json")]
+        output: PathBuf,
+    },
+
+    /// Restore database from a snapshot archive
+    Restore {
+        /// Source snapshot file path
+        #[arg(short, long, default_value = "./backups/faizdb_snapshot.json")]
+        input: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -100,6 +114,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Benchmark { count }) => run_benchmark(count),
         Some(Commands::VectorDemo) => run_vector_demo(),
         Some(Commands::GraphDemo) => run_graph_demo(),
+        Some(Commands::Backup { output }) => run_backup_cli(&output),
+        Some(Commands::Restore { input }) => run_restore_cli(&input),
         None => {
             print_info();
             println!();
@@ -337,5 +353,65 @@ fn run_graph_demo() {
         println!("  Depth {}: Node='{}' (via relation: {:?})",
             step.depth, step.vertex_id, step.relation
         );
+    }
+}
+
+fn run_backup_cli(output_path: &std::path::Path) {
+    println!("\n💾 FaizDB Consistent Snapshot Backup Engine");
+    println!("-------------------------------------------");
+    println!("Initiating non-blocking online snapshot to: {}", output_path.display());
+
+    let db = DatabaseContext::new();
+    let collections = db.all_collections();
+    let mut data = Vec::new();
+    for (name, col) in collections {
+        let docs = col.find_all(None);
+        data.push((name, docs));
+    }
+
+    let archive = faizdb_core::backup::build_snapshot(&data);
+    match faizdb_core::backup::save_snapshot_file(&archive, output_path) {
+        Ok(_) => {
+            println!("✅ Snapshot archive successfully created!");
+            println!("   • Collections  : {:?}", archive.manifest.collections);
+            println!("   • Documents    : {}", archive.manifest.total_documents);
+            println!("   • Checksum     : {}", archive.manifest.checksum);
+            println!("   • Archive Size : {} bytes", archive.manifest.file_size_bytes);
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to create snapshot: {e}");
+        }
+    }
+}
+
+fn run_restore_cli(input_path: &std::path::Path) {
+    println!("\n🔄 FaizDB Disaster Recovery & Snapshot Restore");
+    println!("----------------------------------------------");
+    println!("Restoring database from: {}", input_path.display());
+
+    match faizdb_core::backup::load_and_verify_snapshot(input_path) {
+        Ok(archive) => {
+            println!("✅ Cryptographic Checksum verified: {}", archive.manifest.checksum);
+            println!("   Restoring {} documents across {} collections...",
+                archive.manifest.total_documents, archive.manifest.collections.len()
+            );
+
+            let db = DatabaseContext::new();
+            let mut restored = 0;
+            for (col_name, doc_vals) in archive.collections_data {
+                let col = db.get_or_create_collection(&col_name);
+                for val in doc_vals {
+                    if let Some(doc) = faizdb_core::document::model::Document::from_json_value(val) {
+                        if col.insert(doc).is_ok() {
+                            restored += 1;
+                        }
+                    }
+                }
+            }
+            println!("🎉 Disaster Recovery Complete: {restored} documents restored into live database!");
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to restore snapshot: {e}");
+        }
     }
 }
