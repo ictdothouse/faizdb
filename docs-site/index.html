@@ -451,9 +451,20 @@
         <div class="sidebar-title">Getting Started</div>
         <a href="#intro" class="sidebar-link active">🌟 Overview & Vision</a>
         <a href="#advantages" class="sidebar-link">💎 Why FaizDB Beats Other DBs</a>
+        <a href="#features-overview" class="sidebar-link">✨ Core Features Matrix</a>
         <a href="#installation" class="sidebar-link">📦 1-Line Installation</a>
         <a href="#quickstart" class="sidebar-link">⚡ 60-Second Quickstart</a>
         <a href="#architecture" class="sidebar-link">🏛️ Architecture & Storage</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-title">Security & Enterprise Hardening</div>
+        <a href="#security-vault" class="sidebar-link">🛡️ Zero-Trust Security Suite</a>
+        <a href="#secondary-indexes" class="sidebar-link">⚡ Secondary B-Tree & Unique Keys</a>
+        <a href="#explain-planner" class="sidebar-link">📊 EXPLAIN Query Plan & Optimizer</a>
+        <a href="#transactions" class="sidebar-link">💳 Multi-Document ACID Transactions</a>
+        <a href="#data-migration" class="sidebar-link">📥 Bulk CSV / JSON Ingestion</a>
+        <a href="#backup-retention" class="sidebar-link">⏰ Auto-Backup & SOC2 Retention</a>
       </div>
 
       <div class="sidebar-group">
@@ -475,8 +486,9 @@
 
       <div class="sidebar-group">
         <div class="sidebar-title">Client Libraries & SDKs</div>
-        <a href="#sdk-python" class="sidebar-link">🐍 Python (PyMongo)</a>
-        <a href="#sdk-node" class="sidebar-link">⚡ Node.js & TypeScript</a>
+        <a href="#sdk-python" class="sidebar-link">🐍 Python (Official SDK)</a>
+        <a href="#sdk-node" class="sidebar-link">⚡ Node.js & TypeScript SDK</a>
+        <a href="#sdk-go" class="sidebar-link">🔵 Go (Official SDK)</a>
         <a href="#sdk-php" class="sidebar-link">🐘 PHP Applications</a>
         <a href="#sdk-static-web" class="sidebar-link">🌍 Pure Static HTML/JS Web</a>
         <a href="#sdk-mobile-tv" class="sidebar-link">📱 Mobile & Smart TV</a>
@@ -615,6 +627,218 @@
               <li><strong>Built-in Disaster Recovery</strong>: Non-blocking atomic snapshots with SHA-256 integrity verification.</li>
             </ul>
           </div>
+        </div>
+      </section>
+
+      <!-- Section: Core Features Overview Matrix -->
+      <section id="features-overview">
+        <h2>✨ Core Features & Architectural Capabilities</h2>
+        <p class="lead">
+          FaizDB bridges document flexibility, sub-millisecond caching, high-dimensional vector intelligence, and enterprise-grade durability into a single memory-safe binary.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">Zero-Trust Enterprise Security</div>
+            <div class="feature-desc">Military-grade AES-256-GCM AEAD encryption at rest and in-transit (TLS 1.3), Argon2id key derivation, and signed JWT Role-Based Access Control (RBAC).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">High-Speed Secondary B-Tree Indexes</div>
+            <div class="feature-desc">Secondary B-Tree indexing on any arbitrary JSON field with strict unique key constraint validation ($O(\log N)$ point and range lookups).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Cost-Based EXPLAIN Query Planner</div>
+            <div class="feature-desc">Automated query optimizer that chooses between IndexScan and SequentialScan, returning sub-microsecond latency diagnostics in Studio UI.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">💳</div>
+            <div class="feature-title">Multi-Document ACID Transactions</div>
+            <div class="feature-desc">Snapshot Isolation multi-statement transactions with atomic Write-Ahead Log (WAL) commits and rollback safety.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📥</div>
+            <div class="feature-title">Bulk CSV / JSON Data Migration</div>
+            <div class="feature-desc">High-throughput batch ingestion engine via REST and Studio Drag-and-Drop with automatic type inference.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⏰</div>
+            <div class="feature-title">Automated Backup & SOC2 Retention</div>
+            <div class="feature-desc">Built-in background scheduler for hourly, daily, and weekly encrypted snapshots with customizable retention lifecycle.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">AI-Native Vector HNSW Index</div>
+            <div class="feature-desc">Hierarchical Navigable Small World (HNSW) vector indexing supporting 4096 dimensions with Cosine, Euclidean (L2), and Dot Product distances.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🕸️</div>
+            <div class="feature-title">Knowledge Graph & GraphRAG</div>
+            <div class="feature-desc">In-memory directional entity-relationship graph with breadth-first (BFS) and depth-first (DFS) multi-hop traversals.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Zero-Trust Security Suite -->
+      <section id="security-vault">
+        <h2>🛡️ Zero-Trust Security Suite</h2>
+        <p class="lead">
+          FaizDB implements a comprehensive, defense-in-depth security model engineered for enterprise compliance (SOC2, HIPAA, ISO 27001, GDPR).
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🔒 AES-256-GCM AEAD Encryption</div>
+            <div class="feature-desc">Authenticated Encryption with Associated Data ensures ciphertext integrity and prevents bit-flipping attacks on disk and backup archives.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🔑 Argon2id Password Hashing</div>
+            <div class="feature-desc">State-of-the-art memory-hard key derivation function ($m=65536, t=3, p=4$) that resists GPU/ASIC brute-force cracking.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">👥 Granular RBAC & JWT Tokens</div>
+            <div class="feature-desc">Three discrete permission tiers: <code>Admin</code> (full cluster & audit control), <code>ReadWrite</code> (CRUD operations), and <code>ReadOnly</code> (analytics queries).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">📝 Immutable Security Audit Logs</div>
+            <div class="feature-desc">Every administrative action, failed authentication, and data mutation is permanently recorded in structured audit logs with IP, timestamp, and request ID.</div>
+          </div>
+        </div>
+
+        <h3>Authentication & Token Generation Example</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / curl</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Login to obtain JWT Token
+curl -X POST http://127.0.0.1:27018/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "faizdb-admin-2026"}'
+
+# 2. Query with Authenticated Bearer Token
+curl -X POST http://127.0.0.1:27018/v1/query \
+  -H "Authorization: Bearer &lt;JWT_TOKEN&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT * FROM users"}'</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Secondary Indexes & Unique Constraints -->
+      <section id="secondary-indexes">
+        <h2>⚡ Secondary B-Tree Indexes & Unique Key Enforcement</h2>
+        <p>FaizDB supports secondary B-Tree indexes on any field with automated uniqueness checks:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql / mongodb syntax</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>-- SQL Dialect:
+CREATE UNIQUE INDEX idx_email ON users(email);
+DROP INDEX email ON users;
+
+-- MongoDB Shell Dialect:
+db.users.createIndex({"email": 1}, {"unique": true});
+db.users.dropIndex("email");</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: EXPLAIN Query Planner -->
+      <section id="explain-planner">
+        <h2>📊 Cost-Based EXPLAIN Query Planner & Optimizer</h2>
+        <p>Inspect query execution strategies and microsecond latency diagnostics:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql explain</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>EXPLAIN SELECT * FROM users WHERE email = 'faiz@ict.house';</code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>json response</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>{
+  "Explain": {
+    "plan_type": "IndexScan(idx_email)",
+    "collection": "users",
+    "index_used": "idx_email",
+    "execution_time_us": 74,
+    "documents_examined": 1,
+    "documents_returned": 1,
+    "is_unique": true,
+    "estimated_cost_score": 1.05
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Multi-Document ACID Transactions -->
+      <section id="transactions">
+        <h2>💳 Multi-Document ACID Transactions</h2>
+        <p>Execute multi-statement transactions with Snapshot Isolation and Write-Ahead Log (WAL) safety:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>http rest transactions</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Begin Transaction
+curl -X POST http://127.0.0.1:27018/v1/transaction/begin -H "Authorization: Bearer &lt;TOKEN&gt;"
+
+# 2. Stage Document Mutations
+curl -X POST http://127.0.0.1:27018/v1/collections/accounts/insert \
+  -H "Authorization: Bearer &lt;TOKEN&gt;" -d '{"account": "A", "balance": 900}'
+
+# 3. Commit Transaction (or /rollback to abort)
+curl -X POST http://127.0.0.1:27018/v1/transaction/commit -H "Authorization: Bearer &lt;TOKEN&gt;"</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Bulk Data Migration -->
+      <section id="data-migration">
+        <h2>📥 Bulk CSV / JSON Data Migration Engine</h2>
+        <p>Migrate existing datasets into FaizDB with zero friction via REST API or Studio UI Drag & Drop:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>csv & json bulk ingestion</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Ingest CSV Data with Automatic Type Inference:
+curl -X POST http://127.0.0.1:27018/v1/collections/products/import \
+  -H "Authorization: Bearer &lt;TOKEN&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"csv": "name,price,in_stock\nRTX 5090,1999.99,true\nTPU v5,2499.50,true"}'</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Automated Backup & SOC2 Retention -->
+      <section id="backup-retention">
+        <h2>⏰ Automated Backup Scheduler & SOC2 Retention Policy</h2>
+        <p>Schedule non-blocking point-in-time snapshots with automatic retention pruning:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>backup schedule rest api</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Configure Daily Auto-Backup with 14-Day Retention:
+curl -X POST http://127.0.0.1:27018/v1/backup/schedule \
+  -H "Authorization: Bearer &lt;TOKEN&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "frequency_minutes": 1440,
+    "retention_days": 14,
+    "passphrase": "enterprise-vault-key-2026"
+  }'</code></pre>
         </div>
       </section>
 
@@ -1006,6 +1230,43 @@ const users = db.collection('customers');
 
 await users.insertOne({ company: 'Acme Corp', tier: 'Enterprise', mrr: 5000 });
 console.log('Customer saved successfully in FaizDB!');</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Go SDK -->
+      <section id="sdk-go">
+        <h2>🔵 Go Official SDK Integration Guide</h2>
+        <p>Connect using the official type-safe Go SDK (<code>github.com/ictdothouse/faizdb/bindings/go</code>):</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>go</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>package main
+
+import (
+	"fmt"
+	"github.com/ictdothouse/faizdb/bindings/go"
+)
+
+func main() {
+	client := faizdb.NewClient("http://localhost:27018")
+	_, err := client.Login("admin", "faizdb-admin-2026")
+	if err != nil {
+		panic(err)
+	}
+
+	users := client.Collection("users")
+	docID, err := users.Insert(map[string]interface{}{
+		"name":  "Ahmad Faiz",
+		"email": "faiz@ict.house",
+		"role":  "Architect",
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Document inserted with ID: %s\n", docID)
+}</code></pre>
         </div>
       </section>
 
