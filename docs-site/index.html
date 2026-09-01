@@ -1337,17 +1337,51 @@ db.players.deleteOne({ "name": "Inactive User" });</code></pre>
       <!-- Section: Raft Cluster & Sharding -->
       <section id="raft-cluster">
         <h2>🌐 Raft Consensus, High Availability & Auto-Sharding</h2>
-        <p>FaizDB includes a native Raft distributed consensus implementation with automated leader election and 16,384 virtual hash slots:</p>
+        <p class="lead">
+          FaizDB integrates a native, high-performance <strong>Raft Distributed Consensus Engine</strong> paired with a <strong>16,384 Virtual Hash Slot</strong> partition ring. It guarantees automatic leader election, zero-downtime failover, and linear horizontal scale-out across bare-metal servers, VMs, and Kubernetes pods.
+        </p>
 
         <div class="grid-2">
           <div class="feature-card">
-            <div class="feature-title">Automated Failover</div>
-            <div class="feature-desc">When a leader node goes offline, followers initiate a Term Election and elect a new Leader within 150-300ms.</div>
+            <div class="feature-title">⚡ Sub-300ms Automated Failover</div>
+            <div class="feature-desc">When a Leader node disconnects or crashes, follower nodes detect heartbeat timeout and elect a new Leader within 150–300ms via Raft randomized term timers.</div>
           </div>
           <div class="feature-card">
-            <div class="feature-title">Consistent Hash Ring</div>
-            <div class="feature-desc">Keys are partitioned into 16,384 virtual slots using CRC32 hash algorithms for balanced distribution.</div>
+            <div class="feature-title">🎯 16,384 Virtual Slot Hash Ring</div>
+            <div class="feature-desc">Keys are partitioned into 16,384 consistent hash slots using CRC32. Shards are rebalanced across joining/leaving nodes with zero downtime.</div>
           </div>
+        </div>
+
+        <h3>Raft Cluster Management REST API</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / curl — cluster endpoints</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Check Live Cluster Topology & Shard Distribution
+curl -X GET http://127.0.0.1:27018/v1/cluster/status \
+  -H "Authorization: Bearer faizdb-cluster-secret"
+
+# Response:
+# {
+#   "success": true,
+#   "data": {
+#     "node": { "node_id": "node-1", "term": 3, "is_leader": true, "peers": 3 },
+#     "shards": { "node-1": "0-5461", "node-2": "5462-10922", "node-3": "10923-16383" },
+#     "consensus": "Raft v1.0",
+#     "virtual_slots": 16384
+#   }
+# }
+
+# 2. Dynamically Join a New Node to the Cluster
+curl -X POST http://127.0.0.1:27018/v1/cluster/join \
+  -H "Authorization: Bearer faizdb-cluster-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"peer_id": "node-4", "peer_address": "10.0.0.14:27018"}'
+
+# 3. Simulate Failover / Trigger Immediate Leader Election
+curl -X POST http://127.0.0.1:27018/v1/cluster/failover \
+  -H "Authorization: Bearer faizdb-cluster-secret"</code></pre>
         </div>
       </section>
 
@@ -1355,39 +1389,146 @@ db.players.deleteOne({ "name": "Inactive User" });</code></pre>
       <section id="geo-replication">
         <h2>🌍 Multi-Region Geo-Replication &amp; Active-Active CRDTs</h2>
         <p class="lead">
-          Deploy FaizDB across global datacenters (e.g., Singapore <code>ap-southeast-1</code>, US <code>us-east-1</code>, Frankfurt <code>eu-central-1</code>) with local sub-millisecond writes and mathematically guaranteed Strong Eventual Consistency.
+          Deploy FaizDB across globally distributed datacenters (e.g. Singapore <code>ap-southeast-1</code>, Frankfurt <code>eu-central-1</code>, US Virginia <code>us-east-1</code>) with <strong>local sub-millisecond writes</strong> and mathematically proven <strong>Strong Eventual Consistency (SEC)</strong> using Conflict-Free Replicated Data Types (CRDTs).
         </p>
 
+        <div class="code-block">
+          <div class="code-header">
+            <span>global active-active mesh topology</span>
+          </div>
+          <pre><code>                     ┌───────────────────────────────────────┐
+                     │       Singapore (ap-southeast-1)      │
+                     │       Local Read & Write < 0.5ms      │
+                     └───────────────┬───────▲───────────────┘
+                                     │       │
+                   Async Gossip Delta│       │Async Gossip Delta
+                                     ▼       │
+        ┌────────────────────────────────────┴──┐   Async Delta   ┌───────────────────────────────────────┐
+        │       Frankfurt (eu-central-1)        │◄───────────────►│       US Virginia (us-east-1)         │
+        │       Local Read & Write < 0.5ms      │                 │       Local Read & Write < 0.5ms      │
+        └───────────────────────────────────────┘                 └───────────────────────────────────────┘
+                                ▲                                             ▲
+                                │                                             │
+                                └────── CRDT Version Vector & LWW Merge ──────┘</code></pre>
+        </div>
+
+        <h3>📐 The 4 Native CRDT Mathematical Models in FaizDB</h3>
         <div class="grid-2">
           <div class="feature-card">
-            <div class="feature-title">📐 Conflict-Free CRDTs</div>
-            <div class="feature-desc">Field-level merging with Version Vectors, Last-Write-Wins (LWW) Registers, Observed-Remove Sets (OR-Set), and Positive-Negative Counters (PN-Counter).</div>
+            <div class="feature-title">1. Version Vectors (Causal Ordering)</div>
+            <div class="feature-desc">Tracks causal event history across $N$ regional nodes without requiring globally synchronized atomic clocks (immune to NTP drift).</div>
           </div>
           <div class="feature-card">
-            <div class="feature-title">⚡ Zero Distributed Locks</div>
-            <div class="feature-desc">Active-Active multi-master replication resolves split-brain partitions without distributed 2PC or latency penalties.</div>
+            <div class="feature-title">2. LWW-Register (Last-Write-Wins)</div>
+            <div class="feature-desc">Field-level deterministic conflict resolution combining hybrid physical timestamps and deterministic region ID tie-breakers.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">3. OR-Set (Observed-Remove Set)</div>
+            <div class="feature-desc">Handles distributed arrays, tags, and sets. Unique element UUID tags eliminate the classic distributed delete-resurrection bug.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">4. PN-Counter (Positive-Negative)</div>
+            <div class="feature-desc">State-based distributed counters supporting commutative increments ($P$) and decrements ($N$) for live player scores, likes, and balances.</div>
           </div>
         </div>
 
-        <h3>Geo-Replication REST API Synchronization</h3>
+        <h3>🚀 3-Region Deployment Walkthrough</h3>
+        <p>Follow these steps to launch a 3-continent active-active cluster:</p>
+
         <div class="code-block">
           <div class="code-header">
-            <span>bash / curl</span>
+            <span>bash / curl — 3-region setup</span>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre><code># 1. Inspect Active Regional Mesh & Latencies:
-curl -X GET http://127.0.0.1:27018/v1/cluster/regions
+          <pre><code># ─── Step 1: Start Region 1 (Singapore) ───
+export FAIZDB_REGION="ap-southeast-1"
+faizdb serve --http-port 27018 --host 0.0.0.0
 
-# 2. Register Remote Peer Datacenter:
-curl -X POST http://127.0.0.1:27018/v1/cluster/regions \
+# ─── Step 2: Start Region 2 (Frankfurt) & Register to Singapore ───
+export FAIZDB_REGION="eu-central-1"
+faizdb serve --http-port 27018 --host 0.0.0.0
+
+# Register Frankfurt into Singapore's mesh:
+curl -X POST http://singapore.faizdb.io:27018/v1/cluster/regions \
+  -H "Authorization: Bearer faizdb-cluster-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"region_id": "eu-central-1", "endpoint": "http://frankfurt.faizdb.io:27018"}'
+
+# ─── Step 3: Start Region 3 (US East) & Register to Mesh ───
+curl -X POST http://singapore.faizdb.io:27018/v1/cluster/regions \
+  -H "Authorization: Bearer faizdb-cluster-secret" \
   -H "Content-Type: application/json" \
   -d '{"region_id": "us-east-1", "endpoint": "http://us.faizdb.io:27018"}'
 
-# 3. Exchange & Merge CRDT Replication Deltas:
-curl -X POST http://127.0.0.1:27018/v1/cluster/geo-sync \
-  -H "Content-Type: application/json" \
-  -d '{"deltas": [{"source_region": "us-east-1", "collection": "users", "document_id": "usr_99", "field_updates": {"tier": ["Enterprise", 1700000000000, "us-east-1"]}, "version_vector": {"versions": {"us-east-1": 1}}, "timestamp": 1700000000000}]}'</code></pre>
+# ─── Step 4: Verify Mesh Status Across All Regions ───
+curl -X GET http://singapore.faizdb.io:27018/v1/cluster/regions \
+  -H "Authorization: Bearer faizdb-cluster-secret"</code></pre>
         </div>
+
+        <h3>🐍 Python Multi-Region Delta Synchronization Example</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python multi-region synchronization</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import requests
+
+SINGAPORE_API = "http://singapore.faizdb.io:27018/v1"
+FRANKFURT_API = "http://frankfurt.faizdb.io:27018/v1"
+AUTH_HEADER = {"Authorization": "Bearer faizdb-cluster-secret"}
+
+# 1. Write document locally in Singapore (< 0.5ms latency)
+requests.post(f"{SINGAPORE_API}/collections/customers/documents", json={
+    "_id": "cust_apac_01",
+    "tier": "Enterprise",
+    "balance": 50000
+}, headers=AUTH_HEADER)
+
+# 2. Propagate CRDT Delta to Frankfurt asynchronously
+sync_payload = {
+    "deltas": [{
+        "source_region": "ap-southeast-1",
+        "collection": "customers",
+        "document_id": "cust_apac_01",
+        "field_updates": {
+            "tier": ["Enterprise", 1700000000000, "ap-southeast-1"]
+        },
+        "version_vector": {"ap-southeast-1": 1},
+        "timestamp": 1700000000000
+    }]
+}
+
+resp = requests.post(f"{FRANKFURT_API}/cluster/geo-sync", json=sync_payload, headers=AUTH_HEADER)
+print("Deltas Applied in Frankfurt:", resp.json()["data"]["applied_deltas"])</code></pre>
+        </div>
+
+        <h3>⚡ Why FaizDB CRDTs Outperform Synchronous Consensus (CockroachDB / Spanner)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Architecture Aspect</th>
+              <th>Synchronous 2PC / Multi-Paxos (CockroachDB / Spanner)</th>
+              <th>🚀 FaizDB Active-Active CRDTs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Cross-Region Write Latency</strong></td>
+              <td>150–250ms (Waits for round-trip WAN consensus ACK)</td>
+              <td><strong>&lt; 0.5ms (Writes commit locally immediately)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Trans-Oceanic Cable Cut (Partition)</strong></td>
+              <td>Regional partition freezes writes (Quorum loss)</td>
+              <td><strong>100% Uptime (Continues writes locally, merges upon reconnect)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Distributed Lock Contention</strong></td>
+              <td>High lock wait times during concurrent global updates</td>
+              <td><strong>Zero Distributed Locks (Lock-free CRDT mathematical convergence)</strong></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <!-- Section 8: Backup & Disaster Recovery -->
