@@ -280,7 +280,7 @@ Key Studio Workspaces:
 ## 📚 Comprehensive Documentation
 
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
-* [🎮 Use Cases & Architecture Solutions](docs/USE_CASES_AND_SOLUTIONS.md) — Real-time gaming, anti-bruteforce security, GraphRAG, and flash sales.
+* [🤖 AI, LLM & Real-Time Gaming Use Cases](docs/USE_CASES_AND_SOLUTIONS.md) — Semantic caching (cut 70% LLM tokens), Agentic 3-tier memory, GraphRAG, PyTorch training streaming, and real-time multiplayer gaming.
 * [🧪 Testing & Benchmarks Guide](docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, test run results, and validation instructions.
 * [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, and Geo-Replication.
 * [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python, and Go.
