@@ -33,3 +33,23 @@ A modern SaaS dashboard built with Node.js and Express that connects to FaizDB u
    ```
 3. Open `http://localhost:3000` in your browser.
 4. Add enterprise customers and watch the **Aggregation Analytics Pipeline** calculate revenue by subscription tier in sub-milliseconds!
+
+---
+
+## 📁 3. Official SDK Demonstration Script (`examples/sdk-demo.js`)
+Demonstrates full end-to-end integration using the official Node.js / TypeScript SDK:
+```bash
+node examples/sdk-demo.js
+```
+
+---
+
+## 📁 4. Enterprise Hardening Test Suites
+Automated live verification scripts for testing B-Tree indexes, EXPLAIN planner, ACID transactions, and bulk CSV/JSON migrations:
+```bash
+# Verify B-Tree Unique Constraints & EXPLAIN Query Planner
+node examples/test-enterprise.js
+
+# Verify Bulk CSV / JSON Ingestion & Automated Backup Scheduler
+node examples/test-enterprise-v2.js
+```

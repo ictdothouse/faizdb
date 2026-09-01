@@ -233,35 +233,49 @@ pnpm dev
 
 Key Studio Workspaces:
 - **📊 Overview**: Real-time throughput graphs, live memory gauges, and storage telemetry.
-- **📑 Table Explorer**: Document inspector, JSON editor, and instant query filters.
-- **⚡ FaizQL Console**: Multi-dialect SQL & MongoDB playground with execution timers.
+- **📑 Table Explorer**: Document inspector, JSON editor, instant query filters, and **Drag-and-Drop CSV/JSON bulk import**.
+- **⚡ FaizQL & SQL Console**: Multi-dialect SQL & MongoDB playground with **Cost-Based `EXPLAIN` Query Plan Visualizer**.
 - **📡 Live Change Streams**: Reactive WebSocket event stream monitor.
 - **🌐 Cluster & Shards**: Raft node topology visualizer, shard allocation heatmap, and one-click failover.
 - **🔍 Full-Text Search**: Okapi BM25 relevance score inspection and fuzzy typo testing.
 - **⏳ TTL & Cache**: Live countdown tickers for expiring session tokens and OTP keys.
-- **💾 Backup & PITR**: Point-in-time snapshot manager with SHA/CRC32 verification.
+- **💾 Backup & Disaster Recovery**: Point-in-time snapshot manager with **Automated Hourly/Daily Schedules & SOC2 Retention**.
 - **🧠 AI Vector Search**: 3D semantic similarity projection and embedding distance inspector.
 - **🕸️ Knowledge Graph**: Force-directed GraphRAG visualizer and relationship path traverser.
-- **🔒 Security Vault**: AES-256-GCM encryption toggle and audit trail.
+- **🔒 Security Vault**: AES-256-GCM encryption toggle and Zero-Trust JWT audit trail.
+
+---
+
+## 📚 Comprehensive Documentation
+
+* [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
+* [🌐 Enterprise REST API Reference](docs/API_REFERENCE.md) — Full endpoint reference with authentication, queries, transactions, and migration.
+* [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python, and Go.
+* [☸️ Kubernetes HA Cluster Guide](k8s/README.md) — 3-Node StatefulSet architecture with automated persistence and zero-downtime rolling upgrades.
 
 ---
 
 ## 🗺️ Roadmap to Version 1.0
 
 - [x] High-Throughput LSM-Tree Storage Engine with WAL & MVCC ACID
+- [x] Secondary B-Tree Indexing with Strict Unique Key Enforcement ($O(\log N)$)
+- [x] Cost-Based `EXPLAIN` Query Planner with Microsecond Diagnostics
+- [x] Multi-Document ACID Transactions (`BEGIN`, `COMMIT`, `ROLLBACK`)
 - [x] Native HNSW Vector Similarity Search (up to 4096 dimensions)
 - [x] Native Knowledge Graph & GraphRAG Engine
 - [x] MongoDB Wire Protocol Parser (Drop-in support on Port 27017)
 - [x] Real-time Change Streams (WebSockets)
 - [x] Distributed Raft Consensus Engine & 16,384 Virtual Hash Slots Auto-Sharding
-- [x] Complex Aggregation Pipeline (`$match`, `$group`, `$project`, `$sort`, `$limit`)
+- [x] Bulk CSV / JSON Array Ingestion Engine (`/v1/collections/:name/import`)
+- [x] Automated Snapshot Scheduler & Retention Policy (SOC2 / ISO 27001)
+- [x] Official SDKs for TypeScript/Node.js, Python (`setup.py`), and Go
+- [x] Kubernetes 3-Node High-Availability StatefulSet Deployment Template
 - [x] Full-Text Search Engine with Okapi BM25 & Levenshtein Fuzzy Typo Tolerance
 - [x] Time-To-Live (TTL) Auto-Expiry & High-Speed In-Memory Cache Engine
 - [x] Consistent Point-in-Time Backup & Disaster Recovery (PITR) Engine
 - [x] Modern Web Management Studio (React + Vite + TailwindCSS)
 - [ ] Multi-Datacenter Geo-Replication with Active-Active CRDTs
 - [ ] GPU-Accelerated Vector Indexing (CUDA / Metal Shaders)
-- [ ] Kubernetes Operator & Helm Charts for Auto-Scaling Cloud Clusters
 
 ---
 
@@ -272,5 +286,5 @@ Licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) f
 ---
 
 <div align="center">
-  <sub>Engineered with precision by <b>Ahmad Faiz</b>. Designed to power the next generation of AI-Native computing.</sub>
+  <sub>Engineered with precision by <b>Ahmad Faiz</b>. Designed to power the next generation of Universal & AI-Native computing.</sub>
 </div>
