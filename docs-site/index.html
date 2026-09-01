@@ -962,6 +962,108 @@ console.log('Saved with 60-second auto-expiry TTL!');</code></pre>
         </div>
       </section>
 
+      <!-- Section: PostgreSQL Wire Protocol -->
+      <section id="postgres-wire">
+        <h2>🐘 PostgreSQL Wire Protocol v3.0 (Port 5432)</h2>
+        <p class="lead">
+          FaizDB speaks native PostgreSQL Wire Protocol v3.0 on standard port <code>5432</code>. Connect directly using <code>psql</code>, GUI tools (DBeaver, TablePlus, DataGrip), BI dashboards (Grafana, Metabase), and standard SQL ORMs (Prisma, GORM, SQLAlchemy, Hibernate).
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🐘 Drop-in SQL Compatibility</div>
+            <div class="feature-desc">Standard SQL <code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>EXPLAIN</code>, and multi-statement transactions over port 5432.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">📊 GUI &amp; BI Introspection</div>
+            <div class="feature-desc">Automatic support for <code>information_schema</code> and <code>pg_catalog</code> table schema introspection for TablePlus, DBeaver &amp; Grafana.</div>
+          </div>
+        </div>
+
+        <h3>1. Connect with <code>psql</code> CLI</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / psql</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Connect with standard psql client:
+psql -h 127.0.0.1 -p 5432 -U postgres -d faizdb
+
+-- Execute SQL queries directly:
+SELECT * FROM users WHERE score > 8000;
+INSERT INTO users (name, role, score) VALUES ('Faiz', 'Architect', 9900);</code></pre>
+        </div>
+
+        <h3>2. Connect with Python (<code>psycopg2</code> / <code>asyncpg</code>)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import psycopg2
+
+conn = psycopg2.connect("host=127.0.0.1 port=5432 dbname=faizdb user=postgres password=faizdb")
+cur = conn.cursor()
+
+cur.execute("SELECT name, role FROM users WHERE active = true;")
+rows = cur.fetchall()
+print("PostgreSQL Query Results:", rows)</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: gRPC & Protocol Buffers Gateway -->
+      <section id="grpc-wire">
+        <h2>⚡ gRPC &amp; Protocol Buffers Gateway (Port 50051)</h2>
+        <p class="lead">
+          FaizDB provides ultra-low latency, binary Protocol Buffers microservices communication and AI vector similarity search streaming on port <code>50051</code>.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">⚡ Sub-Millisecond Binary RPC</div>
+            <div class="feature-desc">HTTP/2 multiplexing with zero-allocation Protobuf serialization for high-throughput enterprise microservices.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">📡 Server Streaming Change Streams</div>
+            <div class="feature-desc">Direct gRPC server-streaming for live database mutation events and reactive change feeds.</div>
+          </div>
+        </div>
+
+        <h3>1. Protocol Buffers Schema (<code>proto/faizdb.proto</code>)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>protobuf</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>syntax = "proto3";
+package faizdb.v1;
+
+service FaizDbService {
+  rpc ExecuteQuery (QueryRequest) returns (QueryResponse);
+  rpc VectorSearch (VectorSearchRequest) returns (VectorSearchResponse);
+  rpc InsertDocuments (InsertRequest) returns (InsertResponse);
+  rpc SubscribeChangeStream (StreamRequest) returns (stream ChangeEventMsg);
+  rpc HealthCheck (HealthRequest) returns (HealthResponse);
+}</code></pre>
+        </div>
+
+        <h3>2. High-Performance gRPC Vector Search (Python / TypeScript / Go)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python grpc</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from faizdb import FaizDbGrpcClient
+
+client = FaizDbGrpcClient(target="localhost:50051")
+
+# Sub-millisecond ANN Vector Similarity Search (&lt; 1ms)
+hits = client.vector_search("ai_embeddings", vector=[0.95, 0.90, 0.10], top_k=5)
+for h in hits:
+    print(f"Match: {h['id']} | Similarity Score: {h['score']:.4f}")</code></pre>
+        </div>
+      </section>
+
       <!-- Section 5: Aggregation Pipeline -->
       <section id="aggregations">
         <h2>📊 Complex Aggregation & Analytics Pipeline Engine</h2>
@@ -1177,6 +1279,45 @@ db.players.deleteOne({ "name": "Inactive User" });</code></pre>
         </div>
       </section>
 
+      <!-- Section: Multi-Region Geo-Replication & CRDTs -->
+      <section id="geo-replication">
+        <h2>🌍 Multi-Region Geo-Replication &amp; Active-Active CRDTs</h2>
+        <p class="lead">
+          Deploy FaizDB across global datacenters (e.g., Singapore <code>ap-southeast-1</code>, US <code>us-east-1</code>, Frankfurt <code>eu-central-1</code>) with local sub-millisecond writes and mathematically guaranteed Strong Eventual Consistency.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">📐 Conflict-Free CRDTs</div>
+            <div class="feature-desc">Field-level merging with Version Vectors, Last-Write-Wins (LWW) Registers, Observed-Remove Sets (OR-Set), and Positive-Negative Counters (PN-Counter).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">⚡ Zero Distributed Locks</div>
+            <div class="feature-desc">Active-Active multi-master replication resolves split-brain partitions without distributed 2PC or latency penalties.</div>
+          </div>
+        </div>
+
+        <h3>Geo-Replication REST API Synchronization</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / curl</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Inspect Active Regional Mesh & Latencies:
+curl -X GET http://127.0.0.1:27018/v1/cluster/regions
+
+# 2. Register Remote Peer Datacenter:
+curl -X POST http://127.0.0.1:27018/v1/cluster/regions \
+  -H "Content-Type: application/json" \
+  -d '{"region_id": "us-east-1", "endpoint": "http://us.faizdb.io:27018"}'
+
+# 3. Exchange & Merge CRDT Replication Deltas:
+curl -X POST http://127.0.0.1:27018/v1/cluster/geo-sync \
+  -H "Content-Type: application/json" \
+  -d '{"deltas": [{"source_region": "us-east-1", "collection": "users", "document_id": "usr_99", "field_updates": {"tier": ["Enterprise", 1700000000000, "us-east-1"]}, "version_vector": {"versions": {"us-east-1": 1}}, "timestamp": 1700000000000}]}'</code></pre>
+        </div>
+      </section>
+
       <!-- Section 8: Backup & Disaster Recovery -->
       <section id="backup-restore">
         <h2>💾 Backup, Snapshot & Point-In-Time Disaster Recovery (PITR)</h2>
@@ -1198,48 +1339,55 @@ faizdb restore --input ./backups/faizdb_snapshot_2026.json</code></pre>
       <!-- Section: Python SDK -->
       <section id="sdk-python">
         <h2>🐍 Python Integration Guide</h2>
-        <p>Connect using the official Python MongoDB driver (<code>pymongo</code>):</p>
+        <p>Connect using <code>pymongo</code> (Port 27017) or the official high-speed gRPC Client (Port 50051):</p>
         <div class="code-block">
           <div class="code-header">
-            <span>python</span>
+            <span>python grpc & pymongo</span>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre><code>import pymongo
+          <pre><code># 1. Official FaizDB gRPC Client (Port 50051)
+from faizdb import FaizDbGrpcClient
 
-client = pymongo.MongoClient("mongodb://127.0.0.1:27017")
-db = client["production_db"]
-collection = db["telemetry"]
+client = FaizDbGrpcClient(target="localhost:50051")
+hits = client.vector_search("embeddings", vector=[0.95, 0.90, 0.10], top_k=5)
+print("Vector Matches:", hits)
 
-collection.insert_one({"sensor": "alpha-01", "humidity": 65.2, "status": "ok"})
-print("Retrieved:", collection.find_one({"sensor": "alpha-01"}))</code></pre>
+# 2. Drop-in PyMongo Driver (Port 27017)
+import pymongo
+mongo_client = pymongo.MongoClient("mongodb://127.0.0.1:27017")
+col = mongo_client["app_db"]["users"]
+col.insert_one({"name": "Ahmad Faiz", "role": "Architect"})</code></pre>
         </div>
       </section>
 
       <!-- Section: Node.js SDK -->
       <section id="sdk-node">
-        <h2>⚡ Node.js & TypeScript Integration Guide</h2>
-        <p>Connect using <code>mongodb</code> or <code>mongoose</code>:</p>
+        <h2>⚡ Node.js &amp; TypeScript Integration Guide</h2>
+        <p>Connect using <code>@faizdb/client</code> (gRPC Port 50051) or <code>mongodb</code> / <code>mongoose</code> (Port 27017):</p>
         <div class="code-block">
           <div class="code-header">
             <span>typescript</span>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre><code>import { MongoClient } from 'mongodb';
+          <pre><code>// 1. Official gRPC Client (Port 50051)
+import { FaizDbGrpcClient } from '@faizdb/client';
 
-const client = new MongoClient('mongodb://127.0.0.1:27017');
-await client.connect();
-const db = client.db('enterprise_app');
-const users = db.collection('customers');
+const client = new FaizDbGrpcClient({ target: 'localhost:50051' });
+const results = await client.vectorSearch('products', [0.1, 0.5, 0.9], 10);
+console.log('AI Vector Search:', results);
 
-await users.insertOne({ company: 'Acme Corp', tier: 'Enterprise', mrr: 5000 });
-console.log('Customer saved successfully in FaizDB!');</code></pre>
+// 2. Drop-in Native MongoDB Driver (Port 27017)
+import { MongoClient } from 'mongodb';
+const mongo = new MongoClient('mongodb://127.0.0.1:27017');
+await mongo.connect();
+await mongo.db('enterprise').collection('customers').insertOne({ name: 'Faiz', tier: 'Enterprise' });</code></pre>
         </div>
       </section>
 
       <!-- Section: Go SDK -->
       <section id="sdk-go">
         <h2>🔵 Go Official SDK Integration Guide</h2>
-        <p>Connect using the official type-safe Go SDK (<code>github.com/ictdothouse/faizdb/bindings/go</code>):</p>
+        <p>Connect using the official type-safe Go SDK (<code>github.com/ictdothouse/faizdb/bindings/go</code>) via gRPC or REST:</p>
         <div class="code-block">
           <div class="code-header">
             <span>go</span>
@@ -1248,27 +1396,23 @@ console.log('Customer saved successfully in FaizDB!');</code></pre>
           <pre><code>package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/ictdothouse/faizdb/bindings/go"
 )
 
 func main() {
-	client := faizdb.NewClient("http://localhost:27018")
-	_, err := client.Login("admin", "faizdb-admin-2026")
-	if err != nil {
-		panic(err)
-	}
+	// 1. High-Performance gRPC Client (Port 50051)
+	grpcClient := faizdb.NewGrpcClient("localhost:50051")
+	hits, _ := grpcClient.VectorSearch(context.Background(), "ai_embeddings", []float32{0.95, 0.90, 0.10}, 5)
+	fmt.Printf("gRPC Vector Matches: %d\n", len(hits))
 
-	users := client.Collection("users")
-	docID, err := users.Insert(map[string]interface{}{
-		"name":  "Ahmad Faiz",
-		"email": "faiz@ict.house",
-		"role":  "Architect",
-	})
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("Document inserted with ID: %s\n", docID)
+	// 2. REST & Admin Client (Port 27018)
+	restClient := faizdb.NewClient("http://localhost:27018")
+	_, _ = restClient.Login("admin", "faizdb-admin-2026")
+	users := restClient.Collection("users")
+	docID, _ := users.Insert(map[string]interface{}{"name": "Faiz", "role": "Architect"})
+	fmt.Println("Inserted document:", docID)
 }</code></pre>
         </div>
       </section>
