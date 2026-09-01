@@ -82,10 +82,32 @@ FIND users VECTOR NEAR [0.95, 0.90, 0.10, 0.05] TOP 5
 ./faizdb graph-demo    # Ujian GraphRAG relationship traversal
 ```
 
-### 4. Deploy dengan Docker
+### 4. FaizDB Web Management Studio (UI Dashboard)
+Dashboard visual moden berasaskan **React + Vite + TailwindCSS + Shadcn/ui**:
+```bash
+cd studio
+pnpm install
+pnpm dev
+# Buka http://localhost:5173
+```
+
+### 5. Sambung Terus Menggunakan Pemandu Rasmi MongoDB (Port 27017)
+```python
+from pymongo import MongoClient
+
+client = MongoClient("mongodb://127.0.0.1:27017", directConnection=True)
+db = client["faizdb"]
+users = db["users"]
+
+users.insert_one({"name": "Ahmad Faiz", "role": "Innovator"})
+doc = users.find_one({"role": "Innovator"})
+print("Found:", doc)
+```
+
+### 6. Deploy dengan Docker
 ```bash
 docker build -t faizdb .
-docker run -d -p 27018:27018 -v faizdb_data:/data faizdb
+docker run -d -p 27017:27017 -p 27018:27018 -v faizdb_data:/data faizdb
 ```
 
 ---
