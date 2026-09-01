@@ -32,6 +32,7 @@
 pub mod cluster;
 pub mod document;
 pub mod error;
+pub mod search;
 pub mod storage;
 pub mod stream;
 pub mod transaction;
@@ -40,6 +41,7 @@ pub mod transaction;
 pub use cluster::{RaftNode, NodeRole, ShardRouter, ShardDistribution};
 pub use document::{Document, DocumentId, Value};
 pub use error::{FaizError, FaizResult};
+pub use search::{InvertedIndex, SearchResult};
 pub use storage::engine::StorageEngine;
 pub use stream::{ChangeEvent, ChangeStreamBus, OperationType};
 

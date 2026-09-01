@@ -46,6 +46,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Distributed Cluster & Sharding Manager',
       desc: 'Raft consensus multi-node topology, automated failover & 16,384 virtual hash slots',
     },
+    search: {
+      title: 'Full-Text Search Engine (Okapi BM25)',
+      desc: 'Inverted index, statistical relevance ranking, stop-word elimination & fuzzy typo matching',
+    },
     vector: {
       title: 'AI Vector Search Engine',
       desc: 'HNSW sub-millisecond similarity matching & embedding visualizer (up to 4096 dimensions)',

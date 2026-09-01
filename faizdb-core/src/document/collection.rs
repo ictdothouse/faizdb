@@ -112,6 +112,9 @@ pub struct Collection {
 
     /// Total data size in bytes
     total_size: AtomicU64,
+
+    /// Native Full-Text Inverted Index (BM25)
+    text_index: crate::search::InvertedIndex,
 }
 
 impl Collection {
@@ -127,6 +130,7 @@ impl Collection {
             index_data: DashMap::new(),
             doc_count: AtomicU64::new(0),
             total_size: AtomicU64::new(0),
+            text_index: crate::search::InvertedIndex::new(),
         }
     }
 
@@ -139,6 +143,7 @@ impl Collection {
             index_data: DashMap::new(),
             doc_count: AtomicU64::new(0),
             total_size: AtomicU64::new(0),
+            text_index: crate::search::InvertedIndex::new(),
         }
     }
 
@@ -193,6 +198,10 @@ impl Collection {
 
         // Update secondary indexes
         self.update_indexes_insert(&doc);
+
+        // Index for Full-Text Search (BM25)
+        let doc_text = extract_doc_text(&doc);
+        self.text_index.index_document(&id_str, &doc_text);
 
         // Insert into primary store
         self.documents.insert(id_str, doc);
@@ -356,10 +365,25 @@ impl Collection {
         self.total_size
             .fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
 
-        // Remove from secondary indexes
+        // Remove from secondary indexes & text search index
         self.update_indexes_delete(&doc);
+        self.text_index.remove_document(&id);
 
         Ok(doc)
+    }
+
+    /// Full-Text Search with Okapi BM25 Ranking and Fuzzy typo-tolerance
+    pub fn search_text(&self, query: &str, fuzzy: bool, top_k: usize) -> Vec<(Document, f64, Vec<String>)> {
+        let results = self.text_index.search(query, fuzzy, top_k);
+        let mut out = Vec::new();
+
+        for res in results {
+            if let Some(entry) = self.documents.get(&res.doc_id) {
+                out.push((entry.value().clone(), res.score, res.matched_terms));
+            }
+        }
+
+        out
     }
 
     /// Delete all documents matching a filter.
@@ -493,6 +517,25 @@ impl std::fmt::Debug for Collection {
             .field("total_size", &self.total_size.load(Ordering::Relaxed))
             .finish()
     }
+}
+
+/// Extract all searchable string tokens from a document
+fn extract_doc_text(doc: &Document) -> String {
+    let mut parts = Vec::new();
+    for (_k, v) in &doc.fields {
+        match v {
+            Value::String(s) => parts.push(s.as_str()),
+            Value::Array(arr) => {
+                for item in arr {
+                    if let Value::String(s) = item {
+                        parts.push(s.as_str());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    parts.join(" ")
 }
 
 // Make Collection safely shareable across threads

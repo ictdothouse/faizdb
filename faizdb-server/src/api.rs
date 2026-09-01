@@ -72,6 +72,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/insert", post(insert_document))
         .route("/v1/collections/{name}/stats", get(collection_stats))
         .route("/v1/collections/{name}/aggregate", post(aggregate_collection))
+        .route("/v1/collections/{name}/search", post(search_collection))
         .route("/v1/subscribe", get(ws_global_subscribe))
         .route("/v1/collections/{name}/watch", get(ws_collection_watch))
         // Cluster & Raft Endpoints
@@ -172,6 +173,43 @@ async fn aggregate_collection(
         }
         Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Aggregation error: {e}")))),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FullTextSearchRequest {
+    pub query: String,
+    #[serde(default)]
+    pub fuzzy: bool,
+    #[serde(default = "default_top_k")]
+    pub top_k: usize,
+}
+
+fn default_top_k() -> usize {
+    10
+}
+
+async fn search_collection(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(payload): Json<FullTextSearchRequest>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    let results = col.search_text(&payload.query, payload.fuzzy, payload.top_k);
+
+    let output: Vec<serde_json::Value> = results
+        .into_iter()
+        .map(|(doc, score, matched_terms)| {
+            let mut val = serde_json::to_value(&doc.fields).unwrap_or(serde_json::Value::Null);
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("_id".to_string(), serde_json::Value::String(doc.id.as_str().to_string()));
+                obj.insert("_score".to_string(), serde_json::json!(score));
+                obj.insert("_matched_terms".to_string(), serde_json::json!(matched_terms));
+            }
+            val
+        })
+        .collect();
+
+    Json(ApiResponse::ok(output))
 }
 
 /// Cluster Status Handler: `/v1/cluster/status`
