@@ -1,11 +1,13 @@
 //! REST API handlers and Router for FaizDB Server.
 
 use std::sync::Arc;
+use std::time::{Instant, Duration};
+use std::net::SocketAddr;
 use axum::{
     body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        ConnectInfo, Path, State,
     },
     http::{header, HeaderValue, Method, Request, StatusCode},
     middleware::{self, Next},
@@ -13,6 +15,7 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
+use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -159,6 +162,110 @@ async fn cluster_auth_middleware(req: Request<Body>, next: Next) -> Result<Respo
     Err(StatusCode::UNAUTHORIZED)
 }
 
+static RATE_LIMITER: std::sync::OnceLock<DashMap<String, (u64, Instant)>> = std::sync::OnceLock::new();
+
+fn get_rate_limiter() -> &'static DashMap<String, (u64, Instant)> {
+    RATE_LIMITER.get_or_init(DashMap::new)
+}
+
+/// Returns true if the IP belongs to an internal / trusted network (LAN, VPC, Loopback).
+/// These hosts are game servers, microservices, or cluster nodes — never public clients.
+fn is_internal_ip(ip: &str) -> bool {
+    if ip == "unknown" {
+        return false;
+    }
+    // Loopback
+    if ip.starts_with("127.") || ip == "::1" {
+        return true;
+    }
+    // RFC-1918 private ranges (LAN / VPC)
+    if ip.starts_with("10.")
+        || ip.starts_with("192.168.")
+        || ip.starts_with("100.64.")  // CGNAT (Tailscale, WireGuard, AWS VPC)
+    {
+        return true;
+    }
+    // 172.16.0.0 – 172.31.255.255
+    if let Some(second_octet) = ip.strip_prefix("172.").and_then(|s| s.split('.').next()) {
+        if let Ok(n) = second_octet.parse::<u8>() {
+            if (16..=31).contains(&n) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Enterprise-grade Context-Aware Rate Limiter:
+/// - Internal IPs (LAN / VPC / Loopback) → Bypass. Game servers, microservices are free.
+/// - Authenticated requests (valid Bearer token) → Bypass. Registered clients are trusted.
+/// - Public anonymous requests → 100 requests / 10s hard limit (brute-force / DDoS shield).
+async fn rate_limit_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    // --- 1. Resolve client IP ---
+    let mut ip = "unknown".to_string();
+
+    if let Some(forwarded) = req.headers().get("x-forwarded-for") {
+        if let Ok(s) = forwarded.to_str() {
+            ip = s.split(',').next().unwrap_or("unknown").trim().to_string();
+        }
+    }
+    if ip == "unknown" {
+        if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>() {
+            ip = addr.ip().to_string();
+        }
+    }
+
+    // --- 2. VPC / LAN Whitelist: internal game servers & microservices bypass all limits ---
+    if is_internal_ip(&ip) {
+        return Ok(next.run(req).await);
+    }
+
+    // --- 3. Authenticated Bypass: registered clients with valid API key bypass limits ---
+    let expected_token = std::env::var("FAIZDB_API_KEY")
+        .unwrap_or_else(|_| "faizdb-secret-key".to_string());
+    if let Some(auth_val) = req.headers().get(header::AUTHORIZATION) {
+        if let Ok(auth_str) = auth_val.to_str() {
+            let token = auth_str.trim_start_matches("Bearer ").trim();
+            if token == expected_token {
+                return Ok(next.run(req).await);
+            }
+        }
+    }
+
+    // --- 4. Public anonymous throttle: 100 req / 10s sliding window ---
+    {
+        let limiter = get_rate_limiter();
+        let mut entry = limiter.entry(ip.clone()).or_insert((0, Instant::now()));
+
+        let now = Instant::now();
+        let window = Duration::from_secs(10);
+        let limit: u64 = std::env::var("FAIZDB_RATE_LIMIT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(100);
+
+        if now.duration_since(entry.1) > window {
+            // New window — reset counter
+            entry.0 = 1;
+            entry.1 = now;
+        } else {
+            entry.0 += 1;
+            if entry.0 > limit {
+                tracing::warn!(
+                    "[RateLimit] Public IP {} exceeded {} req/10s — blocked (429)",
+                    ip, limit
+                );
+                return Err(StatusCode::TOO_MANY_REQUESTS);
+            }
+        }
+    }
+
+    Ok(next.run(req).await)
+}
+
 /// Create the Axum HTTP router with REST, WebSocket Change Streams & Cluster RPC
 pub fn create_router(state: Arc<AppState>) -> Router {
     let public_routes = Router::new()
@@ -195,6 +302,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .merge(client_routes)
         .merge(cluster_routes)
         .layer(middleware::from_fn(cors_middleware))
+        .layer(middleware::from_fn(rate_limit_middleware))
         .with_state(state)
 }
 

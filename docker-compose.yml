@@ -10,6 +10,20 @@ services:
     ports:
       - "27017:27017" # MongoDB Wire Protocol
       - "27018:27018" # FaizDB REST / HTTP API
+    environment:
+      # --- Security: Set strong random secrets in production! ---
+      FAIZDB_API_KEY: ${FAIZDB_API_KEY:-faizdb-secret-key}
+      FAIZDB_CLUSTER_TOKEN: ${FAIZDB_CLUSTER_TOKEN:-faizdb-cluster-secret}
+      FAIZDB_ALLOWED_ORIGINS: ${FAIZDB_ALLOWED_ORIGINS:-http://localhost:27020}
+
+      # --- Rate Limiting ---
+      # Max requests per 10s for PUBLIC (anonymous) IPs.
+      # Internal / VPC / authenticated requests are EXEMPT — no limit.
+      # Increase this if you have legitimate high-traffic public endpoints.
+      FAIZDB_RATE_LIMIT: ${FAIZDB_RATE_LIMIT:-100}
+
+      # --- Logging ---
+      RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - faizdb_data:/data
     restart: unless-stopped

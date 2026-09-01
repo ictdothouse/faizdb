@@ -36,9 +36,8 @@ pub async fn run_dual_server(
         }
     });
 
-    // Run HTTP & WebSocket API
     let http_handle = tokio::spawn(async move {
-        if let Err(e) = axum::serve(http_listener, http_router).await {
+        if let Err(e) = axum::serve(http_listener, http_router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await {
             tracing::error!("HTTP/WS server error: {e}");
         }
     });
@@ -58,6 +57,6 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("🔥 FaizDB Server running on http://{addr}");
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).await?;
     Ok(())
 }
