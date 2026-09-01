@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # FaizDB Database Engine (27017: Mongo, 5432: Postgres, 50051: gRPC, 27018: HTTP/REST)
   faizdb:

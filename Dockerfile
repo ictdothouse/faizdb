@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for FaizDB — The AI-Native NoSQL Database
 
 # Stage 1: Build
-FROM rust:1.85-slim-bookworm as builder
+FROM rust:1.88-slim-bookworm AS builder
 
 WORKDIR /usr/src/faizdb
 

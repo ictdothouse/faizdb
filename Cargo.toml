@@ -13,11 +13,11 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["Ahmad Faiz <faiz@faizdb.io>"]
+authors = ["Ahmad Faiz <faiz@ict.house>"]
 license = "Apache-2.0"
-repository = "https://github.com/faizdb/faizdb"
+repository = "https://github.com/ictdothouse/faizdb"
 description = "The AI-Native NoSQL Database Engine — Fast, Secure, Run Everywhere"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [workspace.dependencies]
 # Serialization
@@ -26,7 +26,7 @@ serde_json = "1.0"
 bson = "2.13"
 
 # Async runtime
-tokio = { version = "1.42", features = ["full"] }
+tokio = { version = "1.53", features = ["full"] }
 
 # Networking & gRPC
 axum = { version = "0.8", features = ["ws"] }
@@ -65,7 +65,7 @@ anyhow = "1.0"
 # Testing
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.14"
-rand = "0.8"
+rand = "0.9"
 
 # Utilities
 uuid = { version = "1.11", features = ["v4", "v7", "serde"] }

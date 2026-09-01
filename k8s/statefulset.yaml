@@ -20,7 +20,7 @@ spec:
       containers:
         - name: faizdb-engine
           image: ictdothouse/faizdb:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 27017
               name: mongo-wire
@@ -65,12 +65,20 @@ spec:
               port: 27018
             initialDelaySeconds: 5
             periodSeconds: 10
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /v1/health
               port: 27018
             initialDelaySeconds: 2
             periodSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /v1/health
+              port: 27018
+            failureThreshold: 30
+            periodSeconds: 2
           volumeMounts:
             - name: faizdb-storage
               mountPath: /data/faizdb
@@ -95,6 +103,12 @@ spec:
     - port: 27017
       targetPort: 27017
       name: wire-protocol
+    - port: 5432
+      targetPort: 5432
+      name: pg-wire
+    - port: 50051
+      targetPort: 50051
+      name: grpc
     - port: 27018
       targetPort: 27018
       name: http-rest
