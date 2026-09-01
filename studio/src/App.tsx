@@ -37,13 +37,6 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  if (!isAuthenticated) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
-
-  const currentUser = api.getUsername();
-  const currentRole = api.getRole();
-
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
   const [collections, setCollections] = useState<string[]>(['users', 'products']);
   const [selectedCollection, setSelectedCollection] = useState<string>('users');
@@ -80,17 +73,19 @@ export const App: React.FC = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Fetch initial connection and data
+  // Fetch initial connection and data (only when authenticated)
   useEffect(() => {
-    checkConnectionAndLoad();
-  }, []);
+    if (isAuthenticated) {
+      checkConnectionAndLoad();
+    }
+  }, [isAuthenticated]);
 
-  // Fetch documents when selectedCollection changes
+  // Fetch documents when selectedCollection changes (only when authenticated)
   useEffect(() => {
-    if (selectedCollection) {
+    if (isAuthenticated && selectedCollection) {
       loadCollectionDocuments(selectedCollection);
     }
-  }, [selectedCollection]);
+  }, [isAuthenticated, selectedCollection]);
 
   const checkConnectionAndLoad = async () => {
     setIsRefreshing(true);
@@ -173,6 +168,14 @@ export const App: React.FC = () => {
     setIsCreateColModalOpen(false);
     setCurrentTab('tables');
   };
+
+  // Auth gate — renders LoginPage if not authenticated (after all hooks have registered)
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
+  const currentUser = api.getUsername();
+  const currentRole = api.getRole();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100 font-sans">
