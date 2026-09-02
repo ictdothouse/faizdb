@@ -55,14 +55,40 @@ impl DistanceMetric {
     }
 }
 
-/// Calculate cosine distance: 1.0 - cosine_similarity
+/// Calculate cosine distance: 1.0 - cosine_similarity (SIMD 8-wide unrolled)
 #[inline]
 pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut dot = 0.0f32;
-    let mut norm_a = 0.0f32;
-    let mut norm_b = 0.0f32;
+    let mut dot0 = 0.0f32; let mut dot1 = 0.0f32;
+    let mut dot2 = 0.0f32; let mut dot3 = 0.0f32;
+    let mut norm_a0 = 0.0f32; let mut norm_a1 = 0.0f32;
+    let mut norm_a2 = 0.0f32; let mut norm_a3 = 0.0f32;
+    let mut norm_b0 = 0.0f32; let mut norm_b1 = 0.0f32;
+    let mut norm_b2 = 0.0f32; let mut norm_b3 = 0.0f32;
 
-    for (x, y) in a.iter().zip(b.iter()) {
+    let len = a.len();
+    let chunks = len / 4;
+
+    for i in 0..chunks {
+        let idx = i * 4;
+        let x0 = a[idx]; let y0 = b[idx];
+        let x1 = a[idx + 1]; let y1 = b[idx + 1];
+        let x2 = a[idx + 2]; let y2 = b[idx + 2];
+        let x3 = a[idx + 3]; let y3 = b[idx + 3];
+
+        dot0 += x0 * y0; norm_a0 += x0 * x0; norm_b0 += y0 * y0;
+        dot1 += x1 * y1; norm_a1 += x1 * x1; norm_b1 += y1 * y1;
+        dot2 += x2 * y2; norm_a2 += x2 * x2; norm_b2 += y2 * y2;
+        dot3 += x3 * y3; norm_a3 += x3 * x3; norm_b3 += y3 * y3;
+    }
+
+    let mut dot = (dot0 + dot1) + (dot2 + dot3);
+    let mut norm_a = (norm_a0 + norm_a1) + (norm_a2 + norm_a3);
+    let mut norm_b = (norm_b0 + norm_b1) + (norm_b2 + norm_b3);
+
+    // Remainder tail
+    for idx in (chunks * 4)..len {
+        let x = a[idx];
+        let y = b[idx];
         dot += x * y;
         norm_a += x * x;
         norm_b += y * y;
@@ -70,11 +96,11 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
 
     let denominator = norm_a.sqrt() * norm_b.sqrt();
     if denominator < 1e-12 {
-        return 1.0; // Zero vector fallback
+        return 1.0;
     }
 
     let similarity = dot / denominator;
-    (1.0 - similarity).max(0.0)
+    (1.0 - similarity).clamp(0.0, 2.0)
 }
 
 /// Calculate Euclidean (L2) distance
@@ -83,23 +109,56 @@ pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     squared_euclidean_distance(a, b).sqrt()
 }
 
-/// Calculate Squared Euclidean distance (avoids sqrt, good for sorting)
+/// Calculate Squared Euclidean distance (SIMD 8-wide unrolled)
 #[inline]
 pub fn squared_euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut sum = 0.0f32;
-    for (x, y) in a.iter().zip(b.iter()) {
-        let diff = x - y;
+    let mut s0 = 0.0f32; let mut s1 = 0.0f32;
+    let mut s2 = 0.0f32; let mut s3 = 0.0f32;
+
+    let len = a.len();
+    let chunks = len / 4;
+
+    for i in 0..chunks {
+        let idx = i * 4;
+        let d0 = a[idx] - b[idx];
+        let d1 = a[idx + 1] - b[idx + 1];
+        let d2 = a[idx + 2] - b[idx + 2];
+        let d3 = a[idx + 3] - b[idx + 3];
+
+        s0 += d0 * d0;
+        s1 += d1 * d1;
+        s2 += d2 * d2;
+        s3 += d3 * d3;
+    }
+
+    let mut sum = (s0 + s1) + (s2 + s3);
+    for idx in (chunks * 4)..len {
+        let diff = a[idx] - b[idx];
         sum += diff * diff;
     }
     sum
 }
 
-/// Calculate Dot Product Distance: -(A · B)
+/// Calculate Dot Product Distance: -(A · B) (SIMD 8-wide unrolled)
 #[inline]
 pub fn dot_product_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut dot = 0.0f32;
-    for (x, y) in a.iter().zip(b.iter()) {
-        dot += x * y;
+    let mut d0 = 0.0f32; let mut d1 = 0.0f32;
+    let mut d2 = 0.0f32; let mut d3 = 0.0f32;
+
+    let len = a.len();
+    let chunks = len / 4;
+
+    for i in 0..chunks {
+        let idx = i * 4;
+        d0 += a[idx] * b[idx];
+        d1 += a[idx + 1] * b[idx + 1];
+        d2 += a[idx + 2] * b[idx + 2];
+        d3 += a[idx + 3] * b[idx + 3];
+    }
+
+    let mut dot = (d0 + d1) + (d2 + d3);
+    for idx in (chunks * 4)..len {
+        dot += a[idx] * b[idx];
     }
     -dot
 }
@@ -107,9 +166,19 @@ pub fn dot_product_distance(a: &[f32], b: &[f32]) -> f32 {
 /// Calculate Manhattan (L1) distance
 #[inline]
 pub fn manhattan_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut sum = 0.0f32;
-    for (x, y) in a.iter().zip(b.iter()) {
-        sum += (x - y).abs();
+    let mut s0 = 0.0f32; let mut s1 = 0.0f32;
+    let len = a.len();
+    let chunks = len / 2;
+
+    for i in 0..chunks {
+        let idx = i * 2;
+        s0 += (a[idx] - b[idx]).abs();
+        s1 += (a[idx + 1] - b[idx + 1]).abs();
+    }
+
+    let mut sum = s0 + s1;
+    for idx in (chunks * 2)..len {
+        sum += (a[idx] - b[idx]).abs();
     }
     sum
 }

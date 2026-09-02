@@ -27,3 +27,5 @@ pub mod wal;
 pub mod compaction;
 pub mod columnar;
 pub mod tiered;
+pub mod arc_cache;
+

@@ -8,6 +8,7 @@ pub mod backup;
 pub mod cluster;
 pub mod collections;
 pub mod health;
+pub mod metrics;
 pub mod middleware;
 pub mod websocket;
 
@@ -85,7 +86,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/health", get(health::health_check))
         .route("/v1/info", get(health::server_info))
         .route("/v1/auth/login", post(auth::auth_login))
-        .route("/v1/metrics", get(health::metrics_handler));
+        .route("/metrics", get(metrics::metrics_handler))
+        .route("/v1/metrics", get(metrics::metrics_handler));
 
     // Read-only — requires any valid JWT
     let read_routes = Router::new()
