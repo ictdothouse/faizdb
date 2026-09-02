@@ -508,11 +508,13 @@
       </a>
       <ul class="nav-links">
         <li><a href="#features">Features</a></li>
-        <li><a href="#spectrum">Spectrum Use Cases</a></li>
+        <li><a href="#spectrum">Spectrum</a></li>
+        <li><a href="#solutions">Gaming & Streaming</a></li>
         <li><a href="#benchmarks">Benchmark Ranking</a></li>
         <li><a href="#comparison">Comparison</a></li>
         <li><a href="https://github.com/ictdothouse/faizdb" target="_blank">GitHub</a></li>
       </ul>
+
       <div style="display: flex; gap: 0.75rem;">
         <a href="https://github.com/ictdothouse/faizdb" class="btn btn-outline" target="_blank">⭐ Star on GitHub</a>
         <a href="#install" class="btn btn-primary">Get Started</a>
@@ -697,6 +699,60 @@
       </div>
     </div>
   </section>
+
+  <!-- ── Industry Solutions: Gaming, Streaming & Communications ── -->
+  <section class="container" id="solutions" style="padding-bottom: 4rem;">
+    <div class="section-header">
+      <div class="badge" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">HIGH-VELOCITY VERTICALS</div>
+      <h2>Engineered for Gaming, Streaming & Communications</h2>
+      <p>High-throughput, sub-millisecond execution for mission-critical real-time platforms.</p>
+    </div>
+
+    <div class="bento-grid">
+      <!-- 1. Gaming Solution Card -->
+      <div class="bento-card col-4" style="border-top: 4px solid #f43f5e;">
+        <div class="card-icon" style="background: rgba(244, 63, 94, 0.15); color: #fb7185;">🎮</div>
+        <h3>Multiplayer Gaming & World State</h3>
+        <p style="margin-bottom: 1rem;">
+          Power 128Hz tick-rate multiplayer games. MemTable in-memory SkipLists handle player state positions with zero disk latency.
+        </p>
+        <ul style="list-style: none; font-size: 0.875rem; color: var(--text-muted); line-height: 1.8;">
+          <li>⚡ <strong>Anti-Cheat Inventories:</strong> Multi-doc MVCC ACID transactions eliminate item duplication.</li>
+          <li>🎯 <strong>Skill Matchmaking:</strong> HNSW vector clustering groups players by playstyle.</li>
+          <li>🏆 <strong>Live Leaderboards:</strong> Distributed CRDT PN-Counters sync scores globally.</li>
+        </ul>
+      </div>
+
+      <!-- 2. Streaming Solution Card -->
+      <div class="bento-card col-4" style="border-top: 4px solid #38bdf8;">
+        <div class="card-icon" style="background: rgba(6, 182, 212, 0.15); color: #38bdf8;">📡</div>
+        <h3>High-Throughput Live Streaming & CDC</h3>
+        <p style="margin-bottom: 1rem;">
+          Ingest millions of video events and IoT telemetry streams. Native Debezium & Kafka CDC streamers broadcast updates in real time.
+        </p>
+        <ul style="list-style: none; font-size: 0.875rem; color: var(--text-muted); line-height: 1.8;">
+          <li>🔄 <strong>Real-time WebSockets:</strong> Live client pushes via <code>/v1/subscribe</code> and collection watch.</li>
+          <li>🐘 <strong>Parquet Compaction:</strong> High-speed <code>ColumnarBatch</code> scans for live viewer telemetry.</li>
+          <li>☁️ <strong>S3 Multipart Sync:</strong> Automatically archives old stream logs to cold object buckets.</li>
+        </ul>
+      </div>
+
+      <!-- 3. Communications Solution Card -->
+      <div class="bento-card col-4" style="border-top: 4px solid #34d399;">
+        <div class="card-icon" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">💬</div>
+        <h3>Instant Messaging & Encrypted VoIP</h3>
+        <p style="margin-bottom: 1rem;">
+          Build WhatsApp/Telegram-class messaging systems with end-to-end encryption and ephemeral disappearing chat buffers.
+        </p>
+        <ul style="list-style: none; font-size: 0.875rem; color: var(--text-muted); line-height: 1.8;">
+          <li>⏳ <strong>Ephemeral TTL Purge:</strong> Zero-CPU millisecond background thread purges expired chats.</li>
+          <li>🔐 <strong>E2EE Security Vault:</strong> AES-256-GCM AEAD encrypted storage + Ed25519 auth.</li>
+          <li>🕸️ <strong>Social Graph Traversal:</strong> Graph BFS/DFS finds mutual friends in &lt; 0.5ms.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
 
   <!-- ── Benchmark Ranking & Rubric Evaluation ── -->
   <section class="container" id="benchmarks" style="padding-bottom: 4rem;">
