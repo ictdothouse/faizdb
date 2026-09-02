@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tier-1 Engineering Guide — FaizDB</title>
+  <meta name="description" content="Technical architecture and engineering deep dive on SIMD vector acceleration, Adaptive Replacement Cache (ARC), Prometheus telemetry, and Chaos testing.">
+  
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --primary: #6366F1;
+      --primary-hover: #4F46E5;
+      --secondary: #20970B;
+      --neutral: #9C9C9C;
+      --bg: #FAFAFA;
+      --surface: #FFFFFF;
+      --text-primary: #0A0A0A;
+      --text-secondary: #6B6B6B;
+      --border: #E8E8EC;
+      --border-subtle: #F0F0F4;
+      --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.08);
+      --font-display: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    html.dark {
+      --primary: #818CF8;
+      --primary-hover: #6366F1;
+      --secondary: #22C55E;
+      --neutral: #71717A;
+      --bg: #09090B;
+      --surface: #121216;
+      --text-primary: #F4F4F5;
+      --text-secondary: #A1A1AA;
+      --border: #27272A;
+      --border-subtle: #1C1C20;
+      --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background-color: var(--bg); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    .type-display { font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: 700; letter-spacing: -0.035em; }
+    .type-subhead { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+    .type-body { font-family: var(--font-body); font-size: 15px; color: var(--text-secondary); line-height: 1.6; }
+    .type-overline { font-family: var(--font-display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--primary); }
+
+    header { position: sticky; top: 0; z-index: 100; height: 56px; background: rgba(250, 250, 250, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+    html.dark header { background: rgba(9, 9, 11, 0.85); }
+    .nav-inner { display: flex; justify-content: space-between; align-items: center; height: 100%; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-primary); font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+    .logo-mark { width: 26px; height: 26px; border-radius: 6px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+    .nav-menu { display: flex; gap: 24px; list-style: none; align-items: center; }
+    .nav-menu a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-menu a:hover, .nav-menu a.active { color: var(--text-primary); }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-family: var(--font-body); font-size: 14px; text-decoration: none; cursor: pointer; border: 1px solid transparent; height: 32px; padding: 0 12px; }
+    .btn-secondary { background: transparent; color: var(--text-primary); border-color: var(--border); }
+    .btn-secondary:hover { background: var(--surface); }
+
+    .content-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; margin-bottom: 24px; transition: all 0.2s ease; }
+    .content-card:hover { box-shadow: var(--card-shadow-hover); }
+
+    .code-block { background: var(--border-subtle); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; font-family: var(--font-mono); font-size: 13px; line-height: 1.7; color: var(--text-primary); overflow-x: auto; margin: 16px 0; }
+    .c-pri { color: var(--primary); font-weight: 600; }
+    .c-sec { color: var(--secondary); font-weight: 600; }
+
+    footer { border-top: 1px solid var(--border); background: var(--surface); padding: 48px 0 24px; margin-top: 64px; font-size: 14px; color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container nav-inner">
+      <a href="index.html" class="logo">
+        <div class="logo-mark">⚡</div>
+        <span>FaizDB</span>
+      </a>
+      <ul class="nav-menu">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="installation.html">Installation</a></li>
+        <li><a href="tier1.html" class="active">Tier-1 Engine</a></li>
+        <li><a href="api.html">API Matrix</a></li>
+        <li><a href="sdk.html">SDKs</a></li>
+      </ul>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button id="themeToggle" class="btn btn-secondary">☀️</button>
+        <a href="https://github.com/ictdothouse/faizdb" class="btn btn-secondary" target="_blank">⭐ GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top: 48px; padding-bottom: 64px;">
+    <span class="type-overline">Engineering Specification</span>
+    <h1 class="type-display" style="margin: 8px 0 16px;">Tier-1 Architecture & Engine</h1>
+    <p class="type-body" style="font-size: 17px; margin-bottom: 40px;">
+      In-depth technical architecture of the 5 core engineering pillars built for hyperscale performance.
+    </p>
+
+    <!-- Pillar 1 -->
+    <div class="content-card">
+      <h2 class="type-subhead">1. 8-Wide SIMD & 32x Binary Quantization (BQ)</h2>
+      <p class="type-body" style="margin-top: 6px;">
+        Vector operations unroll 8-wide contiguous float accumulators into native AVX-512 (x86_64) and NEON (ARM64) SIMD registers. 1-bit binary compression packs 1536-dim vectors into 192 bytes with instant bitwise XOR + <code>POPCNT</code> execution.
+      </p>
+      <div class="code-block">
+        <div><span class="c-pri">use</span> faizdb_vector::quantization::{BinaryQuantizer, BinaryQuantizedVector};</div>
+        <div>let bin_vec = BinaryQuantizer::quantize(&raw_f32_embeddings);</div>
+        <div>let dist = BinaryQuantizer::hamming_distance(&query_bin, &stored_bin);</div>
+      </div>
+    </div>
+
+    <!-- Pillar 2 -->
+    <div class="content-card">
+      <h2 class="type-subhead">2. Adaptive Replacement Cache (ARC)</h2>
+      <p class="type-body" style="margin-top: 6px;">
+        Implements the Megiddo-Modha self-tuning algorithm with 4 lists ($T_1, T_2, B_1, B_2$) dynamically adjusting target parameter $p$ based on real-time cache hit feedback.
+      </p>
+    </div>
+
+    <!-- Pillar 3 -->
+    <div class="content-card">
+      <h2 class="type-subhead">3. Prometheus Exposition Metrics (`/metrics`)</h2>
+      <p class="type-body" style="margin-top: 6px;">
+        Exposes standardized <code>GET /metrics</code> endpoints tracking uptime, read/write ops/sec, active client connections, and cache hit ratios for Kubernetes & Grafana integration.
+      </p>
+    </div>
+
+    <!-- Pillar 4 -->
+    <div class="content-card">
+      <h2 class="type-subhead">4. S3 / GCS Direct Cloud Object Offloader</h2>
+      <p class="type-body" style="margin-top: 6px;">
+        Automated parallel multipart chunk offloading streaming cold compacted SSTable blocks directly to AWS S3, MinIO, or Google Cloud Storage buckets.
+      </p>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>© 2026 FaizDB Project · Genesis Design System</span>
+      <a href="index.html" style="color: var(--primary); text-decoration: none;">Back to Home</a>
+    </div>
+  </footer>
+
+  <script>
+    const toggleBtn = document.getElementById('themeToggle');
+    const htmlEl = document.documentElement;
+    const saved = localStorage.getItem('faizdb-theme') || 'light';
+    htmlEl.className = saved;
+    toggleBtn.textContent = saved === 'dark' ? '🌙' : '☀️';
+
+    toggleBtn.addEventListener('click', () => {
+      const next = htmlEl.classList.contains('light') ? 'dark' : 'light';
+      htmlEl.className = next;
+      toggleBtn.textContent = next === 'dark' ? '🌙' : '☀️';
+      localStorage.setItem('faizdb-theme', next);
+    });
+  </script>
+</body>
+</html>

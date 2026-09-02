@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Installation Guide — FaizDB</title>
+  <meta name="description" content="Official Installation and Deployment Guide for FaizDB standalone binary, systemd daemon, Docker Compose, and embedded Rust library.">
+  
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --primary: #6366F1;
+      --primary-hover: #4F46E5;
+      --secondary: #20970B;
+      --neutral: #9C9C9C;
+      --bg: #FAFAFA;
+      --surface: #FFFFFF;
+      --text-primary: #0A0A0A;
+      --text-secondary: #6B6B6B;
+      --border: #E8E8EC;
+      --border-subtle: #F0F0F4;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --error: #EF4444;
+      --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.08);
+      --btn-shadow-hover: 0 4px 12px rgba(99, 102, 241, 0.35);
+      --font-display: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    html.dark {
+      --primary: #818CF8;
+      --primary-hover: #6366F1;
+      --secondary: #22C55E;
+      --neutral: #71717A;
+      --bg: #09090B;
+      --surface: #121216;
+      --text-primary: #F4F4F5;
+      --text-secondary: #A1A1AA;
+      --border: #27272A;
+      --border-subtle: #1C1C20;
+      --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.4);
+      --btn-shadow-hover: 0 4px 12px rgba(129, 140, 248, 0.35);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.6;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    
+    .type-display { font-family: var(--font-display); font-size: clamp(32px, 4vw, 48px); font-weight: 700; line-height: 1.15; letter-spacing: -0.035em; }
+    .type-subhead { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+    .type-body { font-family: var(--font-body); font-size: 15px; color: var(--text-secondary); line-height: 1.6; }
+    .type-caption { font-family: var(--font-body); font-size: 12px; color: var(--neutral); }
+    .type-overline { font-family: var(--font-display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--primary); }
+
+    /* Header (56px) */
+    header {
+      position: sticky; top: 0; z-index: 100; height: 56px;
+      background: rgba(250, 250, 250, 0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    html.dark header { background: rgba(9, 9, 11, 0.85); }
+    .nav-inner { display: flex; justify-content: space-between; align-items: center; height: 100%; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-primary); font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+    .logo-mark { width: 26px; height: 26px; border-radius: 6px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+    .nav-menu { display: flex; gap: 24px; list-style: none; align-items: center; }
+    .nav-menu a { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-menu a:hover, .nav-menu a.active { color: var(--text-primary); }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 6px; font-family: var(--font-body); font-weight: 500; font-size: 14px; text-decoration: none; cursor: pointer; border: 1px solid transparent; transition: all 0.2s ease; }
+    .btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+    .btn-primary { background: var(--primary); color: #FFFFFF; border-color: var(--primary); }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .btn-secondary { background: transparent; color: var(--text-primary); border-color: var(--border); }
+    .btn-secondary:hover { background: var(--surface); transform: translateY(-1px); }
+
+    .content-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 32px; margin-bottom: 32px;
+      transition: all 0.2s ease;
+    }
+    .content-card:hover { box-shadow: var(--card-shadow-hover); }
+
+    .code-block {
+      background: var(--border-subtle); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px; font-family: var(--font-mono);
+      font-size: 13px; line-height: 1.7; color: var(--text-primary);
+      overflow-x: auto; margin: 16px 0;
+    }
+    .c-cmd { color: var(--primary); font-weight: 600; }
+    .c-comment { color: var(--neutral); }
+
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; margin: 16px 0; }
+    th { background: var(--border-subtle); color: var(--text-secondary); font-family: var(--font-display); font-size: 12px; text-transform: uppercase; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    td { padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--text-primary); }
+
+    footer { border-top: 1px solid var(--border); background: var(--surface); padding: 48px 0 24px; margin-top: 64px; font-size: 14px; color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="container nav-inner">
+      <a href="index.html" class="logo">
+        <div class="logo-mark">⚡</div>
+        <span>FaizDB</span>
+      </a>
+      <ul class="nav-menu">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="installation.html" class="active">Installation</a></li>
+        <li><a href="tier1.html">Tier-1 Engine</a></li>
+        <li><a href="api.html">API Matrix</a></li>
+        <li><a href="sdk.html">SDKs</a></li>
+      </ul>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button id="themeToggle" class="btn btn-secondary btn-sm">☀️</button>
+        <a href="https://github.com/ictdothouse/faizdb" class="btn btn-secondary btn-sm" target="_blank">⭐ GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top: 48px; padding-bottom: 64px;">
+    <span class="type-overline">Deployment Guide</span>
+    <h1 class="type-display" style="margin: 8px 0 16px;">Installation & Setup</h1>
+    <p class="type-body" style="font-size: 17px; margin-bottom: 40px;">
+      Install FaizDB via 1-line automated shell script, pre-compiled static binary, Docker Compose, or link in-process as an embedded library.
+    </p>
+
+    <!-- 1-line Install -->
+    <div class="content-card">
+      <h2 class="type-subhead">1. Automated 1-Line Standalone Install</h2>
+      <p class="type-body" style="margin-top: 6px;">Installs the pre-compiled native binary directly into <code>/usr/local/bin</code> on Linux and macOS, or user path on Windows.</p>
+      
+      <div class="code-block">
+        <div class="c-comment"># Linux & macOS (Apple Silicon / Intel x86_64)</div>
+        <div><span class="c-cmd">curl</span> -sSf https://faizdb.ict.house/install.sh | sh</div>
+        
+        <div class="c-comment" style="margin-top: 12px;"># Windows PowerShell (x64)</div>
+        <div><span class="c-cmd">irm</span> https://faizdb.ict.house/install.ps1 | <span class="c-cmd">iex</span></div>
+      </div>
+    </div>
+
+    <!-- Official Binaries Matrix -->
+    <div class="content-card">
+      <h2 class="type-subhead">2. Official Download Channels (v0.1.0)</h2>
+      <p class="type-body" style="margin-top: 6px;">All release assets include SHA256 checksum verification files.</p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Platform / OS</th>
+            <th>Architecture</th>
+            <th>Binary Target</th>
+            <th>Format</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Linux</strong></td>
+            <td>x86_64</td>
+            <td><code>x86_64-unknown-linux-musl</code> (Zero C Libc)</td>
+            <td><code>tar.gz</code></td>
+          </tr>
+          <tr>
+            <td><strong>Linux (ARM64 / Graviton)</strong></td>
+            <td>aarch64</td>
+            <td><code>aarch64-unknown-linux-musl</code></td>
+            <td><code>tar.gz</code></td>
+          </tr>
+          <tr>
+            <td><strong>macOS (Apple Silicon)</strong></td>
+            <td>arm64 (M1/M2/M3/M4)</td>
+            <td><code>aarch64-apple-darwin</code></td>
+            <td><code>tar.gz</code></td>
+          </tr>
+          <tr>
+            <td><strong>macOS (Intel)</strong></td>
+            <td>x86_64</td>
+            <td><code>x86_64-apple-darwin</code></td>
+            <td><code>tar.gz</code></td>
+          </tr>
+          <tr>
+            <td><strong>Windows</strong></td>
+            <td>x86_64</td>
+            <td><code>x86_64-pc-windows-msvc</code></td>
+            <td><code>zip</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Embedded Mode -->
+    <div class="content-card">
+      <h2 class="type-subhead">3. Embedded SQLite-Style Mode (Zero-Dependency)</h2>
+      <p class="type-body" style="margin-top: 6px;">
+        Link <code>faizdb-core</code> directly into your Rust, Python, or Tauri desktop app. Runs purely in-process with zero network daemons.
+      </p>
+
+      <div class="code-block">
+        <div class="c-comment"># Add to your Cargo.toml:</div>
+        <div>[dependencies]</div>
+        <div><span class="c-cmd">faizdb-core</span> = "0.1.0"</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>© 2026 FaizDB Project · Genesis Design System</span>
+      <a href="index.html" style="color: var(--primary); text-decoration: none;">Back to Home</a>
+    </div>
+  </footer>
+
+  <script>
+    const toggleBtn = document.getElementById('themeToggle');
+    const htmlEl = document.documentElement;
+    const saved = localStorage.getItem('faizdb-theme') || 'light';
+    htmlEl.className = saved;
+    toggleBtn.textContent = saved === 'dark' ? '🌙' : '☀️';
+
+    toggleBtn.addEventListener('click', () => {
+      const next = htmlEl.classList.contains('light') ? 'dark' : 'light';
+      htmlEl.className = next;
+      toggleBtn.textContent = next === 'dark' ? '🌙' : '☀️';
+      localStorage.setItem('faizdb-theme', next);
+    });
+  </script>
+</body>
+</html>
