@@ -7,11 +7,13 @@ pub mod aggregation;
 pub mod ast;
 pub mod parser;
 pub mod executor;
+pub mod distributed;
 
 pub use aggregation::{execute_pipeline, parse_pipeline, PipelineStage, Accumulator};
 pub use ast::{FilterExpr, Operator, Statement, VectorSearchClause, TraverseClause};
 pub use parser::parse_query;
 pub use executor::{DatabaseContext, QueryResult};
+pub use distributed::{DistributedQueryCoordinator, ScatterGatherPlan, ShardTarget, DistributedQueryResult};
 
 /// Query engine version
 pub fn version() -> &'static str {
