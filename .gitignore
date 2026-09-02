@@ -1,11 +1,62 @@
+# ── Rust & Cargo ───────────────────────────────────────────────────
 /target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# ── FaizDB Runtime Artifacts ──────────────────────────────────────
 faizdb_data/
+embedded_db_data/
+iot_data/
 logs/
 *.log
 *.jsonl
 *.sst
 *.wal
+*.hnsw
+backups/*.json
+backups/*.enc.json
+!backups/.gitkeep
+
+# ── Standalone Binaries & Libraries ───────────────────────────────
+faizdb
+faizdb.exe
+*.so
+*.dylib
+*.dll
+*.a
+dist/
+
+# ── Environment & Security Secrets ────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# ── Frontend & Studio ─────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.turbo/
+build/
+.next/
+
+# ── Python & Data Science ─────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# ── OS & IDE Artifacts ────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-faizdb
-.env
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
