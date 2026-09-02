@@ -23,12 +23,18 @@ pub enum QueryResult {
     Explain(ExplainPlan),
 }
 
-/// Execution environment holding database collections, Change Stream bus, Raft consensus & ShardRouter
+/// Execution environment holding database collections, Change Stream bus, Raft consensus, ShardRouter,
+/// persistent StorageEngine (LSM+WAL), MVCC TransactionManager, Vector indexes, and Graph store.
 pub struct DatabaseContext {
     collections: DashMap<String, Arc<Collection>>,
     bus: Arc<ChangeStreamBus>,
     raft: Arc<faizdb_core::cluster::RaftNode>,
     shards: Arc<faizdb_core::cluster::ShardRouter>,
+    storage: Option<Arc<faizdb_core::storage::engine::StorageEngine>>,
+    tx_manager: Arc<faizdb_core::transaction::mvcc::TransactionManager>,
+    active_txns: DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>>,
+    vector_indexes: DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>>,
+    graph_store: Arc<parking_lot::RwLock<faizdb_graph::GraphStore>>,
 }
 
 impl Default for DatabaseContext {
@@ -42,6 +48,11 @@ impl Default for DatabaseContext {
             bus: Arc::new(ChangeStreamBus::new()),
             raft,
             shards,
+            storage: None,
+            tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
+            active_txns: DashMap::new(),
+            vector_indexes: DashMap::new(),
+            graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
         }
     }
 }
@@ -61,6 +72,64 @@ impl DatabaseContext {
             bus: Arc::new(ChangeStreamBus::new()),
             raft,
             shards,
+            storage: None,
+            tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
+            active_txns: DashMap::new(),
+            vector_indexes: DashMap::new(),
+            graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+        }
+    }
+
+    /// Create DatabaseContext with an active persistent StorageEngine
+    pub fn with_storage(storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Self {
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
+        let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
+        shards.register_node("node_1", "127.0.0.1:27018");
+
+        let ctx = Self {
+            collections: DashMap::new(),
+            bus: Arc::new(ChangeStreamBus::new()),
+            raft,
+            shards,
+            storage: Some(storage),
+            tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
+            active_txns: DashMap::new(),
+            vector_indexes: DashMap::new(),
+            graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+        };
+
+        ctx.recover_from_storage();
+        ctx
+    }
+
+    /// Open or create storage engine at given data directory and recover existing data
+    pub fn with_storage_dir(data_dir: impl AsRef<std::path::Path>) -> Result<Self, String> {
+        let config = faizdb_core::storage::engine::StorageConfig {
+            data_dir: data_dir.as_ref().to_path_buf(),
+            ..Default::default()
+        };
+        let storage = faizdb_core::storage::engine::StorageEngine::open(config)
+            .map_err(|e| format!("Failed to open storage engine: {e}"))?;
+        Ok(Self::with_storage(Arc::new(storage)))
+    }
+
+    /// Recover all collections and documents from storage on startup
+    pub fn recover_from_storage(&self) {
+        if let Some(storage) = &self.storage {
+            if let Ok(entries) = storage.prefix_scan(b"doc:") {
+                for (key_bytes, val_bytes) in entries {
+                    if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
+                        let parts: Vec<&str> = key_str.splitn(3, ':').collect();
+                        if parts.len() == 3 {
+                            let col_name = parts[1];
+                            if let Ok(doc) = serde_json::from_slice::<Document>(&val_bytes) {
+                                let col = self.get_or_create_collection(col_name);
+                                col.load_document(doc);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -79,12 +148,43 @@ impl DatabaseContext {
         self.shards.clone()
     }
 
-    /// Get or create a collection
+    /// Get or create a collection (backed by StorageEngine if configured)
     pub fn get_or_create_collection(&self, name: &str) -> Arc<Collection> {
         self.collections
             .entry(name.to_string())
-            .or_insert_with(|| Arc::new(Collection::new(name)))
+            .or_insert_with(|| {
+                if let Some(storage) = &self.storage {
+                    Arc::new(Collection::with_storage(name, storage.clone()))
+                } else {
+                    Arc::new(Collection::new(name))
+                }
+            })
             .clone()
+    }
+
+    /// Access underlying persistent StorageEngine
+    pub fn storage(&self) -> Option<Arc<faizdb_core::storage::engine::StorageEngine>> {
+        self.storage.clone()
+    }
+
+    /// Access MVCC TransactionManager
+    pub fn tx_manager(&self) -> Arc<faizdb_core::transaction::mvcc::TransactionManager> {
+        self.tx_manager.clone()
+    }
+
+    /// Access active transactions map
+    pub fn active_txns(&self) -> &DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>> {
+        &self.active_txns
+    }
+
+    /// Access vector indexes
+    pub fn vector_indexes(&self) -> &DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>> {
+        &self.vector_indexes
+    }
+
+    /// Access knowledge graph store
+    pub fn graph_store(&self) -> Arc<parking_lot::RwLock<faizdb_graph::GraphStore>> {
+        self.graph_store.clone()
     }
 
     /// List all collection names
@@ -183,6 +283,8 @@ impl DatabaseContext {
                 filter,
                 limit,
                 skip,
+                vector_search,
+                traverse,
                 ..
             } => {
                 let col = self.get_or_create_collection(&collection);
@@ -196,14 +298,50 @@ impl DatabaseContext {
 
                 let docs_to_scan = candidate_docs.unwrap_or_else(|| col.find_all(None));
 
-                let filtered: Vec<Document> = docs_to_scan
+                let mut filtered: Vec<Document> = docs_to_scan
                     .into_iter()
                     .filter(|doc| filter.as_ref().map_or(true, |f| f.matches(doc)))
+                    .collect();
+
+                // Graph traversal filtering if specified
+                if let Some(t_clause) = traverse {
+                    let paths = self.graph_store.read().traverse_bfs(&t_clause.start_id, t_clause.max_depth, t_clause.relation.as_deref());
+                    let reached_ids: std::collections::HashSet<String> = paths.into_iter().map(|p| p.vertex_id).collect();
+                    filtered.retain(|d| reached_ids.contains(d.id.as_str()));
+                }
+
+                // Vector search ranking if specified
+                if let Some(v_clause) = vector_search {
+                    let mut scored: Vec<(Document, f32)> = filtered
+                        .into_iter()
+                        .filter_map(|doc| {
+                            if let Some(val) = doc.get("vector").or_else(|| doc.get("embedding")) {
+                                if let Some(arr) = val.as_array() {
+                                    let vec: Vec<f32> = arr.iter().filter_map(|x| match x {
+                                        faizdb_core::document::model::Value::Float(f) => Some(*f as f32),
+                                        faizdb_core::document::model::Value::Integer(i) => Some(*i as f32),
+                                        _ => None,
+                                    }).collect();
+                                    if vec.len() == v_clause.vector.len() {
+                                        let dist = faizdb_vector::cosine_distance(&vec, &v_clause.vector);
+                                        return Some((doc, dist));
+                                    }
+                                }
+                            }
+                            None
+                        })
+                        .collect();
+                    scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                    filtered = scored.into_iter().take(v_clause.top_k).map(|(d, _)| d).collect();
+                }
+
+                let final_docs = filtered
+                    .into_iter()
                     .skip(skip.unwrap_or(0))
                     .take(limit.unwrap_or(usize::MAX))
                     .collect();
 
-                Ok(QueryResult::Documents(filtered))
+                Ok(QueryResult::Documents(final_docs))
             }
             Statement::Insert { collection, documents } => {
                 let col = self.get_or_create_collection(&collection);

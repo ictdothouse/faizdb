@@ -7,9 +7,11 @@ pub mod auth;
 pub mod backup;
 pub mod cluster;
 pub mod collections;
+pub mod graph;
 pub mod health;
 pub mod metrics;
 pub mod middleware;
+pub mod vector;
 pub mod websocket;
 
 use std::sync::Arc;
@@ -24,10 +26,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower::ServiceBuilder;
 use tower_http::timeout::TimeoutLayer;
-
-use faizdb_core::cluster::GeoReplicationEngine;
-use faizdb_query::DatabaseContext;
-use faizdb_security::auth::AuthManager;
 
 pub use middleware::AppState;
 
@@ -100,6 +98,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/collections/{name}/watch", get(websocket::ws_collection_watch))
         .route("/v1/backup/list", get(backup::backup_list))
         .route("/v1/auth/whoami", get(auth::auth_whoami))
+        .route("/v1/vector/indexes", get(vector::list_vector_indexes))
+        .route("/v1/graph/vertices/{id}", get(graph::get_vertex))
+        .route("/v1/graph/traverse", get(graph::traverse_graph))
+        .route("/v1/graph/shortest_path", get(graph::shortest_path))
+        .route("/v1/graph/stats", get(graph::graph_stats))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::client_auth_middleware));
 
     // Write — requires Admin or ReadWrite
@@ -116,6 +119,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/transaction/begin", post(collections::transaction_begin))
         .route("/v1/transaction/commit", post(collections::transaction_commit))
         .route("/v1/transaction/rollback", post(collections::transaction_rollback))
+        .route("/v1/vector/index", post(vector::create_vector_index))
+        .route("/v1/vector/insert", post(vector::insert_vector))
+        .route("/v1/vector/search", post(vector::search_vector))
+        .route("/v1/graph/vertices", post(graph::create_vertex))
+        .route("/v1/graph/edges", post(graph::create_edge))
         .route("/v1/backup/create", post(backup::backup_create))
         .layer(axum_middleware::from_fn(middleware::rbac_write_middleware))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::client_auth_middleware));

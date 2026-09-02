@@ -77,15 +77,18 @@ pub fn merge_sstables(
     }
 
     // Open iterators for all input SSTables
-    let mut readers: Vec<SSTableReader> = input_paths
+    let readers: Vec<SSTableReader> = input_paths
         .iter()
         .map(SSTableReader::open)
         .collect::<FaizResult<_>>()?;
 
     let mut iterators: Vec<Box<dyn Iterator<Item = FaizResult<(Vec<u8>, MemEntry)>>>> = readers
-        .iter_mut()
+        .iter()
         .map(|r| -> Box<dyn Iterator<Item = FaizResult<(Vec<u8>, MemEntry)>>> {
-            Box::new(r.iter().unwrap_or_else(|_| Box::new(std::iter::empty())))
+            match r.iter() {
+                Ok(it) => Box::new(it),
+                Err(_) => Box::new(std::iter::empty()),
+            }
         })
         .collect();
 

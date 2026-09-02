@@ -93,6 +93,11 @@ impl Transaction {
         std::mem::take(&mut self.write_buffer)
     }
 
+    /// Get reference to the write buffer
+    pub fn write_buffer(&self) -> &BTreeMap<Vec<u8>, TxnWrite> {
+        &self.write_buffer
+    }
+
     /// Get the transaction status
     pub fn status(&self) -> TxnStatus {
         self.status

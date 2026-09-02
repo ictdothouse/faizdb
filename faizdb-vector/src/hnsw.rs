@@ -364,13 +364,6 @@ impl HnswIndex {
 
         self.nodes[node_idx].neighbors[layer] = scored.into_iter().map(|(idx, _)| idx).collect();
     }
-            .collect();
-
-        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
-        scored.truncate(max_m);
-
-        self.nodes[node_idx].neighbors[layer] = scored.into_iter().map(|(idx, _)| idx).collect();
-    }
 
     /// Search within a specific layer
     fn search_layer(

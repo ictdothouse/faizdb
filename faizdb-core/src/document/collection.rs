@@ -122,6 +122,9 @@ pub struct Collection {
 
     /// Time-To-Live (TTL) & Auto-Expiry Cache Scheduler
     ttl: crate::ttl::TtlManager,
+
+    /// Optional underlying LSM-Tree storage engine for durability
+    storage: Option<Arc<crate::storage::engine::StorageEngine>>,
 }
 
 impl Collection {
@@ -140,7 +143,25 @@ impl Collection {
             total_size: AtomicU64::new(0),
             text_index: crate::search::InvertedIndex::new(),
             ttl: crate::ttl::TtlManager::new(),
+            storage: None,
         }
+    }
+
+    /// Create a collection backed by a persistent StorageEngine (WAL + MemTable + SSTables)
+    pub fn with_storage(name: impl Into<String>, storage: Arc<crate::storage::engine::StorageEngine>) -> Self {
+        let mut col = Self::new(name);
+        col.storage = Some(storage);
+        col
+    }
+
+    /// Set the persistent StorageEngine
+    pub fn set_storage(&mut self, storage: Arc<crate::storage::engine::StorageEngine>) {
+        self.storage = Some(storage);
+    }
+
+    /// Get reference to underlying StorageEngine if configured
+    pub fn storage(&self) -> Option<Arc<crate::storage::engine::StorageEngine>> {
+        self.storage.clone()
     }
 
     /// Create a collection with custom configuration
@@ -155,6 +176,7 @@ impl Collection {
             total_size: AtomicU64::new(0),
             text_index: crate::search::InvertedIndex::new(),
             ttl: crate::ttl::TtlManager::new(),
+            storage: None,
         }
     }
 
@@ -232,9 +254,17 @@ impl Collection {
         }
 
         // Insert into primary store
-        self.documents.insert(id_str, doc);
+        self.documents.insert(id_str.clone(), doc.clone());
         self.doc_count.fetch_add(1, Ordering::Relaxed);
         self.total_size.fetch_add(size as u64, Ordering::Relaxed);
+
+        // If storage engine is connected, persist through WAL and MemTable
+        if let Some(storage) = &self.storage {
+            let key = format!("doc:{}:{}", self.config.name, id_str).into_bytes();
+            if let Ok(val) = serde_json::to_vec(&doc) {
+                storage.put(&key, &val)?;
+            }
+        }
 
         Ok(id)
     }
@@ -251,6 +281,32 @@ impl Collection {
         }
 
         Ok(ids)
+    }
+
+    /// Load an existing document recovered from persistent storage into memory structures without re-persisting
+    pub fn load_document(&self, doc: Document) {
+        let id_str = doc.id.as_str().to_string();
+        let size = doc.size_bytes();
+
+        for idx_entry in self.secondary_indexes.iter() {
+            idx_entry.value().insert(&doc);
+        }
+        self.update_indexes_insert(&doc);
+
+        let doc_text = extract_doc_text(&doc);
+        self.text_index.index_document(&id_str, &doc_text);
+
+        if let Some(ttl_val) = doc.get("_ttl").or_else(|| doc.get("ttl")) {
+            if let Some(secs) = ttl_val.as_i64() {
+                if secs > 0 {
+                    self.ttl.set_expiry(&id_str, secs as u64);
+                }
+            }
+        }
+
+        self.documents.insert(id_str, doc);
+        self.doc_count.fetch_add(1, Ordering::Relaxed);
+        self.total_size.fetch_add(size as u64, Ordering::Relaxed);
     }
 
     /// Find a document by its ID (with lazy TTL evaluation).
@@ -356,7 +412,15 @@ impl Collection {
                 .fetch_sub(old_size - new_size, Ordering::Relaxed);
         }
 
-        Ok(entry.value().clone())
+        let updated = entry.value().clone();
+        if let Some(storage) = &self.storage {
+            let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
+            if let Ok(val) = serde_json::to_vec(&updated) {
+                let _ = storage.put(&key, &val);
+            }
+        }
+
+        Ok(updated)
     }
 
     /// Update documents matching a filter using field-level updates.
@@ -409,6 +473,12 @@ impl Collection {
         }
         self.update_indexes_delete(&doc);
         self.text_index.remove_document(&id);
+
+        // If storage engine is connected, persist tombstone through WAL and MemTable
+        if let Some(storage) = &self.storage {
+            let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
+            let _ = storage.delete(&key);
+        }
 
         Ok(doc)
     }

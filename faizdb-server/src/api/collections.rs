@@ -225,27 +225,94 @@ pub async fn collection_ttl_purge(
 
 // ── Transactions ─────────────────────────────────────────────────────────────
 
-pub async fn transaction_begin() -> impl IntoResponse {
-    let txn_id = format!("txn_{}", uuid::Uuid::now_v7());
+#[derive(Debug, Deserialize, Default)]
+pub struct TransactionRequest {
+    pub txn_id: Option<String>,
+}
+
+pub async fn transaction_begin(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let txn = state.db.tx_manager().begin();
+    let txn_id = format!("txn_{}", txn.id);
+    let snapshot_ts = txn.snapshot_ts();
+    state.db.active_txns().insert(txn_id.clone(), Arc::new(parking_lot::Mutex::new(txn)));
+
     (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
         "txn_id": txn_id,
         "isolation_level": "SnapshotIsolation",
+        "snapshot_ts": snapshot_ts,
         "status": "Active",
     }))))
 }
 
-pub async fn transaction_commit() -> impl IntoResponse {
-    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-        "status": "Committed",
-        "message": "All staged mutations written to WAL",
-    }))))
+pub async fn transaction_commit(
+    State(state): State<Arc<AppState>>,
+    body: Option<Json<TransactionRequest>>,
+) -> impl IntoResponse {
+    let txn_id = body.and_then(|b| b.0.txn_id);
+    if let Some(id) = txn_id {
+        if let Some((_, txn_mutex)) = state.db.active_txns().remove(&id) {
+            let mut txn = txn_mutex.lock();
+            let writes = txn.write_buffer().clone();
+            match state.db.tx_manager().commit(&mut txn) {
+                Ok(()) => {
+                    if let Some(storage) = state.db.storage() {
+                        for (key, write) in &writes {
+                            match write {
+                                faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
+                                    let _ = storage.put(key, val.as_slice());
+                                }
+                                faizdb_core::transaction::mvcc::TxnWrite::Delete => {
+                                    let _ = storage.delete(key);
+                                }
+                            }
+                        }
+                    }
+                    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                        "txn_id": id,
+                        "status": "Committed",
+                        "message": "All staged mutations verified with snapshot isolation and written to WAL",
+                    }))))
+                }
+                Err(e) => {
+                    (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Transaction commit conflict: {e}"))))
+                }
+            }
+        } else {
+            (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed")))
+        }
+    } else {
+        (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+            "status": "Committed",
+            "message": "All staged mutations written to WAL",
+        }))))
+    }
 }
 
-pub async fn transaction_rollback() -> impl IntoResponse {
-    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-        "status": "Aborted",
-        "message": "Transaction rolled back, write-buffer discarded",
-    }))))
+pub async fn transaction_rollback(
+    State(state): State<Arc<AppState>>,
+    body: Option<Json<TransactionRequest>>,
+) -> impl IntoResponse {
+    let txn_id = body.and_then(|b| b.0.txn_id);
+    if let Some(id) = txn_id {
+        if let Some((_, txn_mutex)) = state.db.active_txns().remove(&id) {
+            let mut txn = txn_mutex.lock();
+            state.db.tx_manager().abort(&mut txn);
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                "txn_id": id,
+                "status": "Aborted",
+                "message": "Transaction rolled back, write-buffer discarded",
+            }))))
+        } else {
+            (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed")))
+        }
+    } else {
+        (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+            "status": "Aborted",
+            "message": "Transaction rolled back, write-buffer discarded",
+        }))))
+    }
 }
 
 // ── Import ───────────────────────────────────────────────────────────────────

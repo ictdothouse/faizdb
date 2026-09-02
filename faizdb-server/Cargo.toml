@@ -30,3 +30,7 @@ tonic = { workspace = true }
 prost = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { version = "0.6", features = ["timeout"] }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

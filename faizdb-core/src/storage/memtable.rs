@@ -18,7 +18,7 @@ use parking_lot::RwLock;
 use crate::error::{FaizError, FaizResult};
 
 /// A single entry in the MemTable
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemEntry {
     /// A key-value pair (Put operation)
     Value(Vec<u8>),

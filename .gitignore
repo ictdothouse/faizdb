@@ -33,6 +33,8 @@ dist/
 *.pem
 *.key
 *.crt
+docs/*audit*
+docs/faizdb-audit-report.md
 
 # ── Frontend & Studio ─────────────────────────────────────────────
 node_modules/

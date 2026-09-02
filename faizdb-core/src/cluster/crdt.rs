@@ -96,6 +96,11 @@ impl<T: Clone + PartialEq> LwwRegister<T> {
         }
     }
 
+    /// Alias for set() — updates value if timestamp/region is newer
+    pub fn update(&mut self, value: T, timestamp: u64, region_id: &str) -> bool {
+        self.set(value, timestamp, region_id)
+    }
+
     /// Merge two LWW registers deterministically
     pub fn merge(&mut self, other: &LwwRegister<T>) {
         if other.timestamp > self.timestamp
@@ -212,6 +217,41 @@ impl PnCounter {
                 *cur = v;
             }
         }
+    }
+}
+
+/// Alias for LwwRegister for compatibility
+pub type CrdtLwwRegister<T> = LwwRegister<T>;
+
+/// Node-scoped distributed PN-Counter wrapper
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct CrdtPnCounter {
+    pub node_id: String,
+    pub counter: PnCounter,
+}
+
+impl CrdtPnCounter {
+    pub fn new(node_id: impl Into<String>) -> Self {
+        Self {
+            node_id: node_id.into(),
+            counter: PnCounter::new(),
+        }
+    }
+
+    pub fn increment(&mut self) {
+        self.counter.increment(&self.node_id, 1);
+    }
+
+    pub fn decrement(&mut self) {
+        self.counter.decrement(&self.node_id, 1);
+    }
+
+    pub fn value(&self) -> i64 {
+        self.counter.value()
+    }
+
+    pub fn merge(&mut self, other: &CrdtPnCounter) {
+        self.counter.merge(&other.counter);
     }
 }
 

@@ -57,7 +57,7 @@ impl CdcEnvelope {
     /// Create a new CDC event for an insert operation
     pub fn new_create(
         collection: &str,
-        doc_id: &str,
+        _doc_id: &str,
         document: serde_json::Value,
         lsn: u64,
     ) -> Self {

@@ -22,7 +22,14 @@ pub async fn run_multi_protocol_server(
     grpc_addr: &str,
     http_addr: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let db = std::sync::Arc::new(faizdb_query::DatabaseContext::new());
+    let data_dir = std::env::var("FAIZDB_DATA_DIR").unwrap_or_else(|_| faizdb_core::DEFAULT_DATA_DIR.to_string());
+    let db = std::sync::Arc::new(
+        faizdb_query::DatabaseContext::with_storage_dir(&data_dir)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Persistent storage not initialized at '{data_dir}' ({e}); running in-memory");
+                faizdb_query::DatabaseContext::new()
+            })
+    );
 
     // Initialise AuthManager with JWT secret from env
     let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
@@ -99,7 +106,14 @@ pub async fn run_dual_server(
 
 /// Run only the HTTP & WebSocket server
 pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let db = std::sync::Arc::new(faizdb_query::DatabaseContext::new());
+    let data_dir = std::env::var("FAIZDB_DATA_DIR").unwrap_or_else(|_| faizdb_core::DEFAULT_DATA_DIR.to_string());
+    let db = std::sync::Arc::new(
+        faizdb_query::DatabaseContext::with_storage_dir(&data_dir)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Persistent storage not initialized at '{data_dir}' ({e}); running in-memory");
+                faizdb_query::DatabaseContext::new()
+            })
+    );
 
     let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
         .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
@@ -111,7 +125,7 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     let state = std::sync::Arc::new(AppState {
         db,
         auth,
-        backup_schedule: std::sync::Arc::new(std::sync::RwLock::new(api::BackupScheduleConfig::default())),
+        backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(api::BackupScheduleConfig::default())),
         geo_replication,
     });
     let app = create_router(state);

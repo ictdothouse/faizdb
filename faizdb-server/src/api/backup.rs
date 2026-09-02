@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::StatusCode,
     response::IntoResponse,
     Json,

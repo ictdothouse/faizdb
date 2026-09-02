@@ -16,4 +16,5 @@ ring = { workspace = true }
 argon2 = { workspace = true }
 jsonwebtoken = { workspace = true }
 pem = { workspace = true }
+rand_core = { version = "0.6", features = ["getrandom"] }
 

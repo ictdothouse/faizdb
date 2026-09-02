@@ -153,6 +153,8 @@ impl<K: Clone + Eq + Hash, V: Clone> ArcCache<K, V> {
                 self.replace(&key);
             } else if let Some(k) = self.t1.pop_front() {
                 self.store.remove(&k);
+                self.b1.push_back(k);
+                self.stats.evictions += 1;
             }
         } else if total_size >= self.capacity {
             if total_size == 2 * self.capacity && !self.b2.is_empty() {

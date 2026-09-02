@@ -152,26 +152,37 @@ impl AuthManager {
     pub fn verify_token(&self, token: &str) -> Result<Claims, String> {
         let mut validation = Validation::new(Algorithm::EdDSA);
         validation.validate_exp = true;
-        decode::<Claims>(token, &self.decoding_key, &validation)
-            .map(|data| data.claims)
-            .map_err(|e| format!("Invalid or expired token: {e}"))
+        validation.leeway = 0;
+        let token_data = decode::<Claims>(token, &self.decoding_key, &validation)
+            .map_err(|e| format!("Invalid or expired token: {e}"))?;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as usize;
+
+        // RFC 7519: current date/time MUST be before expiration date/time
+        if token_data.claims.exp <= now {
+            return Err("Token expired".to_string());
+        }
+
+        Ok(token_data.claims)
     }
 }
 
 /// Build a minimal Ed25519 SubjectPublicKeyInfo (SPKI) DER structure.
 /// Required to PEM-encode an Ed25519 raw public key for `jsonwebtoken`.
 fn build_ed25519_spki(raw_public_key: &[u8]) -> Vec<u8> {
-    // Ed25519 OID: 1.3.101.112 encoded as DER SEQUENCE { SEQUENCE { OID }, BIT STRING }
-    let oid: &[u8] = &[0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70];
-    let bit_string_len = raw_public_key.len() + 2;
-    let total_inner = oid.len() + 2 + bit_string_len;
-    let mut spki = Vec::with_capacity(total_inner + 4);
-    spki.push(0x30);
-    spki.push(total_inner as u8);
-    spki.extend_from_slice(oid);
-    spki.push(0x03); // BIT STRING
-    spki.push((raw_public_key.len() + 1) as u8);
-    spki.push(0x00); // unused bits = 0
+    // RFC 8410 standard 12-byte header for Ed25519 SubjectPublicKeyInfo:
+    // SEQUENCE (42 bytes) -> SEQUENCE (5 bytes: AlgorithmIdentifier id-Ed25519 1.3.101.112) -> BIT STRING (33 bytes, 0 unused bits)
+    const ED25519_SPKI_PREFIX: [u8; 12] = [
+        0x30, 0x2a,
+        0x30, 0x05,
+        0x06, 0x03, 0x2b, 0x65, 0x70,
+        0x03, 0x21, 0x00,
+    ];
+    let mut spki = Vec::with_capacity(ED25519_SPKI_PREFIX.len() + raw_public_key.len());
+    spki.extend_from_slice(&ED25519_SPKI_PREFIX);
     spki.extend_from_slice(raw_public_key);
     spki
 }
