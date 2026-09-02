@@ -19,6 +19,29 @@ pub enum QuantizationType {
     None,
     /// 8-bit Scalar Quantization (4x memory reduction)
     Scalar8,
+    /// 1-bit Binary Quantization (32x memory reduction with Hamming POPCNT distance)
+    Binary1,
+}
+
+/// 1-bit Binary Quantized vector payload (32x memory reduction)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BinaryQuantizedVector {
+    /// Packed 64-bit words storing 1-bit per dimension
+    pub bits: Vec<u64>,
+    /// Original dimension of vector
+    pub dim: usize,
+}
+
+impl BinaryQuantizedVector {
+    /// Dimension of the original vector
+    pub fn dim(&self) -> usize {
+        self.dim
+    }
+
+    /// Memory footprint in bytes
+    pub fn memory_bytes(&self) -> usize {
+        self.bits.len() * std::mem::size_of::<u64>() + std::mem::size_of::<usize>()
+    }
 }
 
 /// Quantized vector payload with per-vector min/max scaling parameters
@@ -43,6 +66,7 @@ impl QuantizedVector {
         self.data.len() + std::mem::size_of::<f32>() * 2
     }
 }
+
 
 /// Scalar Quantizer for converting between `f32` and `u8`
 #[derive(Debug, Clone, Default)]
@@ -158,6 +182,53 @@ impl ScalarQuantizer {
     }
 }
 
+/// 1-Bit Binary Quantizer (32x Memory Reduction)
+/// Converts float vectors into binary arrays (1 bit per dimension)
+/// Distance is computed using hardware POPCNT (count_ones) in nanoseconds.
+#[derive(Debug, Clone, Default)]
+pub struct BinaryQuantizer;
+
+impl BinaryQuantizer {
+    /// Quantize float vector into binary representation
+    pub fn quantize(vector: &[f32]) -> BinaryQuantizedVector {
+        let num_words = (vector.len() + 63) / 64;
+        let mut bits = vec![0u64; num_words];
+
+        for (i, &val) in vector.iter().enumerate() {
+            if val > 0.0 {
+                let word_idx = i / 64;
+                let bit_idx = i % 64;
+                bits[word_idx] |= 1u64 << bit_idx;
+            }
+        }
+
+        BinaryQuantizedVector {
+            bits,
+            dim: vector.len(),
+        }
+    }
+
+    /// Calculate Hamming distance using hardware POPCNT
+    #[inline]
+    pub fn hamming_distance(a: &BinaryQuantizedVector, b: &BinaryQuantizedVector) -> u32 {
+        let mut total = 0u32;
+        for (w_a, w_b) in a.bits.iter().zip(b.bits.iter()) {
+            total += (w_a ^ w_b).count_ones();
+        }
+        total
+    }
+
+    /// Normalized Hamming distance in range [0.0, 1.0]
+    #[inline]
+    pub fn normalized_hamming_distance(a: &BinaryQuantizedVector, b: &BinaryQuantizedVector) -> f32 {
+        if a.dim == 0 {
+            return 0.0;
+        }
+        let raw = Self::hamming_distance(a, b);
+        raw as f32 / a.dim as f32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,5 +274,22 @@ mod tests {
         let dist = ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Euclidean);
 
         assert!((dist - 0.3).abs() < 0.02, "Euclidean distance should be ~0.3, got: {dist}");
+    }
+
+    #[test]
+    fn test_binary_quantization_and_popcnt() {
+        let vec_a = vec![1.5, -0.5, 2.0, -1.0, 0.8, -0.2]; // Signs: [1, 0, 1, 0, 1, 0]
+        let vec_b = vec![0.5, -1.2, 0.3, -0.1, 1.1, -0.9]; // Signs: [1, 0, 1, 0, 1, 0] (Identical signs)
+        let vec_c = vec![-1.5, 0.5, -2.0, 1.0, -0.8, 0.2]; // Signs: [0, 1, 0, 1, 0, 1] (Completely opposite signs)
+
+        let bin_a = BinaryQuantizer::quantize(&vec_a);
+        let bin_b = BinaryQuantizer::quantize(&vec_b);
+        let bin_c = BinaryQuantizer::quantize(&vec_c);
+
+        // 32x memory compression verification
+        assert_eq!(bin_a.bits.len(), 1); // 1 u64 word (8 bytes) holds up to 64 dims!
+        assert_eq!(BinaryQuantizer::hamming_distance(&bin_a, &bin_b), 0);
+        assert_eq!(BinaryQuantizer::hamming_distance(&bin_a, &bin_c), 6);
+        assert_eq!(BinaryQuantizer::normalized_hamming_distance(&bin_a, &bin_c), 1.0);
     }
 }

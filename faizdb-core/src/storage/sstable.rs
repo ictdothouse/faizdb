@@ -88,17 +88,33 @@ impl BloomFilter {
     /// Create a new bloom filter sized for the expected number of entries
     /// with a target false positive rate of ~1%
     pub fn new(expected_entries: usize) -> Self {
-        // Calculate optimal size: -n * ln(p) / (ln(2))^2
-        // For p=0.01: bits = n * 9.585
-        let num_bits = (expected_entries as f64 * 9.585).ceil() as usize;
+        Self::new_with_fp_rate(expected_entries, 0.01)
+    }
+
+    /// Create a new bloom filter with custom target false positive rate
+    pub fn new_with_fp_rate(expected_entries: usize, target_fp_rate: f64) -> Self {
+        let entries = expected_entries.max(1);
+        let p = target_fp_rate.clamp(0.0001, 0.5);
+        let num_bits = (-(entries as f64) * p.ln() / (2.0f64.ln().powi(2))).ceil() as usize;
         let num_bytes = (num_bits + 7) / 8;
-        let num_hashes = ((num_bytes as f64 * 8.0 / expected_entries as f64) * 0.693).ceil() as u32;
+        let num_hashes = ((num_bytes as f64 * 8.0 / entries as f64) * 0.693).ceil() as u32;
 
         Self {
             bits: vec![0u8; num_bytes.max(1)],
             num_hashes: num_hashes.max(1).min(16),
         }
     }
+
+    /// Create level-aware dynamic bloom filter (lower levels get tighter FPR to eliminate disk seeks)
+    pub fn new_for_level(expected_entries: usize, level: usize) -> Self {
+        let fp_rate = match level {
+            0 => 0.01,   // 1% FPR for Level 0
+            1 => 0.005,  // 0.5% FPR for Level 1
+            _ => 0.001,  // 0.1% Ultra-low FPR for deep cold SSTables
+        };
+        Self::new_with_fp_rate(expected_entries, fp_rate)
+    }
+
 
     /// Insert a key into the bloom filter
     pub fn insert(&mut self, key: &[u8]) {
@@ -707,4 +723,14 @@ mod tests {
         assert!(restored.may_contain(b"test_key_1"));
         assert!(restored.may_contain(b"test_key_2"));
     }
+
+    #[test]
+    fn test_level_aware_bloom_filter() {
+        let l0 = BloomFilter::new_for_level(1000, 0);
+        let l2 = BloomFilter::new_for_level(1000, 2);
+
+        // Level 2 should allocate more bits than Level 0 for tighter false positive rates
+        assert!(l2.bits.len() > l0.bits.len(), "Deep level SSTables must have larger bloom filter size");
+    }
 }
+

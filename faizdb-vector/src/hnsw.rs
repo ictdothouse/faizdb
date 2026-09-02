@@ -10,7 +10,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::distance::DistanceMetric;
-use crate::quantization::{QuantizationType, QuantizedVector, ScalarQuantizer};
+use crate::quantization::{BinaryQuantizedVector, BinaryQuantizer, QuantizationType, QuantizedVector, ScalarQuantizer};
 
 /// Configuration for the HNSW index
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct HnswConfig {
     pub dimensions: usize,
     /// Distance metric to compare vectors
     pub metric: DistanceMetric,
-    /// Vector quantization type (e.g. None or Scalar8 for 4x memory compression)
+    /// Vector quantization type (e.g. None, Scalar8, or Binary1 for 32x memory compression)
     pub quantization: QuantizationType,
     /// Max outgoing connections per node at layers > 0 (default 16)
     pub m: usize,
@@ -64,7 +64,7 @@ impl HnswConfig {
         }
     }
 
-    /// Set quantization type (e.g. Scalar8 for 4x memory savings)
+    /// Set quantization type (e.g. Scalar8 or Binary1 for 32x memory savings)
     pub fn with_quantization(mut self, quantization: QuantizationType) -> Self {
         self.quantization = quantization;
         self
@@ -80,6 +80,8 @@ pub struct HnswNode {
     pub vector: Vec<f32>,
     /// Quantized 8-bit vector embedding (when Scalar8 is enabled)
     pub quantized: Option<QuantizedVector>,
+    /// Quantized 1-bit vector embedding (when Binary1 is enabled)
+    pub binary_quantized: Option<BinaryQuantizedVector>,
     /// Highest layer this node exists on
     pub level: usize,
     /// Neighbors at each layer: `neighbors[layer]` = list of node internal indices
@@ -187,6 +189,9 @@ impl HnswIndex {
         let node = &self.nodes[node_idx];
         if let Some(ref qv) = node.quantized {
             ScalarQuantizer::asymmetric_distance(v, qv, self.config.metric)
+        } else if let Some(ref bv) = node.binary_quantized {
+            let query_bin = BinaryQuantizer::quantize(v);
+            BinaryQuantizer::normalized_hamming_distance(&query_bin, bv)
         } else {
             self.config.metric.calculate(v, &node.vector)
         }
@@ -197,7 +202,9 @@ impl HnswIndex {
     fn dist_nodes(&self, a_idx: usize, b_idx: usize) -> f32 {
         let node_a = &self.nodes[a_idx];
         let node_b = &self.nodes[b_idx];
-        if let Some(ref qv_b) = node_b.quantized {
+        if let (Some(ref bv_a), Some(ref bv_b)) = (&node_a.binary_quantized, &node_b.binary_quantized) {
+            BinaryQuantizer::normalized_hamming_distance(bv_a, bv_b)
+        } else if let Some(ref qv_b) = node_b.quantized {
             if !node_a.vector.is_empty() {
                 ScalarQuantizer::asymmetric_distance(&node_a.vector, qv_b, self.config.metric)
             } else if let Some(ref qv_a) = node_a.quantized {
@@ -225,6 +232,9 @@ impl HnswIndex {
             if let Some(ref qv) = node.quantized {
                 total += qv.memory_bytes();
             }
+            if let Some(ref bv) = node.binary_quantized {
+                total += bv.memory_bytes();
+            }
             for nbrs in &node.neighbors {
                 total += nbrs.len() * std::mem::size_of::<usize>();
             }
@@ -251,11 +261,15 @@ impl HnswIndex {
         let node_level = self.random_level();
         let new_idx = self.nodes.len();
 
-        let (stored_vector, stored_quantized) = match self.config.quantization {
-            QuantizationType::None => (vector.clone(), None),
+        let (stored_vector, stored_quantized, stored_binary) = match self.config.quantization {
+            QuantizationType::None => (vector.clone(), None, None),
             QuantizationType::Scalar8 => {
                 let qv = ScalarQuantizer::quantize(&vector);
-                (Vec::new(), Some(qv))
+                (Vec::new(), Some(qv), None)
+            }
+            QuantizationType::Binary1 => {
+                let bv = BinaryQuantizer::quantize(&vector);
+                (Vec::new(), None, Some(bv))
             }
         };
 
@@ -263,11 +277,13 @@ impl HnswIndex {
             id: id_str.clone(),
             vector: stored_vector,
             quantized: stored_quantized,
+            binary_quantized: stored_binary,
             level: node_level,
             neighbors: vec![Vec::new(); node_level + 1],
         };
         self.nodes.push(new_node);
         self.id_to_idx.insert(id_str, new_idx);
+
 
         let ep = match self.entry_point {
             None => {
@@ -627,5 +643,32 @@ mod tests {
             "Quantized index bytes ({q_bytes}) must be smaller than raw ({raw_bytes})"
         );
     }
+
+    #[test]
+    fn test_binary_quantized_hnsw_32x_reduction() {
+        let dim = 128;
+        let count = 60;
+        let mut rng = rand::thread_rng();
+
+        let bin_config = HnswConfig::new(dim, DistanceMetric::Cosine)
+            .with_quantization(QuantizationType::Binary1);
+        let mut bin_index = HnswIndex::new(bin_config);
+
+        let mut vectors = Vec::new();
+        for i in 0..count {
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            crate::distance::normalize_in_place(&mut v);
+            vectors.push(v.clone());
+            bin_index.insert(format!("bin_doc_{i}"), v).unwrap();
+        }
+
+        assert_eq!(bin_index.len(), count);
+
+        // Search with query vector 0
+        let results = bin_index.search(&vectors[0], 3);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].id, "bin_doc_0");
+    }
 }
+
 

@@ -18,7 +18,7 @@ pub use distance::{
     normalize, normalize_in_place, squared_euclidean_distance, DistanceMetric,
 };
 pub use hnsw::{HnswConfig, HnswIndex, VectorSearchResult};
-pub use quantization::{QuantizationType, QuantizedVector, ScalarQuantizer};
+pub use quantization::{BinaryQuantizedVector, BinaryQuantizer, QuantizationType, QuantizedVector, ScalarQuantizer};
 
 /// Database version
 pub fn version() -> &'static str {
