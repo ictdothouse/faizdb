@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/faizdb dist/ 2>/dev/null || cp target/${{ matrix.target }}/release/faizdb-cli dist/faizdb 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/faizdb dist/ 2>/dev/null || cp target/${{ matrix.target }}/release/faizdb-cli dist/faizdb 2>/dev/null || cp target/release/faizdb dist/ 2>/dev/null || true
           tar -czf ${{ matrix.artifact_name }} -C dist .
           shasum -a 256 ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.sha256
 
@@ -82,14 +82,16 @@ jobs:
             Copy-Item target/${{ matrix.target }}/release/faizdb.exe dist/
           } elseif (Test-Path target/${{ matrix.target }}/release/faizdb-cli.exe) {
             Copy-Item target/${{ matrix.target }}/release/faizdb-cli.exe dist/faizdb.exe
+          } elseif (Test-Path target/release/faizdb.exe) {
+            Copy-Item target/release/faizdb.exe dist/
           }
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }}
           (Get-FileHash ${{ matrix.artifact_name }} -Algorithm SHA256).Hash > ${{ matrix.artifact_name }}.sha256
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ github.ref_name }}
           files: |
             ${{ matrix.artifact_name }}
             ${{ matrix.artifact_name }}.sha256
