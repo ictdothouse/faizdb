@@ -148,10 +148,81 @@ Output:
 
 ---
 
-## 🔒 Port Configuration Summary
+---
+
+## 🪶 Embedded & IoT / Edge Mode (Zero-Dependency SQLite-Style In-Process DB)
+
+For lightweight, embedded, or edge environments (Raspberry Pi, IoT gateways, smart TVs, desktop tools, Android/iOS apps) where you do **not** want a separate background server daemon or open network ports:
+
+### 1. Embedded in Rust Applications (`Cargo.toml`)
+Add `faizdb-core` directly to your Rust project:
+
+```toml
+[dependencies]
+faizdb-core = { git = "https://github.com/ictdothouse/faizdb.git" }
+```
+
+```rust
+use faizdb_core::storage::engine::{StorageConfig, StorageEngine};
+use std::path::PathBuf;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db = StorageEngine::open(StorageConfig {
+        data_dir: PathBuf::from("./iot_data"),
+        memtable_size: 4 * 1024 * 1024, // 4MB RAM footprint for constrained devices
+        sync_writes: false,
+        enable_wal: true,
+    })?;
+
+    // Direct in-process reads/writes (Sub-microsecond latency)
+    db.put(b"sensor:01", b"{\"temp\": 28.5}")?;
+    let val = db.get(b"sensor:01")?;
+    println!("Value: {:?}", val);
+    Ok(())
+}
+```
+
+### 2. Standalone Static Binary for IoT (Zero Glibc Dependencies)
+Download or cross-compile standalone static MUSL binaries for ARM / Raspberry Pi:
+
+```bash
+# Cross-compile static MUSL binary for ARM64 (Raspberry Pi 4/5, Orange Pi):
+cross build --target aarch64-unknown-linux-musl --release -p faizdb-cli
+
+# Cross-compile for ARMv7 (Raspberry Pi 2/3, 32-bit IoT boards):
+cross build --target armv7-unknown-linux-musleabihf --release -p faizdb-cli
+```
+
+### 3. Mobile Library Compilation (Android NDK & iOS XCFramework)
+```bash
+# Android ARM64 (.so shared object):
+cargo build --target aarch64-linux-android --release -p faizdb-core
+
+# iOS Static Framework (.xcframework):
+cargo build --target aarch64-apple-ios --release -p faizdb-core
+```
+
+---
+
+## 🌐 Official Download Channels
+
+| Artifact | Source / Method | Target Use Case |
+|:---|:---|:---|
+| **Server Binaries (.tar.gz / .zip)** | [**GitHub Releases**](https://github.com/ictdothouse/faizdb/releases) | Linux, macOS, Windows Production Servers |
+| **Rust In-Process Crate** | `cargo add faizdb-core` / GitHub | Embedded Desktop, CLI, & In-Process Applications |
+| **Python SDK** | `pip install .` / `pyproject.toml` | Python AI / Microservice Apps |
+| **Node.js / TypeScript SDK** | `npm install ./bindings/node` | TypeScript backend microservices |
+| **Docker Image** | `docker pull ictdothouse/faizdb:latest` | Kubernetes, Docker Compose, Cloud Clusters |
+| **1-Line Shell Script** | `curl -fsSL ... | bash` | Fast automated terminal setup |
+
+---
+
+## 🔒 4-Way Multi-Protocol Port Configuration Summary
 
 | Port | Protocol | Usage |
 |:---:|:---:|:---|
-| **27017** | **MongoDB Wire Protocol** | Drop-in connection for PyMongo, Mongoose, Prisma, PHP |
-| **27018** | **HTTP REST & WebSockets** | FaizQL queries, Change Streams, Health check, Backups |
-| **27020** | **HTTP (FaizDB Studio)** | Visual Management Dashboard & Query Explorer |
+| **27017** | **🍃 MongoDB Wire Protocol** | Drop-in connection for PyMongo, Mongoose, Prisma, PHP |
+| **5432** | **🐘 PostgreSQL Wire Protocol** | Drop-in connection for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs |
+| **50051** | **⚡ gRPC & Protocol Buffers** | Ultra low-latency microservices and high-throughput Vector ANN streaming |
+| **27018** | **🌐 HTTP REST & WebSockets** | FaizQL queries, Change Streams, Health check, Backups, Geo-Replication |
+| **27020** | **🎛️ HTTP (FaizDB Studio)** | Visual Management Dashboard & Query Explorer |

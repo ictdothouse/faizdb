@@ -282,6 +282,51 @@ Key Studio Workspaces:
 
 ---
 
+### 6. 🪶 Embedded & Edge IoT Mode (Zero-Dependency SQLite-Style In-Process DB)
+
+Need a lightweight, zero-setup, in-process database for CLI tools, Desktop apps, Raspberry Pi, IoT sensors, or local Edge AI without running a separate server process?
+
+FaizDB can be embedded directly into your application like SQLite, requiring **zero server daemon, zero network ports, and zero external dependencies**.
+
+#### A. Add to Your Rust Project (`Cargo.toml`):
+```toml
+[dependencies]
+faizdb-core = { git = "https://github.com/ictdothouse/faizdb.git" }
+```
+
+#### B. Embedded In-Process Rust Usage (Zero-Server):
+```rust
+use faizdb_core::storage::engine::{StorageConfig, StorageEngine};
+use std::path::PathBuf;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Open an embedded local directory database (or in-memory)
+    let config = StorageConfig {
+        data_dir: PathBuf::from("./embedded_db_data"),
+        memtable_size: 4 * 1024 * 1024, // Configurable from 2MB to 64MB (RAM-friendly for IoT)
+        sync_writes: false,
+        enable_wal: true, // Crash-safe WAL with CRC32 verification
+    };
+    
+    let db = StorageEngine::open(config)?;
+
+    // Store IoT sensor data or application state
+    db.put(b"sensor:device_01", b"{\"temp\": 24.5, \"status\": \"active\"}")?;
+
+    // Fast point lookup
+    if let Some(val) = db.get(b"sensor:device_01")? {
+        println!("Retrieved: {}", String::from_utf8(val)?);
+    }
+    Ok(())
+}
+```
+
+#### C. Where to Download Pre-Built Embedded Libraries:
+- **GitHub Releases:** Download pre-compiled static artifacts (`.tar.gz` / `.zip`), static MUSL libraries (`.a`), Android NDK shared libraries (`.so`), and Apple XCFrameworks (`.xcframework`) directly from [**GitHub Releases**](https://github.com/ictdothouse/faizdb/releases).
+- **Cargo / Rust Crate:** `cargo add faizdb-core` to compile natively into your binary.
+
+---
+
 ## 📚 Comprehensive Documentation
 
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.

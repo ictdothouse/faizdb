@@ -451,6 +451,7 @@
         <div class="sidebar-title">Getting Started</div>
         <a href="#intro" class="sidebar-link active">🌟 Overview & Vision</a>
         <a href="#advantages" class="sidebar-link">💎 Why FaizDB Beats Other DBs</a>
+        <a href="#embedded-mode" class="sidebar-link">🪶 Embedded & Edge IoT Mode</a>
         <a href="#use-cases" class="sidebar-link">🤖 AI, LLM & Gaming Use Cases</a>
         <a href="#features-overview" class="sidebar-link">✨ Core Features Matrix</a>
         <a href="#installation" class="sidebar-link">📦 1-Line Installation</a>
@@ -640,6 +641,151 @@
             </ul>
           </div>
         </div>
+      </section>
+
+      <!-- Section: Embedded & Edge IoT Mode (SQLite-Style) -->
+      <section id="embedded-mode">
+        <h2>🪶 Embedded & Edge IoT Mode (Zero-Dependency SQLite-Style In-Process DB)</h2>
+        <p class="lead">
+          FaizDB is engineered with a modular monorepo architecture. In addition to running as a 4-way multi-protocol server daemon, it can be embedded directly into your Rust, C/C++, Desktop, IoT, or Mobile applications — operating <strong>100% in-process with zero background daemons, zero network ports, and zero external runtime dependencies</strong>.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-icon">📦</div>
+            <div class="feature-title">Pure In-Process Storage</div>
+            <div class="feature-desc">Runs directly in application address space like SQLite. Sub-microsecond local reads and writes with zero TCP socket overhead.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">Ultra-Low RAM Footprint</div>
+            <div class="feature-desc">Configurable MemTable size from 2MB to 16MB — runs seamlessly on low-power IoT devices (Raspberry Pi Zero, Orange Pi, RISC-V).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">100% Memory-Safe Rust Core</div>
+            <div class="feature-desc">Unlike C-based SQLite, FaizDB provides memory safety guaranteed by Rust's Borrow-Checker with zero buffer overflow risks.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">Embedded AI Vector Search (HNSW)</div>
+            <div class="feature-desc">Execute on-device Local RAG, semantic similarity lookups, and knowledge graph queries completely offline without internet connectivity.</div>
+          </div>
+        </div>
+
+        <h3>1. Direct Rust In-Process Embedded Code Example</h3>
+        <p>Add <code>faizdb-core</code> to your <code>Cargo.toml</code>:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>cargo.toml</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>[dependencies]
+faizdb-core = { git = "https://github.com/ictdothouse/faizdb.git" }</code></pre>
+        </div>
+
+        <p>Initialize and use the storage engine in your application:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>rust in-process database</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>use faizdb_core::storage::engine::{StorageConfig, StorageEngine};
+use std::path::PathBuf;
+
+fn main() -> Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // 1. Open an embedded local database folder (or in-memory)
+    let config = StorageConfig {
+        data_dir: PathBuf::from("./embedded_db_data"),
+        memtable_size: 4 * 1024 * 1024, // 4MB RAM footprint for constrained IoT
+        sync_writes: false,
+        enable_wal: true, // Crash-safe WAL with CRC32 verification
+    };
+    
+    let db = StorageEngine::open(config)?;
+
+    // 2. Direct in-memory write (Sub-microsecond latency)
+    db.put(b"sensor:device_01", b"{\"temp\": 28.5, \"status\": \"nominal\"}")?;
+
+    // 3. Direct point lookup
+    if let Some(data) = db.get(b"sensor:device_01")? {
+        println!("Retrieved Data: {}", String::from_utf8(data)?);
+    }
+
+    Ok(())
+}</code></pre>
+        </div>
+
+        <h3>2. FaizDB Embedded vs SQLite Comparison</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>SQLite</th>
+              <th>🚀 FaizDB (Embedded Mode)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Memory Safety</strong></td>
+              <td>Written in C (Potential memory vulnerabilities)</td>
+              <td><strong>100% Safe Rust (Zero buffer overflows, 0 GC pauses)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>AI Vector Search (ANN)</strong></td>
+              <td>Requires third-party extensions (sqlite-vss)</td>
+              <td><strong>Native Built-in HNSW (Cosine, L2, Dot Product) &lt; 1ms</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Data Model Flexibility</strong></td>
+              <td>Strict relational tables / JSON columns</td>
+              <td><strong>Unified Document JSON + Vector + GraphRAG + Key-Value</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Concurrency</strong></td>
+              <td>Single-writer database lock</td>
+              <td><strong>Lock-free MemTable (Crossbeam SkipList) concurrent writes</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Crash Durability</strong></td>
+              <td>Rollback journal / WAL</td>
+              <td><strong>Sequential WAL with CRC32 integrity checksums</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>3. Official Download & Installation Channels</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Artifact / Package</th>
+              <th>Channel & Command</th>
+              <th>Target Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Rust Crate</strong></td>
+              <td><code>cargo add faizdb-core --git https://github.com/ictdothouse/faizdb.git</code></td>
+              <td>Embedded Desktop, CLI, & Edge IoT Apps</td>
+            </tr>
+            <tr>
+              <td><strong>Standalone Pre-Compiled Binaries</strong></td>
+              <td><a href="https://github.com/ictdothouse/faizdb/releases" target="_blank" style="color: var(--primary-dark); font-weight: 700;">GitHub Releases (.tar.gz / .zip)</a></td>
+              <td>Linux (x86_64 / ARM64), macOS (Apple Silicon / Intel), Windows</td>
+            </tr>
+            <tr>
+              <td><strong>Static MUSL IoT Binaries</strong></td>
+              <td><code>cross build --target aarch64-unknown-linux-musl --release</code></td>
+              <td>Raspberry Pi, Orange Pi, OpenWrt, Embedded Linux</td>
+            </tr>
+            <tr>
+              <td><strong>Mobile Frameworks (.so / .xcframework)</strong></td>
+              <td><code>cargo build --target aarch64-linux-android --release</code></td>
+              <td>Android NDK, iOS Static Framework, Flutter, React Native</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <!-- Section: Real-Time Gaming & High-Load Use Cases -->
