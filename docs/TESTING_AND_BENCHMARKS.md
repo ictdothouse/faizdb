@@ -125,3 +125,39 @@ To measure CPU cycles, memory allocations, and nanosecond latency distributions:
 cargo bench -p faizdb-core
 ```
 Benchmark source file: [`faizdb-core/benches/storage_bench.rs`](../faizdb-core/benches/storage_bench.rs).
+
+---
+
+## 6. Distributed Chaos & Fault Tolerance Testing
+
+Validate system resilience against mid-flight power failures, network partitions, and split-brain recovery:
+
+```bash
+# Run automated Chaos Engineering test suite:
+cargo test -p faizdb-server --test test_chaos_fault_tolerance
+```
+
+Test source file: [`faizdb-server/tests/test_chaos_fault_tolerance.rs`](../faizdb-server/tests/test_chaos_fault_tolerance.rs).
+
+---
+
+## 7. Official YCSB (Yahoo! Cloud Serving Benchmark) Runner
+
+Execute multi-threaded industry-standard workload suites against a live FaizDB instance:
+
+```bash
+# Workload A (50% Read / 50% Update):
+python scripts/ycsb_runner.py --workload A --ops 10000 --threads 8
+
+# Workload B (95% Read / 5% Update):
+python scripts/ycsb_runner.py --workload B --ops 10000 --threads 16
+
+# Workload C (100% Read Only):
+python scripts/ycsb_runner.py --workload C --ops 10000 --threads 16
+
+# Workload V (AI High-Dimensional Vector ANN Search):
+python scripts/ycsb_runner.py --workload V --ops 5000 --threads 8
+```
+
+For complete architecture details, see the [📖 Tier-1 Engineering & Architecture Reference Guide](TIER1_ENGINEERING_GUIDE.md).
+
