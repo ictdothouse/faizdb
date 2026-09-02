@@ -106,3 +106,24 @@ fn test_distance_scores_are_ordered_ascending() {
         );
     }
 }
+
+#[test]
+fn test_quantized_vector_search_integration() {
+    use faizdb_vector::quantization::QuantizationType;
+
+    let config = HnswConfig::new(4, DistanceMetric::Cosine)
+        .with_quantization(QuantizationType::Scalar8);
+    let mut index = HnswIndex::new(config);
+
+    index.insert("doc_a".to_string(), vec![1.0, 0.0, 0.0, 0.0]).unwrap();
+    index.insert("doc_b".to_string(), vec![0.0, 1.0, 0.0, 0.0]).unwrap();
+    index.insert("doc_c".to_string(), vec![0.9, 0.1, 0.0, 0.0]).unwrap();
+
+    let query = vec![0.98, 0.02, 0.0, 0.0];
+    let results = index.search(&query, 2);
+
+    assert_eq!(results.len(), 2);
+    // Nearest should be doc_a or doc_c
+    assert!(results[0].id == "doc_a" || results[0].id == "doc_c");
+}
+

@@ -10,6 +10,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::distance::DistanceMetric;
+use crate::quantization::{QuantizationType, QuantizedVector, ScalarQuantizer};
 
 /// Configuration for the HNSW index
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +19,8 @@ pub struct HnswConfig {
     pub dimensions: usize,
     /// Distance metric to compare vectors
     pub metric: DistanceMetric,
+    /// Vector quantization type (e.g. None or Scalar8 for 4x memory compression)
+    pub quantization: QuantizationType,
     /// Max outgoing connections per node at layers > 0 (default 16)
     pub m: usize,
     /// Max outgoing connections per node at layer 0 (default 32)
@@ -36,6 +39,7 @@ impl Default for HnswConfig {
         Self {
             dimensions: 128,
             metric: DistanceMetric::Cosine,
+            quantization: QuantizationType::None,
             m,
             m0: m * 2,
             ef_construction: 128,
@@ -51,12 +55,19 @@ impl HnswConfig {
         Self {
             dimensions,
             metric,
+            quantization: QuantizationType::None,
             m,
             m0: m * 2,
             ef_construction: 128,
             ef_search: 64,
             ml: 1.0 / (m as f64).ln(),
         }
+    }
+
+    /// Set quantization type (e.g. Scalar8 for 4x memory savings)
+    pub fn with_quantization(mut self, quantization: QuantizationType) -> Self {
+        self.quantization = quantization;
+        self
     }
 }
 
@@ -65,8 +76,10 @@ impl HnswConfig {
 pub struct HnswNode {
     /// External document/entity ID
     pub id: String,
-    /// Vector embedding
+    /// Uncompressed vector embedding (empty if quantized)
     pub vector: Vec<f32>,
+    /// Quantized 8-bit vector embedding (when Scalar8 is enabled)
+    pub quantized: Option<QuantizedVector>,
     /// Highest layer this node exists on
     pub level: usize,
     /// Neighbors at each layer: `neighbors[layer]` = list of node internal indices
@@ -168,10 +181,55 @@ impl HnswIndex {
         level.min(16) // Limit max levels to 16
     }
 
-    /// Compute distance between two nodes or vector and node
+    /// Compute distance between a float vector and a stored node
     #[inline]
     fn dist(&self, v: &[f32], node_idx: usize) -> f32 {
-        self.config.metric.calculate(v, &self.nodes[node_idx].vector)
+        let node = &self.nodes[node_idx];
+        if let Some(ref qv) = node.quantized {
+            ScalarQuantizer::asymmetric_distance(v, qv, self.config.metric)
+        } else {
+            self.config.metric.calculate(v, &node.vector)
+        }
+    }
+
+    /// Compute distance between two stored nodes
+    #[inline]
+    fn dist_nodes(&self, a_idx: usize, b_idx: usize) -> f32 {
+        let node_a = &self.nodes[a_idx];
+        let node_b = &self.nodes[b_idx];
+        if let Some(ref qv_b) = node_b.quantized {
+            if !node_a.vector.is_empty() {
+                ScalarQuantizer::asymmetric_distance(&node_a.vector, qv_b, self.config.metric)
+            } else if let Some(ref qv_a) = node_a.quantized {
+                let decomp_a = ScalarQuantizer::dequantize(qv_a);
+                ScalarQuantizer::asymmetric_distance(&decomp_a, qv_b, self.config.metric)
+            } else {
+                self.config.metric.calculate(&node_a.vector, &node_b.vector)
+            }
+        } else if !node_a.vector.is_empty() {
+            self.config.metric.calculate(&node_a.vector, &node_b.vector)
+        } else if let Some(ref qv_a) = node_a.quantized {
+            let decomp_a = ScalarQuantizer::dequantize(qv_a);
+            self.config.metric.calculate(&decomp_a, &node_b.vector)
+        } else {
+            0.0
+        }
+    }
+
+    /// Total RAM footprint in bytes of all nodes and graphs
+    pub fn memory_bytes(&self) -> usize {
+        let mut total = std::mem::size_of::<Self>();
+        for node in &self.nodes {
+            total += node.id.len();
+            total += node.vector.len() * std::mem::size_of::<f32>();
+            if let Some(ref qv) = node.quantized {
+                total += qv.memory_bytes();
+            }
+            for nbrs in &node.neighbors {
+                total += nbrs.len() * std::mem::size_of::<usize>();
+            }
+        }
+        total
     }
 
     /// Insert a vector with its external document ID
@@ -185,7 +243,7 @@ impl HnswIndex {
             ));
         }
 
-        // If ID already exists, remove/replace (for now reject duplicate)
+        // If ID already exists, reject duplicate
         if self.id_to_idx.contains_key(&id_str) {
             return Err(format!("Vector with id '{id_str}' already exists"));
         }
@@ -193,9 +251,18 @@ impl HnswIndex {
         let node_level = self.random_level();
         let new_idx = self.nodes.len();
 
+        let (stored_vector, stored_quantized) = match self.config.quantization {
+            QuantizationType::None => (vector.clone(), None),
+            QuantizationType::Scalar8 => {
+                let qv = ScalarQuantizer::quantize(&vector);
+                (Vec::new(), Some(qv))
+            }
+        };
+
         let new_node = HnswNode {
             id: id_str.clone(),
-            vector: vector.clone(),
+            vector: stored_vector,
+            quantized: stored_quantized,
             level: node_level,
             neighbors: vec![Vec::new(); node_level + 1],
         };
@@ -269,12 +336,18 @@ impl HnswIndex {
 
     /// Shrink a node's neighbor list to max_m using simple heuristic
     fn shrink_neighbors(&mut self, node_idx: usize, layer: usize, max_m: usize) {
-        let node_vec = self.nodes[node_idx].vector.clone();
         let neighbors = &self.nodes[node_idx].neighbors[layer];
 
         let mut scored: Vec<(usize, f32)> = neighbors
             .iter()
-            .map(|&nbr| (nbr, self.config.metric.calculate(&node_vec, &self.nodes[nbr].vector)))
+            .map(|&nbr| (nbr, self.dist_nodes(node_idx, nbr)))
+            .collect();
+
+        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+        scored.truncate(max_m);
+
+        self.nodes[node_idx].neighbors[layer] = scored.into_iter().map(|(idx, _)| idx).collect();
+    }
             .collect();
 
         scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
@@ -496,4 +569,63 @@ mod tests {
         assert_eq!(res.len(), 1);
         assert_eq!(res[0].id, "vec1");
     }
+
+    #[test]
+    fn test_quantized_hnsw_search_and_recall() {
+        let dim = 64;
+        let config = HnswConfig::new(dim, DistanceMetric::Cosine)
+            .with_quantization(QuantizationType::Scalar8);
+        let mut index = HnswIndex::new(config);
+
+        // Insert 50 random vectors
+        let mut rng = rand::thread_rng();
+        let mut vectors = Vec::new();
+        for i in 0..50 {
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            crate::distance::normalize_in_place(&mut v);
+            vectors.push(v.clone());
+            index.insert(format!("item_{i}"), v).unwrap();
+        }
+
+        assert_eq!(index.len(), 50);
+
+        // Query with vector 0 — the nearest item should be item_0 itself
+        let results = index.search(&vectors[0], 3);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].id, "item_0");
+        assert!(results[0].distance < 0.05, "Quantized distance to exact vector should be near 0");
+    }
+
+    #[test]
+    fn test_quantized_hnsw_memory_reduction() {
+        let dim = 128;
+        let count = 100;
+        let mut rng = rand::thread_rng();
+
+        // 1. Raw f32 index
+        let raw_config = HnswConfig::new(dim, DistanceMetric::Cosine);
+        let mut raw_index = HnswIndex::new(raw_config);
+
+        // 2. Quantized SQ8 index
+        let q_config = HnswConfig::new(dim, DistanceMetric::Cosine)
+            .with_quantization(QuantizationType::Scalar8);
+        let mut q_index = HnswIndex::new(q_config);
+
+        for i in 0..count {
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            crate::distance::normalize_in_place(&mut v);
+            raw_index.insert(format!("doc_{i}"), v.clone()).unwrap();
+            q_index.insert(format!("doc_{i}"), v).unwrap();
+        }
+
+        let raw_bytes = raw_index.memory_bytes();
+        let q_bytes = q_index.memory_bytes();
+
+        // Quantized index should consume significantly less RAM for stored vectors
+        assert!(
+            q_bytes < raw_bytes,
+            "Quantized index bytes ({q_bytes}) must be smaller than raw ({raw_bytes})"
+        );
+    }
 }
+

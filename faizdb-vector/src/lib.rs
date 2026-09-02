@@ -11,12 +11,14 @@
 
 pub mod distance;
 pub mod hnsw;
+pub mod quantization;
 
 pub use distance::{
     cosine_distance, dot_product_distance, euclidean_distance, manhattan_distance,
     normalize, normalize_in_place, squared_euclidean_distance, DistanceMetric,
 };
 pub use hnsw::{HnswConfig, HnswIndex, VectorSearchResult};
+pub use quantization::{QuantizationType, QuantizedVector, ScalarQuantizer};
 
 /// Database version
 pub fn version() -> &'static str {
