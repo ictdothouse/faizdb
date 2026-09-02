@@ -486,6 +486,7 @@
         <a href="#ttl-cache" class="sidebar-link">⏳ TTL & In-Memory Cache</a>
         <a href="#raft-cluster" class="sidebar-link">🌐 Raft Consensus & Shards</a>
         <a href="#geo-replication" class="sidebar-link">🌍 Multi-Region Geo CRDTs</a>
+        <a href="#bigdata-lakehouse" class="sidebar-link">🐘 Big Data, Parquet & Lakehouse</a>
         <a href="#backup-restore" class="sidebar-link">💾 Backup & Disaster Recovery</a>
       </div>
 
@@ -1693,6 +1694,143 @@ faizdb backup --output ./backups/faizdb_snapshot_2026.json
 # Restore Database Instantaneously:
 faizdb restore --input ./backups/faizdb_snapshot_2026.json</code></pre>
         </div>
+      </section>
+
+      <!-- Section: Big Data, Lakehouse & Columnar Engine -->
+      <section id="bigdata-lakehouse">
+        <h2>🐘 Big Data, Columnar Parquet &amp; Streaming Lakehouse Architecture</h2>
+        <p class="lead">
+          FaizDB scales seamlessly from single-node embedded IoT devices to <strong>Petabyte-Scale Big Data Lakehouse Workloads</strong>. Engineered with an LSM-Tree sequential storage core, vector quantization, Arrow-compatible columnar batching, multi-tier hot/cold storage, and distributed scatter-gather query aggregation.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card" style="border-top: 3px solid #8b5cf6;">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">Phase 1: Scalar Quantization (SQ8)</div>
+            <div class="feature-desc">Compresses 32-bit float vector embeddings into 8-bit integers (<code>u8</code>), delivering <strong>4x RAM reduction</strong> and enabling 100M+ vectors on cost-efficient hardware with &gt;98% recall accuracy.</div>
+          </div>
+          <div class="feature-card" style="border-top: 3px solid #0ea5e9;">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Phase 2: ColumnarBatch (Arrow/Parquet)</div>
+            <div class="feature-desc">Transposes row JSON into typed columnar arrays with zero-copy projections and SIMD-accelerated column aggregations (DuckDB, Apache Spark, Polars, and Pandas ready).</div>
+          </div>
+          <div class="feature-card" style="border-top: 3px solid #f59e0b;">
+            <div class="feature-icon">💾</div>
+            <div class="feature-title">Phase 3: Automated Tiered Storage</div>
+            <div class="feature-desc">Separates active Hot operational data on NVMe SSDs from Cold historical data on S3/MinIO/GCS object storage with automatic age/capacity lifecycle migration.</div>
+          </div>
+          <div class="feature-card" style="border-top: 3px solid #10b981;">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">Phase 4: Distributed Scatter-Gather &amp; CDC</div>
+            <div class="feature-desc">Executes parallel queries across 16,384 virtual hash slots with filter pushdowns, while emitting Debezium/Kafka-compatible Change Data Capture event streams into Lakehouses.</div>
+          </div>
+        </div>
+
+        <h3>1. Vector Quantization (SQ8) Code Example</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>rust — 4x vector memory reduction</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>use faizdb_vector::{HnswConfig, HnswIndex, DistanceMetric, QuantizationType};
+
+// 1. Initialize HNSW with Scalar8 Quantization enabled
+let config = HnswConfig::new(1536, DistanceMetric::Cosine)
+    .with_quantization(QuantizationType::Scalar8);
+let mut index = HnswIndex::new(config);
+
+// 2. Insert 1536-dimensional embeddings (Compressed from 6.1KB -&gt; 1.5KB per vector)
+index.insert("article_01", embedding_vec)?;
+
+// 3. Ultra-fast Asymmetric Distance Search (&lt; 1ms)
+let hits = index.search(&amp;query_embedding, 5);</code></pre>
+        </div>
+
+        <h3>2. Zero-Copy Columnar Analytics (Arrow / DuckDB Interop)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>rust — columnar batch analytics</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>use faizdb_core::storage::columnar::ColumnarBatch;
+
+// 1. Transpose JSON documents into Arrow-compatible contiguous columns
+let batch = ColumnarBatch::from_json_documents(&amp;documents)?;
+
+// 2. SIMD-Accelerated Columnar Sum without row loops
+let total_volume = batch.sum_f64("trade_volume").unwrap();
+
+// 3. Zero-Copy Column Projection (extract only 'ticker' &amp; 'price')
+let projected = batch.project(&amp;["ticker", "price"])?;
+let csv_export = projected.to_csv();</code></pre>
+        </div>
+
+        <h3>3. Real-Time Change Data Capture (CDC) for Kafka &amp; Lakehouses</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>json — debezium / kafka cdc event stream</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>{
+  "payload": {
+    "op": "c",
+    "ts_ms": 1788339200000,
+    "source": {
+      "version": "0.1.0",
+      "connector": "faizdb-cdc",
+      "name": "faizdb_cluster",
+      "db": "production",
+      "collection": "financial_transactions",
+      "lsn": 10485760
+    },
+    "before": null,
+    "after": {
+      "tx_id": "tx_998822",
+      "amount": 450000.0,
+      "currency": "USD",
+      "status": "cleared"
+    }
+  }
+}</code></pre>
+        </div>
+
+        <h3>4. Big Data Performance Comparison Matrix</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Architecture Metric</th>
+              <th>Legacy Relational (Postgres / MySQL)</th>
+              <th>NoSQL / Big Data (Cassandra / Mongo)</th>
+              <th>🚀 FaizDB Big Data Engine</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Storage Engine</strong></td>
+              <td>B-Tree (Random I/O Bottleneck)</td>
+              <td>LSM-Tree (Cassandra) / B-Tree (Mongo)</td>
+              <td><strong>LSM-Tree with Streaming k-Way BinaryHeap Compaction</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Vector Memory Scale</strong></td>
+              <td>pgvector: Uncompressed (Heavy RAM)</td>
+              <td>Atlas: Expensive Dedicated Tier</td>
+              <td><strong>Native SQ8 Quantization (4x Memory Reduction, 100M+ Vectors)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Lakehouse Interop</strong></td>
+              <td>Slow row-by-row SELECT</td>
+              <td>Requires Spark Mongo Connector</td>
+              <td><strong>Native ColumnarBatch, Arrow Slicing &amp; Debezium Kafka CDC</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Tiered Storage Cost</strong></td>
+              <td>All data on expensive hot disks</td>
+              <td>Manual archival scripts</td>
+              <td><strong>Automated Hot NVMe to Cold S3/GCS Object Lifecycle Migration</strong></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <!-- Section: Python SDK -->

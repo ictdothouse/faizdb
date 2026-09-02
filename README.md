@@ -327,6 +327,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
+### 7. 🐘 Petabyte-Scale Big Data, Columnar Engine & Streaming Lakehouse
+
+FaizDB includes an enterprise-grade Big Data engine capable of scaling from constrained IoT devices to Petabyte-scale Data Lakehouses:
+
+```rust
+// 1. Vector Quantization (SQ8) — 4x RAM reduction for 100M+ AI embeddings
+use faizdb_vector::{HnswConfig, HnswIndex, DistanceMetric, QuantizationType};
+
+let config = HnswConfig::new(1536, DistanceMetric::Cosine)
+    .with_quantization(QuantizationType::Scalar8);
+let mut index = HnswIndex::new(config);
+index.insert("article_01", embedding_vec)?;
+
+// 2. Zero-Copy ColumnarBatch (Arrow / Parquet / DuckDB / Spark Interoperability)
+use faizdb_core::storage::columnar::ColumnarBatch;
+
+let batch = ColumnarBatch::from_json_documents(&documents)?;
+let total_volume = batch.sum_f64("trade_volume").unwrap(); // SIMD Columnar Scan
+let projected = batch.project(&["ticker", "price"])?; // Zero-Copy Column Slice
+
+// 3. Automated Tiered Storage (Hot NVMe + Cold S3/GCS Object Storage)
+use faizdb_core::storage::tiered::{TieredStorageConfig, TieredStorageManager};
+
+let mut tier_mgr = TieredStorageManager::new(TieredStorageConfig::default());
+tier_mgr.evaluate_migration_candidates(); // Auto-migrates cold SSTables to S3
+
+// 4. Distributed Scatter-Gather & Debezium / Kafka CDC Streaming
+use faizdb_query::distributed::DistributedQueryCoordinator;
+use faizdb_server::stream::cdc::CdcEnvelope;
+
+let cdc_event = CdcEnvelope::new_create("orders", "ord_99", order_doc, 1048576);
+let kafka_json = cdc_event.to_kafka_message()?;
+```
+
+---
+
 ## 📚 Comprehensive Documentation
 
 * [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
