@@ -39,10 +39,23 @@ pub enum PipelineStage {
         path: String,
         preserve_null_and_empty_arrays: bool,
     },
+    Lookup {
+        from: String,
+        local_field: String,
+        foreign_field: String,
+        as_field: String,
+    },
 }
 
-/// Execute a sequence of pipeline stages over input documents
-pub fn execute_pipeline(mut docs: Vec<Document>, stages: &[PipelineStage]) -> Vec<Document> {
+/// Execute a sequence of pipeline stages over input documents with a foreign collection resolver
+pub fn execute_pipeline_with_collections<F>(
+    mut docs: Vec<Document>,
+    stages: &[PipelineStage],
+    get_collection_docs: F,
+) -> Vec<Document>
+where
+    F: Fn(&str) -> Vec<Document>,
+{
     for stage in stages {
         docs = match stage {
             PipelineStage::Match(filter) => docs
@@ -135,10 +148,42 @@ pub fn execute_pipeline(mut docs: Vec<Document>, stages: &[PipelineStage]) -> Ve
                 }
                 unwound
             }
+
+            PipelineStage::Lookup {
+                from,
+                local_field,
+                foreign_field,
+                as_field,
+            } => {
+                let foreign_docs = get_collection_docs(from);
+                let clean_local = local_field.strip_prefix('$').unwrap_or(local_field);
+                let clean_foreign = foreign_field.strip_prefix('$').unwrap_or(foreign_field);
+
+                for doc in &mut docs {
+                    let local_val = doc.get_nested(clean_local).cloned();
+                    let mut matched = Vec::new();
+                    if let Some(ref l_val) = local_val {
+                        for f_doc in &foreign_docs {
+                            if let Some(f_val) = f_doc.get_nested(clean_foreign) {
+                                if f_val == l_val {
+                                    matched.push(Value::Object(f_doc.fields.clone()));
+                                }
+                            }
+                        }
+                    }
+                    doc.set(as_field.clone(), Value::Array(matched));
+                }
+                docs
+            }
         };
     }
 
     docs
+}
+
+/// Execute a sequence of pipeline stages over input documents
+pub fn execute_pipeline(docs: Vec<Document>, stages: &[PipelineStage]) -> Vec<Document> {
+    execute_pipeline_with_collections(docs, stages, |_| Vec::new())
 }
 
 fn execute_group_stage(
@@ -336,5 +381,61 @@ mod tests {
         ];
         let res_preserve = execute_pipeline(docs, &stages_preserve);
         assert_eq!(res_preserve.len(), 4);
+    }
+
+    #[test]
+    fn test_lookup_pipeline_stage() {
+        let mut user1 = Document::new();
+        user1.set("_id", "u1");
+        user1.set("name", "Faiz");
+
+        let mut user2 = Document::new();
+        user2.set("_id", "u2");
+        user2.set("name", "Elon");
+
+        let mut order1 = Document::new();
+        order1.set("_id", "o1");
+        order1.set("user_id", "u1");
+        order1.set("total", 100.0);
+
+        let mut order2 = Document::new();
+        order2.set("_id", "o2");
+        order2.set("user_id", "u1");
+        order2.set("total", 250.0);
+
+        let users = vec![user1, user2];
+        let orders = vec![order1, order2];
+
+        let stages = vec![
+            PipelineStage::Lookup {
+                from: "orders".into(),
+                local_field: "_id".into(),
+                foreign_field: "user_id".into(),
+                as_field: "user_orders".into(),
+            }
+        ];
+
+        let res = execute_pipeline_with_collections(users, &stages, |from_col| {
+            if from_col == "orders" {
+                orders.clone()
+            } else {
+                vec![]
+            }
+        });
+
+        assert_eq!(res.len(), 2);
+        // user1 ("Faiz") should have 2 orders
+        if let Some(Value::Array(items)) = res[0].get("user_orders") {
+            assert_eq!(items.len(), 2);
+        } else {
+            panic!("Expected array of orders for user1");
+        }
+
+        // user2 ("Elon") should have 0 orders
+        if let Some(Value::Array(items)) = res[1].get("user_orders") {
+            assert_eq!(items.len(), 0);
+        } else {
+            panic!("Expected empty array of orders for user2");
+        }
     }
 }

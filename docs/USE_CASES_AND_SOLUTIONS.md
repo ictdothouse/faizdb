@@ -147,7 +147,7 @@ In modern gaming architectures (Unreal Engine 5, Unity, Godot, Discord Bots, Web
 
 | FaizDB Architectural Feature | Traditional Database Pain Point | How FaizDB Solves Extreme Game Loads |
 | :--- | :--- | :--- |
-| **Lock-Free MemTable (`crossbeam-skiplist`)** | Servers freeze during concurrent player score updates (Mutex lock contention). | Thousands of game worker threads mutate player states concurrently **without mutex locking** (320,000+ ops/sec). |
+| **Lock-Free MemTable (`crossbeam-skiplist`)** | Servers freeze during concurrent player score updates (Mutex lock contention). | Thousands of game worker threads mutate player states concurrently in-memory **without mutex locking** (323,424 ops/sec in-memory Criterion microbench). |
 | **gRPC Binary Protocol (Port 50051)** | Standard JSON is too heavy for 60 FPS low-latency telemetry updates. | Supports compact **HTTP/2 Protocol Buffers** with sub-millisecond response times (**< 1ms**). |
 | **WebSocket Change Streams (Port 27018)** | Clients must poll servers repeatedly for leaderboard positions (High server CPU load). | Match scores and lobby events are **instantly pushed** to all room participants in real-time. |
 | **High-Speed TTL In-Memory Engine** | Server RAM overflows with abandoned matchmaking lobbies and stale room sessions. | Lobbies and temporary session tokens expire automatically via $O(\log N)$ min-heap eviction. |

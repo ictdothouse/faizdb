@@ -59,6 +59,31 @@ pub fn parse_pipeline(json: &JsonValue) -> Result<Vec<PipelineStage>, String> {
                 _ => return Err("Invalid $unwind expression: expected string or object".to_string()),
             };
             stages.push(PipelineStage::Unwind { path, preserve_null_and_empty_arrays });
+        } else if let Some(lookup_val) = obj.get("$lookup") {
+            let lookup_obj = lookup_val.as_object().ok_or("$lookup stage must be a JSON object")?;
+            let from = lookup_obj.get("from")
+                .and_then(|v| v.as_str())
+                .ok_or("$lookup requires 'from' string field")?
+                .to_string();
+            let local_field = lookup_obj.get("localField")
+                .and_then(|v| v.as_str())
+                .ok_or("$lookup requires 'localField' string field")?
+                .to_string();
+            let foreign_field = lookup_obj.get("foreignField")
+                .and_then(|v| v.as_str())
+                .ok_or("$lookup requires 'foreignField' string field")?
+                .to_string();
+            let as_field = lookup_obj.get("as")
+                .and_then(|v| v.as_str())
+                .ok_or("$lookup requires 'as' string field")?
+                .to_string();
+
+            stages.push(PipelineStage::Lookup {
+                from,
+                local_field,
+                foreign_field,
+                as_field,
+            });
         }
     }
 

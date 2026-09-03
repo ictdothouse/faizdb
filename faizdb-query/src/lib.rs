@@ -10,7 +10,7 @@ pub mod executor;
 pub mod distributed;
 pub mod optimizer;
 
-pub use aggregation::{execute_pipeline, parse_pipeline, PipelineStage, Accumulator};
+pub use aggregation::{execute_pipeline, execute_pipeline_with_collections, parse_pipeline, PipelineStage, Accumulator};
 pub use ast::{FilterExpr, Operator, Statement, VectorSearchClause, TraverseClause};
 pub use parser::parse_query;
 pub use executor::{DatabaseContext, QueryResult};

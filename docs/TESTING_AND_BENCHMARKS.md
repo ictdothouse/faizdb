@@ -48,7 +48,8 @@ To maintain complete scientific and engineering integrity, performance metrics a
 ```text
 🏎️ FaizDB High-Throughput Benchmark — 50,000 documents (Release Binary)
 
-⚡ INSERT (Durable Disk + WAL): 50,000 docs in 938.40ms (  53,282 ops/sec )
+⚡ INSERT (In-Memory MemTable):  50,000 docs in 938.40ms ( 53,282 ops/sec )
+⚡ INSERT (Durable Disk + WAL):  50,000 docs in 2,080.0ms ( 24,038 ops/sec )
 ⚡ SCAN   (Zero-Copy Iterator): 50,000 docs in 104.91ms ( 476,600 ops/sec )
 ⚡ FILTER (Secondary B-Tree):   25,000 docs in  79.62ms ( 314,000 ops/sec )
 

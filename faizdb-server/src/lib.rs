@@ -48,13 +48,47 @@ pub async fn run_multi_protocol_server(
     });
 
     let http_router = create_router(state);
-    let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
-    tracing::info!("🔥 FaizDB REST/HTTP & WebSocket Change Streams running on http://{http_addr}");
+    let http_addr_str = http_addr.to_string();
+    let tls_config_opt = get_server_tls_config().await;
+
+    // 1. Run HTTP & WebSocket API with graceful shutdown on CTRL+C / SIGTERM
+    // Determine TLS mode before binding to prevent EADDRINUSE port collision
+    let http_handle = if let Some(tls_config) = tls_config_opt {
+        let socket_addr: std::net::SocketAddr = http_addr_str
+            .parse()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Invalid HTTP socket address '{http_addr_str}': {e}")))?;
+        let handle = axum_server::Handle::new();
+        let shutdown_handle = handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal().await;
+            shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
+        });
+        tracing::info!("🔒 FaizDB REST/HTTP & WebSocket Change Streams running with TLS on https://{http_addr_str}");
+        tokio::spawn(async move {
+            if let Err(e) = axum_server::bind_rustls(socket_addr, tls_config)
+                .handle(handle)
+                .serve(http_router.into_make_service_with_connect_info::<std::net::SocketAddr>())
+                .await
+            {
+                tracing::error!("TLS HTTP/WS server error: {e}");
+            }
+        })
+    } else {
+        let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
+        tracing::info!("🔥 FaizDB REST/HTTP & WebSocket Change Streams running on http://{http_addr}");
+        let service = http_router.into_make_service_with_connect_info::<std::net::SocketAddr>();
+        tokio::spawn(async move {
+            axum::serve(http_listener, service)
+                .with_graceful_shutdown(shutdown_signal())
+                .await
+                .unwrap_or_else(|e| tracing::error!("HTTP/WS server error: {e}"));
+        })
+    };
 
     let wire_addr_str = wire_addr.to_string();
     let db_for_mongo = db.clone();
 
-    // 1. Spawn MongoDB Wire Protocol server (Port 27017)
+    // 2. Spawn MongoDB Wire Protocol server (Port 27017)
     let mongo_handle = tokio::spawn(async move {
         if let Err(e) = run_wire_server(&wire_addr_str, db_for_mongo).await {
             tracing::error!("MongoDB Wire server error: {e}");
@@ -64,7 +98,7 @@ pub async fn run_multi_protocol_server(
     let pg_addr_str = pg_addr.to_string();
     let db_for_pg = db.clone();
 
-    // 2. Spawn PostgreSQL Wire Protocol server (Port 5432)
+    // 3. Spawn PostgreSQL Wire Protocol server (Port 5432)
     let pg_handle = tokio::spawn(async move {
         if let Err(e) = run_postgres_server(&pg_addr_str, db_for_pg).await {
             tracing::error!("PostgreSQL Wire server error: {e}");
@@ -74,36 +108,10 @@ pub async fn run_multi_protocol_server(
     let grpc_addr_str = grpc_addr.to_string();
     let db_for_grpc = db.clone();
 
-    // 3. Spawn gRPC / Protocol Buffers server (Port 50051)
+    // 4. Spawn gRPC / Protocol Buffers server (Port 50051)
     let grpc_handle = tokio::spawn(async move {
         if let Err(e) = run_grpc_server(&grpc_addr_str, db_for_grpc).await {
             tracing::error!("gRPC server error: {e}");
-        }
-    });
-
-    // 4. Run HTTP & WebSocket API with graceful shutdown on CTRL+C / SIGTERM
-    let http_addr_str = http_addr.to_string();
-    let http_handle = tokio::spawn(async move {
-        if let Some(tls_config) = get_server_tls_config().await {
-            let handle = axum_server::Handle::new();
-            let shutdown_handle = handle.clone();
-            tokio::spawn(async move {
-                shutdown_signal().await;
-                shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
-            });
-            tracing::info!("🔒 FaizDB HTTP/WS Server running with TLS on https://{http_addr_str}");
-            if let Ok(socket_addr) = http_addr_str.parse::<std::net::SocketAddr>() {
-                let _ = axum_server::bind_rustls(socket_addr, tls_config)
-                    .handle(handle)
-                    .serve(http_router.into_make_service_with_connect_info::<std::net::SocketAddr>())
-                    .await;
-            }
-        } else {
-            let service = http_router.into_make_service_with_connect_info::<std::net::SocketAddr>();
-            axum::serve(http_listener, service)
-                .with_graceful_shutdown(shutdown_signal())
-                .await
-                .unwrap_or_else(|e| tracing::error!("HTTP/WS server error: {e}"));
         }
     });
 

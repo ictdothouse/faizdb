@@ -101,7 +101,7 @@ Modern development teams are plagued by **"Architecture Sprawl"**—where an eng
 * **Tech Stack:** Go/C++, distributed SQL engine with Multi-Raft consensus, serializable transactions, and global active-active replication.
 * **Strengths:** Extreme ACID reliability for financial transactions and automatic horizontal scaling.
 * **Where FaizDB Wins:**
-  - **Lightweight Footprint:** CockroachDB requires high memory and CPU allocations for its Go runtime. FaizDB starts in milliseconds with <40MB idle RAM.
+  - **Lightweight Footprint:** CockroachDB requires high memory and CPU allocations for its Go runtime (typically 1–2 GB+ minimum). FaizDB starts in milliseconds with just 23.28 MB resident RAM (`VmRSS` measured via Linux `/proc` with all 4 multi-protocol gateways active).
   - **Multi-Model & AI-Native:** CockroachDB is strictly relational SQL without native Vector HNSW or Knowledge Graph capabilities.
 
 ---

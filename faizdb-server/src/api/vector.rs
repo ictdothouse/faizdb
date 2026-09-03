@@ -102,26 +102,13 @@ pub async fn insert_vector(
     let index_lock = match state.db.vector_indexes().get(&payload.index_name) {
         Some(idx) => idx.clone(),
         None => {
-            // Auto-create index if missing using the vector's dimension
-            let config = HnswConfig {
-                dimensions: payload.vector.len(),
-                metric: DistanceMetric::Cosine,
-                ..Default::default()
-            };
-            if let Some(storage) = state.db.storage() {
-                let key = format!("vec:meta:{}", payload.index_name);
-                if let Ok(val) = serde_json::to_vec(&config) {
-                    if let Err(e) = storage.put(key.as_bytes(), &val) {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::err(format!("Failed to persist auto-created vector index metadata: {e}"))),
-                        );
-                    }
-                }
-            }
-            let new_idx = Arc::new(parking_lot::RwLock::new(HnswIndex::new(config)));
-            state.db.vector_indexes().insert(payload.index_name.clone(), new_idx.clone());
-            new_idx
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::err(format!(
+                    "Vector index '{}' does not exist. Create it first using POST /v1/vector/index",
+                    payload.index_name
+                ))),
+            );
         }
     };
 
@@ -192,7 +179,9 @@ pub async fn insert_vector(
         Err(e) => {
             // Compensating removal: clean up persisted record to prevent orphaned disk state
             if let Some(storage) = state.db.storage() {
-                let _ = storage.delete(storage_key.as_bytes());
+                if let Err(del_err) = storage.delete(storage_key.as_bytes()) {
+                    tracing::warn!("Compensating removal failed for key '{}': {del_err}", storage_key);
+                }
             }
             (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Failed to insert vector: {e}"))))
         }

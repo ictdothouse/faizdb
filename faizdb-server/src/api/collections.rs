@@ -65,7 +65,17 @@ pub async fn insert_document(
             }
         });
 
-    let doc = match Document::from_json_value(doc_val) {
+    let actual_doc_val = if let Some(inner) = doc_val.get("document").cloned() {
+        if inner.is_object() {
+            inner
+        } else {
+            doc_val
+        }
+    } else {
+        doc_val
+    };
+
+    let doc = match Document::from_json_value(actual_doc_val) {
         Some(d) => d,
         None => return (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Expected JSON object"))),
     };
@@ -271,7 +281,12 @@ pub async fn aggregate_collection(
     let col = state.db.get_or_create_collection(&name);
     let all_docs = col.find_all(None);
     match faizdb_query::parse_pipeline(&payload.pipeline) {
-        Ok(stages) => (StatusCode::OK, Json(ApiResponse::ok(faizdb_query::execute_pipeline(all_docs, &stages)))),
+        Ok(stages) => {
+            let res = faizdb_query::execute_pipeline_with_collections(all_docs, &stages, |from_col| {
+                state.db.get_or_create_collection(from_col).find_all(None)
+            });
+            (StatusCode::OK, Json(ApiResponse::ok(res)))
+        }
         Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Aggregation error: {e}")))),
     }
 }
@@ -327,91 +342,88 @@ pub async fn transaction_commit(
 ) -> impl IntoResponse {
     let txn_id = body.and_then(|b| b.0.txn_id);
     if let Some(id) = txn_id {
-        if let Some(txn_entry) = state.db.active_txns().get(&id) {
-            let mut txn = txn_entry.value().lock();
+        // Atomically claim and remove transaction from active_txns map upfront.
+        // This guarantees only one commit/rollback request obtains the transaction
+        // and avoids holding any DashMap read-guards across operations.
+        let txn_mutex = match state.db.active_txns().remove(&id) {
+            Some((_, m)) => m,
+            None => return (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed"))),
+        };
+        let mut txn = txn_mutex.lock();
 
-            // 1. Atomically claim the transaction by transitioning from Active to Committing
-            if let Err(e) = txn.try_set_committing() {
-                return (
-                    StatusCode::CONFLICT,
-                    Json(ApiResponse::err(format!("Transaction cannot be committed: {e}"))),
-                );
-            }
+        // 1. Atomically claim the transaction by transitioning from Active to Committing
+        if let Err(e) = txn.try_set_committing() {
+            return (
+                StatusCode::CONFLICT,
+                Json(ApiResponse::err(format!("Transaction cannot be committed: {e}"))),
+            );
+        }
 
-            // 2. Validate snapshot isolation and commit atomically in TransactionManager FIRST
-            // This guarantees rejected writes are never published to durable storage!
-            match state.db.tx_manager().commit(&mut txn) {
-                Ok(()) => {
-                    let writes = txn.write_buffer().clone();
+        // 2. Validate snapshot isolation and commit atomically in TransactionManager FIRST
+        // This guarantees rejected writes are never published to durable storage!
+        match state.db.tx_manager().commit(&mut txn) {
+            Ok(()) => {
+                let writes = txn.write_buffer().clone();
 
-                    // 3. Validation succeeded: persist staged writes to durable disk storage
-                    if let Some(storage) = state.db.storage() {
-                        for (key, write) in &writes {
-                            let res = match write {
-                                faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
-                                    storage.put(key, val.as_slice())
-                                }
-                                faizdb_core::transaction::mvcc::TxnWrite::Delete => {
-                                    storage.delete(key)
-                                }
-                            };
-                            if let Err(e) = res {
-                                return (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(ApiResponse::err(format!(
-                                        "Transaction commit failed to persist write for key '{}': {e}",
-                                        String::from_utf8_lossy(key)
-                                    ))),
-                                );
+                // 3. Validation succeeded: persist staged writes to durable disk storage
+                if let Some(storage) = state.db.storage() {
+                    for (key, write) in &writes {
+                        let res = match write {
+                            faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
+                                storage.put(key, val.as_slice())
                             }
+                            faizdb_core::transaction::mvcc::TxnWrite::Delete => {
+                                storage.delete(key)
+                            }
+                        };
+                        if let Err(e) = res {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::err(format!(
+                                    "Transaction commit failed to persist write for key '{}': {e}",
+                                    String::from_utf8_lossy(key)
+                                ))),
+                            );
                         }
                     }
+                }
 
-                    // 4. Apply staged mutations into in-memory collections and publish change stream events
-                    for (key_bytes, write) in &writes {
-                        if let Ok(key_str) = std::str::from_utf8(key_bytes) {
-                            if key_str.starts_with("doc:") {
-                                let parts: Vec<&str> = key_str.splitn(3, ':').collect();
-                                if parts.len() == 3 {
-                                    let col_name = parts[1];
-                                    let doc_id = parts[2];
-                                    let col = state.db.get_or_create_collection(col_name);
-                                    match write {
-                                        faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
-                                            if let Ok(doc) = serde_json::from_slice::<Document>(val) {
-                                                col.load_document(doc.clone());
-                                                state.db.change_stream_bus().publish(ChangeEvent::insert(col_name, doc));
-                                            }
+                // 4. Apply staged mutations into in-memory collections and publish change stream events
+                for (key_bytes, write) in &writes {
+                    if let Ok(key_str) = std::str::from_utf8(key_bytes) {
+                        if key_str.starts_with("doc:") {
+                            let parts: Vec<&str> = key_str.splitn(3, ':').collect();
+                            if parts.len() == 3 {
+                                let col_name = parts[1];
+                                let doc_id = parts[2];
+                                let col = state.db.get_or_create_collection(col_name);
+                                match write {
+                                    faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
+                                        if let Ok(doc) = serde_json::from_slice::<Document>(val) {
+                                            col.load_document(doc.clone());
+                                            state.db.change_stream_bus().publish(ChangeEvent::insert(col_name, doc));
                                         }
-                                        faizdb_core::transaction::mvcc::TxnWrite::Delete => {
-                                            let _ = col.delete_by_id(doc_id);
-                                            state.db.change_stream_bus().publish(ChangeEvent::delete(col_name, doc_id));
-                                        }
+                                    }
+                                    faizdb_core::transaction::mvcc::TxnWrite::Delete => {
+                                        let _ = col.delete_by_id(doc_id);
+                                        state.db.change_stream_bus().publish(ChangeEvent::delete(col_name, doc_id));
                                     }
                                 }
                             }
                         }
                     }
-
-                    drop(txn);
-                    state.db.active_txns().remove(&id);
-
-                    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-                        "txn_id": id,
-                        "status": "Committed",
-                        "staged_writes_count": writes.len(),
-                        "message": "All staged mutations verified with snapshot isolation and written to WAL",
-                    }))))
                 }
-                Err(e) => {
-                    // Conflict or validation failure: remove from active transactions
-                    drop(txn);
-                    state.db.active_txns().remove(&id);
-                    (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Transaction commit conflict: {e}"))))
-                }
+
+                (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                    "txn_id": id,
+                    "status": "Committed",
+                    "staged_writes_count": writes.len(),
+                    "message": "All staged mutations verified with snapshot isolation and written to WAL",
+                }))))
             }
-        } else {
-            (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed")))
+            Err(e) => {
+                (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Transaction commit conflict: {e}"))))
+            }
         }
     } else {
         (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
@@ -427,25 +439,23 @@ pub async fn transaction_rollback(
 ) -> impl IntoResponse {
     let txn_id = body.and_then(|b| b.0.txn_id);
     if let Some(id) = txn_id {
-        if let Some(txn_entry) = state.db.active_txns().get(&id) {
-            let mut txn = txn_entry.value().lock();
-            match txn.try_abort() {
-                Ok(()) => {
-                    state.db.tx_manager().abort(&mut txn);
-                    drop(txn);
-                    state.db.active_txns().remove(&id);
-                    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-                        "txn_id": id,
-                        "status": "Aborted",
-                        "message": "Transaction rolled back, write-buffer discarded",
-                    }))))
-                }
-                Err(e) => {
-                    (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Cannot abort transaction: {e}"))))
-                }
+        let txn_mutex = match state.db.active_txns().remove(&id) {
+            Some((_, m)) => m,
+            None => return (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed"))),
+        };
+        let mut txn = txn_mutex.lock();
+        match txn.try_abort() {
+            Ok(()) => {
+                state.db.tx_manager().abort(&mut txn);
+                (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                    "txn_id": id,
+                    "status": "Aborted",
+                    "message": "Transaction rolled back, write-buffer discarded",
+                }))))
             }
-        } else {
-            (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed")))
+            Err(e) => {
+                (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Cannot abort transaction: {e}"))))
+            }
         }
     } else {
         (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({

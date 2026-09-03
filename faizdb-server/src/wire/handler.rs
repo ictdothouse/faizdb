@@ -288,7 +288,9 @@ fn handle_aggregate(
             .collect();
 
         match faizdb_query::parse_pipeline(&serde_json::Value::Array(json_arr)) {
-            Ok(stages) => faizdb_query::execute_pipeline(all_docs, &stages),
+            Ok(stages) => faizdb_query::execute_pipeline_with_collections(all_docs, &stages, |from_col| {
+                db.get_or_create_collection(from_col).find_all(None)
+            }),
             Err(e) => {
                 tracing::warn!("Aggregation pipeline parse error: {e}");
                 all_docs

@@ -65,6 +65,9 @@ enum Commands {
         /// Number of documents to insert
         #[arg(short, long, default_value = "10000")]
         count: usize,
+        /// Optional storage directory to benchmark durable disk writes + WAL (defaults to in-memory)
+        #[arg(short, long)]
+        durable: Option<String>,
     },
 
     /// Run AI Vector Similarity Search demo
@@ -124,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &grpc_addr, &http_addr).await?;
         }
         Some(Commands::Info) => print_info(),
-        Some(Commands::Benchmark { count }) => run_benchmark(count),
+        Some(Commands::Benchmark { count, durable }) => run_benchmark(count, durable),
         Some(Commands::VectorDemo) => run_vector_demo(),
         Some(Commands::GraphDemo) => run_graph_demo(),
         Some(Commands::Backup { output }) => run_backup_cli(&output),
@@ -279,10 +282,28 @@ FaizDB Multi-Dialect Query Examples:
 "#);
 }
 
-fn run_benchmark(count: usize) {
-    println!("🏎️ FaizDB High-Throughput Benchmark — {} documents\n", count);
+fn run_benchmark(count: usize, durable_path: Option<String>) {
+    let durable_dir = durable_path.or_else(|| std::env::var("FAIZDB_DATA_DIR").ok());
+    let (db, is_durable) = if let Some(ref path) = durable_dir {
+        match DatabaseContext::with_storage_dir(path) {
+            Ok(ctx) => (ctx, true),
+            Err(e) => {
+                eprintln!("⚠️ Failed to initialize storage engine at '{path}': {e}. Falling back to in-memory.");
+                (DatabaseContext::new(), false)
+            }
+        }
+    } else {
+        (DatabaseContext::new(), false)
+    };
 
-    let db = DatabaseContext::new();
+    if is_durable {
+        println!("🏎️ FaizDB High-Throughput Benchmark — {} documents [Durable Disk + WAL]\n", count);
+        println!("📂 Storage Directory: {}\n", durable_dir.as_deref().unwrap_or(""));
+    } else {
+        println!("🏎️ FaizDB High-Throughput Benchmark — {} documents [In-Memory MemTable]\n", count);
+        println!("ℹ️  Running in-memory MemTable benchmark. Use --durable <path> or set FAIZDB_DATA_DIR to benchmark durable disk + WAL writes.\n");
+    }
+
     let col = db.get_or_create_collection("bench");
 
     // 1. Bulk Insertion Benchmark
@@ -293,12 +314,25 @@ fn run_benchmark(count: usize) {
             .field("title", Value::String(format!("FaizDB Record #{i}")))
             .field("score", Value::Float((i % 100) as f64 * 1.5))
             .field("active", Value::Boolean(i % 2 == 0));
-        let _ = col.insert(doc);
+        let doc_id = doc.id.clone();
+        let _ = col.insert(doc.clone());
+        if let Some(storage) = db.storage() {
+            let key = format!("doc:bench:{doc_id}");
+            if let Ok(val) = serde_json::to_vec(&doc) {
+                if let Err(e) = storage.put(key.as_bytes(), &val) {
+                    eprintln!("Warning: failed to persist doc {doc_id}: {e}");
+                }
+            }
+        }
     }
     let insert_dur = start.elapsed();
     let insert_ops = count as f64 / insert_dur.as_secs_f64();
 
-    println!("⚡ INSERT : {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)", count, insert_dur, insert_ops);
+    if is_durable {
+        println!("⚡ INSERT (Durable Disk + WAL): {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)", count, insert_dur, insert_ops);
+    } else {
+        println!("⚡ INSERT (In-Memory MemTable): {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)", count, insert_dur, insert_ops);
+    }
 
     // 2. Full Scan Benchmark
     let start = std::time::Instant::now();
