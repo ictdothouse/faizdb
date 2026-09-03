@@ -64,11 +64,11 @@ impl DatabaseContext {
         Self::default()
     }
 
-    pub fn with_node(node_id: &str, address: &str) -> Self {
+    pub fn with_node(node_id: &str, address: &str) -> Result<Self, String> {
         let storage_path = format!("faizdb_node_{}_data", node_id);
         let storage = faizdb_core::storage::engine::StorageEngine::open_default(&storage_path)
-            .ok()
-            .map(Arc::new);
+            .map_err(|e| format!("Failed to open node storage engine at '{storage_path}': {e}"))
+            .map(Arc::new)?;
 
         let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
         shards.register_node(node_id, address);
@@ -78,15 +78,15 @@ impl DatabaseContext {
             bus: Arc::new(ChangeStreamBus::new()),
             raft: Arc::new(faizdb_core::cluster::RaftNode::new(node_id, address)),
             shards,
-            storage,
+            storage: Some(storage),
             tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
             collection_stats: DashMap::new(),
         };
-        ctx.recover_from_storage();
-        ctx
+        ctx.recover_from_storage()?;
+        Ok(ctx)
     }
 
     /// Create DatabaseContext with an active persistent StorageEngine
@@ -108,7 +108,7 @@ impl DatabaseContext {
             collection_stats: DashMap::new(),
         };
 
-        ctx.recover_from_storage();
+        let _ = ctx.recover_from_storage();
         ctx
     }
 
@@ -131,7 +131,7 @@ impl DatabaseContext {
             collection_stats: DashMap::new(),
         };
 
-        ctx.recover_from_storage();
+        let _ = ctx.recover_from_storage();
         ctx
     }
 
@@ -143,56 +143,57 @@ impl DatabaseContext {
         };
         let storage = faizdb_core::storage::engine::StorageEngine::open(config)
             .map_err(|e| format!("Failed to open storage engine: {e}"))?;
-        Ok(Self::with_storage(Arc::new(storage)))
+        let ctx = Self::with_storage(Arc::new(storage));
+        Ok(ctx)
     }
 
     /// Recover all collections, documents, vector indexes, and knowledge graph from storage on startup
-    pub fn recover_from_storage(&self) {
+    pub fn recover_from_storage(&self) -> Result<(), String> {
         if let Some(storage) = &self.storage {
             // 1. Recover documents
-            if let Ok(entries) = storage.prefix_scan(b"doc:") {
-                for (key_bytes, val_bytes) in entries {
-                    if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
-                        let parts: Vec<&str> = key_str.splitn(3, ':').collect();
-                        if parts.len() == 3 {
-                            let col_name = parts[1];
-                            if let Ok(doc) = serde_json::from_slice::<Document>(&val_bytes) {
-                                let col = self.get_or_create_collection(col_name);
-                                col.load_document(doc);
-                            }
+            let entries = storage.prefix_scan(b"doc:")
+                .map_err(|e| format!("Failed to scan documents from storage: {e}"))?;
+            for (key_bytes, val_bytes) in entries {
+                if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
+                    let parts: Vec<&str> = key_str.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        let col_name = parts[1];
+                        if let Ok(doc) = serde_json::from_slice::<Document>(&val_bytes) {
+                            let col = self.get_or_create_collection(col_name);
+                            col.load_document(doc);
                         }
                     }
                 }
             }
 
             // 2. Recover vector index definitions
-            if let Ok(meta_entries) = storage.prefix_scan(b"vec:meta:") {
-                for (key_bytes, val_bytes) in meta_entries {
-                    if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
-                        if let Some(index_name) = key_str.strip_prefix("vec:meta:") {
-                            if let Ok(config) = serde_json::from_slice::<faizdb_vector::HnswConfig>(&val_bytes) {
-                                let index = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(config)));
-                                self.vector_indexes.insert(index_name.to_string(), index);
-                            }
+            let meta_entries = storage.prefix_scan(b"vec:meta:")
+                .map_err(|e| format!("Failed to scan vector index metadata from storage: {e}"))?;
+            for (key_bytes, val_bytes) in meta_entries {
+                if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
+                    if let Some(index_name) = key_str.strip_prefix("vec:meta:") {
+                        if let Ok(config) = serde_json::from_slice::<faizdb_vector::HnswConfig>(&val_bytes) {
+                            let index = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(config)));
+                            self.vector_indexes.insert(index_name.to_string(), index);
                         }
                     }
                 }
             }
 
             // 3. Recover vector data points
-            if let Ok(data_entries) = storage.prefix_scan(b"vec:data:") {
-                for (key_bytes, val_bytes) in data_entries {
-                    if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
-                        // format: vec:data:<index_name>:<id>
-                        let parts: Vec<&str> = key_str.splitn(4, ':').collect();
-                        if parts.len() == 4 {
-                            let index_name = parts[2];
-                            let vector_id = parts[3];
-                            if let Ok(vector) = serde_json::from_slice::<Vec<f32>>(&val_bytes) {
-                                if let Some(index_lock) = self.vector_indexes.get(index_name) {
-                                    let mut index = index_lock.write();
-                                    let _ = index.insert(vector_id.to_string(), vector);
-                                }
+            let data_entries = storage.prefix_scan(b"vec:data:")
+                .map_err(|e| format!("Failed to scan vector data points from storage: {e}"))?;
+            for (key_bytes, val_bytes) in data_entries {
+                if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
+                    // format: vec:data:<index_name>:<id>
+                    let parts: Vec<&str> = key_str.splitn(4, ':').collect();
+                    if parts.len() == 4 {
+                        let index_name = parts[2];
+                        let vector_id = parts[3];
+                        if let Ok(vector) = serde_json::from_slice::<Vec<f32>>(&val_bytes) {
+                            if let Some(index_lock) = self.vector_indexes.get(index_name) {
+                                let mut index = index_lock.write();
+                                let _ = index.insert(vector_id.to_string(), vector);
                             }
                         }
                     }
@@ -200,7 +201,9 @@ impl DatabaseContext {
             }
 
             // 4. Recover graph vertices
-            if let Ok(v_entries) = storage.prefix_scan(b"graph:v:") {
+            let v_entries = storage.prefix_scan(b"graph:v:")
+                .map_err(|e| format!("Failed to scan graph vertices from storage: {e}"))?;
+            {
                 let mut graph = self.graph_store.write();
                 for (_key_bytes, val_bytes) in v_entries {
                     if let Ok(vertex) = serde_json::from_slice::<faizdb_graph::Vertex>(&val_bytes) {
@@ -210,7 +213,9 @@ impl DatabaseContext {
             }
 
             // 5. Recover graph edges
-            if let Ok(e_entries) = storage.prefix_scan(b"graph:e:") {
+            let e_entries = storage.prefix_scan(b"graph:e:")
+                .map_err(|e| format!("Failed to scan graph edges from storage: {e}"))?;
+            {
                 let mut graph = self.graph_store.write();
                 for (_key_bytes, val_bytes) in e_entries {
                     if let Ok(edge) = serde_json::from_slice::<faizdb_graph::Edge>(&val_bytes) {
@@ -219,6 +224,7 @@ impl DatabaseContext {
                 }
             }
         }
+        Ok(())
     }
 
     /// Access the real-time Change Stream broadcast bus
@@ -447,7 +453,7 @@ impl DatabaseContext {
                     .collect();
 
                 // Graph traversal filtering if specified
-                if let Some(t_clause) = traverse {
+                if let Some(ref t_clause) = traverse {
                     let paths = self.graph_store.read().traverse_bfs(&t_clause.start_id, t_clause.max_depth, t_clause.relation.as_deref());
                     let reached_ids: std::collections::HashSet<String> = paths.into_iter().map(|p| p.vertex_id).collect();
                     filtered.retain(|d| reached_ids.contains(d.id.as_str()));
@@ -458,7 +464,12 @@ impl DatabaseContext {
                     // Check if an accelerated HNSW index exists for this collection
                     if let Some(idx_lock) = self.vector_indexes.get(&collection) {
                         let idx = idx_lock.read();
-                        let hits = idx.search(&v_clause.vector, v_clause.top_k);
+                        let candidate_k = if filter.is_some() || traverse.is_some() {
+                            std::cmp::max(v_clause.top_k * 10, 100).min(idx.len().max(v_clause.top_k))
+                        } else {
+                            v_clause.top_k
+                        };
+                        let hits = idx.search(&v_clause.vector, candidate_k);
                         let id_rank: std::collections::HashMap<String, usize> = hits
                             .into_iter()
                             .enumerate()
@@ -467,6 +478,7 @@ impl DatabaseContext {
 
                         filtered.retain(|d| id_rank.contains_key(d.id.as_str()));
                         filtered.sort_by_key(|d| id_rank.get(d.id.as_str()).copied().unwrap_or(usize::MAX));
+                        filtered.truncate(v_clause.top_k);
                     } else {
                         let mut scored: Vec<(Document, f32)> = filtered
                             .into_iter()

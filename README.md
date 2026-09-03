@@ -114,12 +114,12 @@ Unlike database marketing claims, FaizDB’s system footprint is mathematically 
 
 Performance metrics are rigorously categorized by execution layer and hardware environment:
 
-| Benchmark Category | Execution Engine & I/O Path | Debug Mode *(2 vCPU Sandbox)* | Optimized Release *(NVMe / LTO)* | Latency (*p50*) |
+| Benchmark Category | Execution Engine & I/O Path | Debug Mode *(2 vCPU Sandbox)* | Optimized Release *(NVMe / LTO)* | Measured Latency / Avg Time |
 |:---|:---|:---:|:---:|:---:|
-| **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`), HTTP API | **1,481 ops/sec** | **24,000 – 53,282 ops/sec** | ~0.018 ms |
+| **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`), HTTP API | **1,481 ops/sec** | **24,000 – 53,282 ops/sec** | ~0.018 ms *(avg write time)* |
 | **In-Memory Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`), standalone | **38,600 ops/sec** | **323,424 ops/sec** | Sub-microsecond |
 | **Sequential Point Scan** | Zero-Copy Memory Iterator, no disk I/O | **464,465 ops/sec** | **671,327 ops/sec** | Sub-microsecond |
-| **Secondary B-Tree Filter**| 25,000 document indexed range lookup | **180,000 ops/sec** | **649,688 ops/sec** | < 0.1 ms |
+| **Secondary B-Tree Filter**| 25,000 document indexed range lookup | **180,000 ops/sec** | **314,000 ops/sec** | ~0.079 ms *(79.62 ms batch)* |
 | **High-Dimension Vector ANN** | Top-10 HNSW Multi-Layer (128–4096 dims) | **~380 QPS** | **1,200+ QPS** | < 0.85 ms |
 | **Full-Text BM25 Search** | Okapi BM25 with fuzzy typo ranking | **~950 QPS** | **2,800+ QPS** | < 0.35 ms |
 

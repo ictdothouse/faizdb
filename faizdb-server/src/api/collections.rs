@@ -327,12 +327,37 @@ pub async fn transaction_commit(
 ) -> impl IntoResponse {
     let txn_id = body.and_then(|b| b.0.txn_id);
     if let Some(id) = txn_id {
-        if let Some((_, txn_mutex)) = state.db.active_txns().remove(&id) {
-            let mut txn = txn_mutex.lock();
+        if let Some(txn_entry) = state.db.active_txns().get(&id) {
+            let mut txn = txn_entry.value().lock();
             let writes = txn.write_buffer().clone();
+
+            // 1. Storage persistence must complete successfully before in-memory application
+            if let Some(storage) = state.db.storage() {
+                for (key, write) in &writes {
+                    let res = match write {
+                        faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
+                            storage.put(key, val.as_slice())
+                        }
+                        faizdb_core::transaction::mvcc::TxnWrite::Delete => {
+                            storage.delete(key)
+                        }
+                    };
+                    if let Err(e) = res {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::err(format!(
+                                "Transaction commit failed to persist write for key '{}': {e}",
+                                String::from_utf8_lossy(key)
+                            ))),
+                        );
+                    }
+                }
+            }
+
+            // 2. Verify snapshot isolation conflict validation in TransactionManager
             match state.db.tx_manager().commit(&mut txn) {
                 Ok(()) => {
-                    // Apply all staged mutations into in-memory collections
+                    // 3. Durable commit succeeded: apply staged mutations into in-memory collections
                     for (key_bytes, write) in &writes {
                         if let Ok(key_str) = std::str::from_utf8(key_bytes) {
                             if key_str.starts_with("doc:") {
@@ -358,27 +383,9 @@ pub async fn transaction_commit(
                         }
                     }
 
-                    if let Some(storage) = state.db.storage() {
-                        for (key, write) in &writes {
-                            let res = match write {
-                                faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
-                                    storage.put(key, val.as_slice())
-                                }
-                                faizdb_core::transaction::mvcc::TxnWrite::Delete => {
-                                    storage.delete(key)
-                                }
-                            };
-                            if let Err(e) = res {
-                                return (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(ApiResponse::err(format!(
-                                        "Transaction commit failed to persist write for key '{}': {e}",
-                                        String::from_utf8_lossy(key)
-                                    ))),
-                                );
-                            }
-                        }
-                    }
+                    drop(txn);
+                    state.db.active_txns().remove(&id);
+
                     (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
                         "txn_id": id,
                         "status": "Committed",
