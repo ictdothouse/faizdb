@@ -19,6 +19,7 @@ static NEXT_TXN_ID: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TxnStatus {
     Active,
+    Committing,
     Committed,
     Aborted,
 }
@@ -118,6 +119,33 @@ impl Transaction {
         self.write_buffer.get(key)
     }
 
+    /// Attempt to transition transaction to Committing status.
+    /// Fails if the transaction is already Committing, Committed, or Aborted.
+    pub fn try_set_committing(&mut self) -> FaizResult<()> {
+        match self.status {
+            TxnStatus::Active => {
+                self.status = TxnStatus::Committing;
+                Ok(())
+            }
+            TxnStatus::Committing => Err(FaizError::TransactionConflict(
+                "Transaction is already being committed concurrently".into(),
+            )),
+            TxnStatus::Committed => Err(FaizError::TransactionAborted(
+                "Transaction already committed".into(),
+            )),
+            TxnStatus::Aborted => Err(FaizError::TransactionAborted(
+                "Transaction already aborted".into(),
+            )),
+        }
+    }
+
+    /// Restore Active status if commit fails recoverably before validation
+    pub fn restore_active(&mut self) {
+        if self.status == TxnStatus::Committing {
+            self.status = TxnStatus::Active;
+        }
+    }
+
     /// Mark the transaction as committed
     pub fn mark_committed(&mut self) {
         self.status = TxnStatus::Committed;
@@ -129,6 +157,23 @@ impl Transaction {
         self.write_buffer.clear();
     }
 
+    /// Try to abort the transaction (fails if currently committing)
+    pub fn try_abort(&mut self) -> FaizResult<()> {
+        match self.status {
+            TxnStatus::Active => {
+                self.mark_aborted();
+                Ok(())
+            }
+            TxnStatus::Committing => Err(FaizError::TransactionConflict(
+                "Cannot abort transaction that is currently committing".into(),
+            )),
+            TxnStatus::Committed => Err(FaizError::TransactionAborted(
+                "Cannot abort already committed transaction".into(),
+            )),
+            TxnStatus::Aborted => Ok(()),
+        }
+    }
+
     /// Abort the transaction (discard all buffered writes)
     pub fn abort(&mut self) {
         self.mark_aborted();
@@ -137,6 +182,9 @@ impl Transaction {
     fn check_active(&self) -> FaizResult<()> {
         match self.status {
             TxnStatus::Active => Ok(()),
+            TxnStatus::Committing => Err(FaizError::TransactionConflict(
+                "Transaction is currently committing".into(),
+            )),
             TxnStatus::Committed => Err(FaizError::TransactionAborted(
                 "Transaction already committed".into(),
             )),

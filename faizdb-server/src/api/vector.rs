@@ -125,11 +125,44 @@ pub async fn insert_vector(
         }
     };
 
+    // 1. Preflight validation: ID eligibility and vector dimensions before storage writes
+    if payload.id.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err("Vector id cannot be empty")),
+        );
+    }
+
+    {
+        let idx = index_lock.read();
+        if payload.vector.len() != idx.config.dimensions {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::err(format!(
+                    "Vector dimension mismatch: expected {}, got {}",
+                    idx.config.dimensions,
+                    payload.vector.len()
+                ))),
+            );
+        }
+        if idx.contains_id(&payload.id) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::err(format!(
+                    "Vector with id '{}' already exists",
+                    payload.id
+                ))),
+            );
+        }
+    }
+
+    let storage_key = format!("vec:data:{}:{}", payload.index_name, payload.id);
+
+    // 2. Persist to storage engine
     if let Some(storage) = state.db.storage() {
-        let key = format!("vec:data:{}:{}", payload.index_name, payload.id);
         match serde_json::to_vec(&payload.vector) {
             Ok(val) => {
-                if let Err(e) = storage.put(key.as_bytes(), &val) {
+                if let Err(e) = storage.put(storage_key.as_bytes(), &val) {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(ApiResponse::err(format!("Failed to persist vector to storage engine: {e}"))),
@@ -145,6 +178,7 @@ pub async fn insert_vector(
         }
     }
 
+    // 3. Apply in-memory insertion with compensating removal on unexpected failure
     let mut index = index_lock.write();
     let total_nodes = index.len() + 1;
     match index.insert(payload.id.clone(), payload.vector.clone()) {
@@ -155,7 +189,13 @@ pub async fn insert_vector(
                 "total_nodes": total_nodes,
             }))))
         }
-        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Failed to insert vector: {e}")))),
+        Err(e) => {
+            // Compensating removal: clean up persisted record to prevent orphaned disk state
+            if let Some(storage) = state.db.storage() {
+                let _ = storage.delete(storage_key.as_bytes());
+            }
+            (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Failed to insert vector: {e}"))))
+        }
     }
 }
 

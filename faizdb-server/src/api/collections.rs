@@ -329,35 +329,45 @@ pub async fn transaction_commit(
     if let Some(id) = txn_id {
         if let Some(txn_entry) = state.db.active_txns().get(&id) {
             let mut txn = txn_entry.value().lock();
-            let writes = txn.write_buffer().clone();
 
-            // 1. Storage persistence must complete successfully before in-memory application
-            if let Some(storage) = state.db.storage() {
-                for (key, write) in &writes {
-                    let res = match write {
-                        faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
-                            storage.put(key, val.as_slice())
-                        }
-                        faizdb_core::transaction::mvcc::TxnWrite::Delete => {
-                            storage.delete(key)
-                        }
-                    };
-                    if let Err(e) = res {
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(ApiResponse::err(format!(
-                                "Transaction commit failed to persist write for key '{}': {e}",
-                                String::from_utf8_lossy(key)
-                            ))),
-                        );
-                    }
-                }
+            // 1. Atomically claim the transaction by transitioning from Active to Committing
+            if let Err(e) = txn.try_set_committing() {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(ApiResponse::err(format!("Transaction cannot be committed: {e}"))),
+                );
             }
 
-            // 2. Verify snapshot isolation conflict validation in TransactionManager
+            // 2. Validate snapshot isolation and commit atomically in TransactionManager FIRST
+            // This guarantees rejected writes are never published to durable storage!
             match state.db.tx_manager().commit(&mut txn) {
                 Ok(()) => {
-                    // 3. Durable commit succeeded: apply staged mutations into in-memory collections
+                    let writes = txn.write_buffer().clone();
+
+                    // 3. Validation succeeded: persist staged writes to durable disk storage
+                    if let Some(storage) = state.db.storage() {
+                        for (key, write) in &writes {
+                            let res = match write {
+                                faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
+                                    storage.put(key, val.as_slice())
+                                }
+                                faizdb_core::transaction::mvcc::TxnWrite::Delete => {
+                                    storage.delete(key)
+                                }
+                            };
+                            if let Err(e) = res {
+                                return (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(ApiResponse::err(format!(
+                                        "Transaction commit failed to persist write for key '{}': {e}",
+                                        String::from_utf8_lossy(key)
+                                    ))),
+                                );
+                            }
+                        }
+                    }
+
+                    // 4. Apply staged mutations into in-memory collections and publish change stream events
                     for (key_bytes, write) in &writes {
                         if let Ok(key_str) = std::str::from_utf8(key_bytes) {
                             if key_str.starts_with("doc:") {
@@ -394,6 +404,9 @@ pub async fn transaction_commit(
                     }))))
                 }
                 Err(e) => {
+                    // Conflict or validation failure: remove from active transactions
+                    drop(txn);
+                    state.db.active_txns().remove(&id);
                     (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Transaction commit conflict: {e}"))))
                 }
             }
@@ -414,21 +427,30 @@ pub async fn transaction_rollback(
 ) -> impl IntoResponse {
     let txn_id = body.and_then(|b| b.0.txn_id);
     if let Some(id) = txn_id {
-        if let Some((_, txn_mutex)) = state.db.active_txns().remove(&id) {
-            let mut txn = txn_mutex.lock();
-            state.db.tx_manager().abort(&mut txn);
-            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-                "txn_id": id,
-                "status": "Aborted",
-                "message": "Transaction rolled back, write-buffer discarded",
-            }))))
+        if let Some(txn_entry) = state.db.active_txns().get(&id) {
+            let mut txn = txn_entry.value().lock();
+            match txn.try_abort() {
+                Ok(()) => {
+                    state.db.tx_manager().abort(&mut txn);
+                    drop(txn);
+                    state.db.active_txns().remove(&id);
+                    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                        "txn_id": id,
+                        "status": "Aborted",
+                        "message": "Transaction rolled back, write-buffer discarded",
+                    }))))
+                }
+                Err(e) => {
+                    (StatusCode::CONFLICT, Json(ApiResponse::err(format!("Cannot abort transaction: {e}"))))
+                }
+            }
         } else {
             (StatusCode::NOT_FOUND, Json(ApiResponse::err("Transaction not found or already closed")))
         }
     } else {
         (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
             "status": "Aborted",
-            "message": "Transaction rolled back, write-buffer discarded",
+            "message": "Transaction write-buffer discarded",
         }))))
     }
 }

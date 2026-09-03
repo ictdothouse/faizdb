@@ -89,6 +89,29 @@ impl DatabaseContext {
         Ok(ctx)
     }
 
+    /// Create DatabaseContext with persistent StorageEngine and propagate recovery errors
+    pub fn try_with_storage(storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Result<Self, String> {
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
+        let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
+        shards.register_node("node_1", "127.0.0.1:27018");
+
+        let ctx = Self {
+            collections: DashMap::new(),
+            bus: Arc::new(ChangeStreamBus::new()),
+            raft,
+            shards,
+            storage: Some(storage),
+            tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
+            active_txns: DashMap::new(),
+            vector_indexes: DashMap::new(),
+            graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            collection_stats: DashMap::new(),
+        };
+
+        ctx.recover_from_storage()?;
+        Ok(ctx)
+    }
+
     /// Create DatabaseContext with an active persistent StorageEngine
     pub fn with_storage(storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Self {
         let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
@@ -143,8 +166,7 @@ impl DatabaseContext {
         };
         let storage = faizdb_core::storage::engine::StorageEngine::open(config)
             .map_err(|e| format!("Failed to open storage engine: {e}"))?;
-        let ctx = Self::with_storage(Arc::new(storage));
-        Ok(ctx)
+        Self::try_with_storage(Arc::new(storage))
     }
 
     /// Recover all collections, documents, vector indexes, and knowledge graph from storage on startup

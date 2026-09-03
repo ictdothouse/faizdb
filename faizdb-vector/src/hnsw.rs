@@ -175,6 +175,11 @@ impl HnswIndex {
         self.nodes.is_empty()
     }
 
+    /// Check if index contains an entry with given ID
+    pub fn contains_id(&self, id: &str) -> bool {
+        self.id_to_idx.contains_key(id)
+    }
+
     /// Generate random layer level according to exponential distribution
     fn random_level(&self) -> usize {
         let mut rng = rand::rng();
