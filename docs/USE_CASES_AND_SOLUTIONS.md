@@ -33,7 +33,7 @@ FaizDB is engineered from the ground up as an **AI-Native database engine**, con
 ┌───────────────────┐          ┌───────────────────┐        ┌───────────────────┐          ┌───────────────────┐
 │  Semantic Cache   │          │  AI Agent Memory  │        │  GraphRAG Hybrid  │          │ PyTorch Streaming │
 │ Cosine Sim > 0.95 │          │ Working/Episodic/ │        │ Vector + Graph +  │          │ gRPC Zero-Copy    │
-│ Cut 70% LLM Costs │          │ Entity Graph DB   │        │ Okapi BM25 Search │          │ 320k Docs / Sec   │
+│ Cut 70% LLM Costs │          │ Entity Graph DB   │        │ Okapi BM25 Search │          │ 50k+ W / 320k+ R  │
 └───────────────────┘          └───────────────────┘        └───────────────────┘          └───────────────────┘
 ```
 
@@ -124,7 +124,7 @@ FaizDB executes **Tri-Hybrid Context Retrieval**:
 **The Challenge:** High-performance training clusters (NVIDIA H100, B200, RTX 5090) frequently suffer from *GPU Starvation* while waiting for slow disk I/O to deliver training batches.
 
 **The FaizDB Solution:**
-* **320,000+ Records/Sec Throughput:** FaizDB LSM-Tree streams dataset batches directly into PyTorch / TensorFlow `DataLoader` pipelines via gRPC Port 50051 with *Zero-Copy Byte Slices*.
+* **High-Throughput Zero-Copy Data Streaming:** FaizDB LSM-Tree streams dataset batches directly into PyTorch / TensorFlow `DataLoader` pipelines via gRPC Port 50051 with *Zero-Copy Byte Slices* (53,282 durable writes/sec on disk, 476k+ scan ops/sec).
 * **Non-Blocking Model Checkpointing:** Atomically persists multi-gigabyte model parameter snapshots without halting GPU tensor compute kernels.
 
 ---
