@@ -24,6 +24,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 tempfile = { workspace = true }
 rand = { workspace = true }
+ring = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

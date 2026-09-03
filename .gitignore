@@ -34,6 +34,7 @@ dist/
 *.key
 *.crt
 docs/*audit*
+!docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md
 docs/faizdb-audit-report.md
 
 # ── Frontend & Studio ─────────────────────────────────────────────

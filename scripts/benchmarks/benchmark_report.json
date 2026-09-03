@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-09-03T11:59:55Z",
+  "sqlite": {
+    "workload_a": {
+      "throughput": 152337.1142173003,
+      "latencies": {
+        "p50": 4.03,
+        "p90": 5.72,
+        "p95": 6.52,
+        "p99": 53.29,
+        "max": 397.73,
+        "avg": 5.83
+      }
+    },
+    "workload_b": {
+      "throughput": 195044.52332719608,
+      "latencies": {
+        "p50": 2.94,
+        "p90": 5.02,
+        "p95": 5.38,
+        "p99": 14.32,
+        "max": 551.55,
+        "avg": 4.05
+      }
+    },
+    "workload_c": {
+      "throughput": 118348.2023476415,
+      "latencies": {
+        "p50": 6.73,
+        "p90": 9.38,
+        "p95": 10.15,
+        "p99": 27.21,
+        "max": 120.42,
+        "avg": 7.71
+      }
+    },
+    "workload_e": {
+      "throughput": 10932.391532660833,
+      "latencies": {
+        "p50": 89.98,
+        "p90": 107.34,
+        "p95": 128.88,
+        "p99": 375.41,
+        "max": 727.33,
+        "avg": 89.6
+      }
+    }
+  },
+  "faizdb_live": null,
+  "instructions": {
+    "microbenchmark": "cargo bench -p faizdb-core",
+    "full_verification": "bash scripts/audit_verify_all.sh"
+  }
+}

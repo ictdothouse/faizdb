@@ -19,6 +19,7 @@ fn setup_test_app() -> (axum::Router, String) {
         auth,
         backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(Default::default())),
         geo_replication: geo,
+        metrics: std::sync::Arc::new(Default::default()),
     });
 
     (create_router(state), token)

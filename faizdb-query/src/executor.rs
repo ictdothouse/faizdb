@@ -35,6 +35,7 @@ pub struct DatabaseContext {
     active_txns: DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>>,
     vector_indexes: DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>>,
     graph_store: Arc<parking_lot::RwLock<faizdb_graph::GraphStore>>,
+    collection_stats: DashMap<String, crate::optimizer::TableStatistics>,
 }
 
 impl Default for DatabaseContext {
@@ -53,6 +54,7 @@ impl Default for DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            collection_stats: DashMap::new(),
         }
     }
 }
@@ -77,6 +79,7 @@ impl DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            collection_stats: DashMap::new(),
         }
     }
 
@@ -96,6 +99,7 @@ impl DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            collection_stats: DashMap::new(),
         };
 
         ctx.recover_from_storage();
@@ -200,28 +204,62 @@ impl DatabaseContext {
             .collect()
     }
 
+    /// Run ANALYZE on a collection to compute cardinality, attribute stats, and histograms
+    pub fn analyze_collection(&self, collection: &str) -> crate::optimizer::TableStatistics {
+        let col = self.get_or_create_collection(collection);
+        let docs = col.find_all(None);
+        let stats = crate::optimizer::TableStatistics::analyze(collection, &docs);
+        self.collection_stats.insert(collection.to_string(), stats.clone());
+        stats
+    }
+
+    /// Get current collection statistics or compute them on demand
+    pub fn get_or_compute_stats(&self, collection: &str) -> crate::optimizer::TableStatistics {
+        if let Some(stats) = self.collection_stats.get(collection) {
+            return stats.clone();
+        }
+        self.analyze_collection(collection)
+    }
+
     /// Execute an AST statement
     pub fn execute(&self, stmt: Statement) -> Result<QueryResult, String> {
         match stmt {
+            Statement::Analyze { collection } => {
+                let stats = self.analyze_collection(&collection);
+                Ok(QueryResult::Success(format!(
+                    "Collection '{collection}' analyzed successfully: {} documents, {} attributes tracked with CBO histograms",
+                    stats.total_documents, stats.column_stats.len()
+                )))
+            }
             Statement::Explain(inner_stmt) => {
                 let start = Instant::now();
                 match *inner_stmt {
                     Statement::Find { collection, filter, .. } => {
                         let col = self.get_or_create_collection(&collection);
-                        let total_in_col = col.stats().document_count as usize;
+                        let stats = self.get_or_compute_stats(&collection);
 
                         // Check if an index can be used
                         let mut index_name = None;
                         let mut is_unique = false;
-                        let mut docs_examined = total_in_col;
+                        let mut index_field = None;
+                        let mut docs_examined = stats.total_documents;
 
                         if let Some(FilterExpr::Field { field, op: Operator::Eq, value }) = &filter {
                             if let Some(idx) = col.get_secondary_index(field) {
                                 index_name = Some(idx.def.name.clone());
                                 is_unique = idx.def.unique;
+                                index_field = Some(field.as_str());
                                 docs_examined = idx.lookup(value).len();
                             }
                         }
+
+                        // Run through Cost-Based Optimizer
+                        let decision = crate::optimizer::QueryOptimizer::choose_best_plan(
+                            &stats,
+                            filter.as_ref(),
+                            index_field,
+                            index_name.as_deref(),
+                        );
 
                         let res = self.execute(Statement::Find {
                             collection: collection.clone(),
@@ -239,27 +277,20 @@ impl DatabaseContext {
                         };
 
                         let execution_time_us = start.elapsed().as_micros() as u64;
-                        let plan_type = if let Some(ref idx) = index_name {
-                            format!("IndexScan({idx})")
-                        } else {
-                            format!("SequentialScan({collection})")
-                        };
-
-                        let cost = if index_name.is_some() {
-                            1.0 + (docs_examined as f64 * 0.05)
-                        } else {
-                            10.0 + (total_in_col as f64 * 0.5)
-                        };
 
                         Ok(QueryResult::Explain(ExplainPlan {
-                            plan_type,
+                            plan_type: decision.chosen_plan,
                             collection,
-                            index_used: index_name,
+                            index_used: decision.index_used,
                             execution_time_us,
                             documents_examined: docs_examined,
                             documents_returned: docs_returned,
                             is_unique,
-                            estimated_cost_score: cost,
+                            estimated_cost_score: decision.estimated_cost,
+                            estimated_selectivity_pct: Some(decision.selectivity_pct),
+                            seq_scan_cost: Some(decision.seq_scan_cost),
+                            index_scan_cost: decision.index_scan_cost,
+                            optimization_rationale: Some(decision.rationale),
                         }))
                     }
                     other => {
@@ -274,6 +305,10 @@ impl DatabaseContext {
                             documents_returned: 1,
                             is_unique: false,
                             estimated_cost_score: 1.0,
+                            estimated_selectivity_pct: Some(100.0),
+                            seq_scan_cost: Some(1.0),
+                            index_scan_cost: None,
+                            optimization_rationale: Some("Direct statement execution".to_string()),
                         }))
                     }
                 }
@@ -288,12 +323,36 @@ impl DatabaseContext {
                 ..
             } => {
                 let col = self.get_or_create_collection(&collection);
+                let stats = self.get_or_compute_stats(&collection);
 
-                // Optimization: Index Lookup if equality filter matches secondary index
-                let candidate_docs = if let Some(FilterExpr::Field { field, op: Operator::Eq, value }) = &filter {
-                    col.find_by_secondary_index(field, value)
+                // Cost-Based Index vs Sequential Scan Selection (Adaptive Execution)
+                let mut index_name = None;
+                let mut index_field = None;
+                let mut filter_val = None;
+
+                if let Some(FilterExpr::Field { field, op: Operator::Eq, value }) = &filter {
+                    if let Some(idx) = col.get_secondary_index(field) {
+                        index_name = Some(idx.def.name.clone());
+                        index_field = Some(field.as_str());
+                        filter_val = Some(value);
+                    }
+                }
+
+                let decision = crate::optimizer::QueryOptimizer::choose_best_plan(
+                    &stats,
+                    filter.as_ref(),
+                    index_field,
+                    index_name.as_deref(),
+                );
+
+                let candidate_docs = if decision.index_used.is_some() {
+                    if let (Some(field), Some(val)) = (index_field, filter_val) {
+                        col.find_by_secondary_index(field, val)
+                    } else {
+                        None
+                    }
                 } else {
-                    None
+                    None // Adaptive fallback to sequential scan
                 };
 
                 let docs_to_scan = candidate_docs.unwrap_or_else(|| col.find_all(None));

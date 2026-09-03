@@ -133,6 +133,14 @@ pub struct ExplainPlan {
     pub documents_returned: usize,
     pub is_unique: bool,
     pub estimated_cost_score: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_selectivity_pct: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq_scan_cost: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_scan_cost: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub optimization_rationale: Option<String>,
 }
 
 /// Top-level AST statement
@@ -178,6 +186,9 @@ pub enum Statement {
     DropIndex {
         collection: String,
         field: String,
+    },
+    Analyze {
+        collection: String,
     },
     Explain(Box<Statement>),
     BeginTransaction,

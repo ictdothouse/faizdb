@@ -26,6 +26,80 @@ pub struct AppState {
     pub auth: Arc<AuthManager>,
     pub backup_schedule: Arc<parking_lot::RwLock<BackupScheduleConfig>>,
     pub geo_replication: Arc<GeoReplicationEngine>,
+    pub metrics: Arc<super::metrics::MetricsCollector>,
+}
+
+// ── OpenTelemetry & Correlation ID Tracing Middleware ────────────────────────
+
+pub async fn trace_middleware(
+    State(state): State<Arc<AppState>>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    let start = Instant::now();
+
+    // 1. Extract or generate Correlation ID
+    let correlation_id = req
+        .headers()
+        .get("x-correlation-id")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::now_v7().to_string());
+
+    // 2. Extract or generate W3C traceparent (format: 00-{trace_id}-{span_id}-01)
+    let traceparent = req
+        .headers()
+        .get("traceparent")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            let trace_id = Uuid::new_v4().to_string().replace('-', "");
+            let span_id_raw = Uuid::now_v7().to_string().replace('-', "");
+            let span_id = &span_id_raw[0..16];
+            format!("00-{trace_id}-{span_id}-01")
+        });
+
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+
+    // Track active connections
+    state.metrics.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let mut res = next.run(req).await;
+
+    state.metrics.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    let elapsed = start.elapsed();
+    state.metrics.record_query_latency(elapsed);
+
+    if method == Method::GET {
+        state.metrics.queries_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    } else if method == Method::POST {
+        state.metrics.inserts_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    } else if method == Method::DELETE {
+        state.metrics.deletes_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    } else if method == Method::PUT || method == Method::PATCH {
+        state.metrics.updates_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    // Set correlation headers on response
+    if let Ok(val) = HeaderValue::from_str(&correlation_id) {
+        res.headers_mut().insert("x-correlation-id", val);
+    }
+    if let Ok(val) = HeaderValue::from_str(&traceparent) {
+        res.headers_mut().insert("traceparent", val);
+    }
+
+    info!(
+        correlation_id = %correlation_id,
+        traceparent = %traceparent,
+        method = %method,
+        uri = %uri,
+        latency_ms = %elapsed.as_millis(),
+        status = %res.status().as_u16(),
+        "HTTP request processed"
+    );
+
+    res
 }
 
 // ── CORS ────────────────────────────────────────────────────────────────────

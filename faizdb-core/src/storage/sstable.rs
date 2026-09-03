@@ -429,6 +429,11 @@ impl SSTableReader {
         })
     }
 
+    /// Check whether the bloom filter may contain a key
+    pub fn may_contain(&self, key: &[u8]) -> bool {
+        self.bloom.may_contain(key)
+    }
+
     /// Look up a key in the SSTable.
     ///
     /// Uses the bloom filter for fast negative lookups, then binary

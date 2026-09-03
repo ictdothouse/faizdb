@@ -85,7 +85,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/info", get(health::server_info))
         .route("/v1/auth/login", post(auth::auth_login))
         .route("/metrics", get(metrics::metrics_handler))
-        .route("/v1/metrics", get(metrics::metrics_handler));
+        .route("/v1/metrics", get(metrics::metrics_handler))
+        .route("/v1/system/profile", get(metrics::system_profile_handler));
 
     // Read-only — requires any valid JWT
     let read_routes = Router::new()
@@ -163,6 +164,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                             .ok().and_then(|v| v.parse().ok()).unwrap_or(30),
                     ),
                 ))
+                .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::trace_middleware))
                 .layer(axum_middleware::from_fn(middleware::request_id_middleware))
                 .layer(axum_middleware::from_fn(middleware::audit_middleware))
                 .layer(axum_middleware::from_fn(middleware::rate_limit_middleware))

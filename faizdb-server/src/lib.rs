@@ -44,6 +44,7 @@ pub async fn run_multi_protocol_server(
         auth,
         backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(api::BackupScheduleConfig::default())),
         geo_replication,
+        metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
 
     let http_router = create_router(state);
@@ -127,6 +128,7 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
         auth,
         backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(api::BackupScheduleConfig::default())),
         geo_replication,
+        metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
     let app = create_router(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
