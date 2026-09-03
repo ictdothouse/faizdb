@@ -18,6 +18,7 @@ fn setup_test_app() -> (axum::Router, Arc<AppState>, String) {
     let state = Arc::new(AppState {
         db,
         auth,
+        user_store: Arc::new(faizdb_security::UserStore::new()),
         backup_schedule: Arc::new(parking_lot::RwLock::new(Default::default())),
         geo_replication: geo,
         metrics: Arc::new(Default::default()),

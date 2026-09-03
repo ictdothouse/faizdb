@@ -20,7 +20,7 @@ use std::time::Duration;
 use axum::{
     http::StatusCode,
     middleware as axum_middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -110,7 +110,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let write_routes = Router::new()
         .route("/v1/query", post(collections::execute_query))
         .route("/v1/collections/{name}/documents", post(collections::insert_document))
-        .route("/v1/collections/{name}/documents/{id}", delete(collections::delete_document))
+        .route(
+            "/v1/collections/{name}/documents/{id}",
+            delete(collections::delete_document)
+                .put(collections::update_document_put)
+                .patch(collections::update_document_patch),
+        )
         .route("/v1/collections/{name}/indexes", post(collections::create_collection_index))
         .route("/v1/collections/{name}/indexes/{field}", delete(collections::drop_collection_index))
         .route("/v1/collections/{name}/insert", post(collections::insert_document))
@@ -135,6 +140,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/auth/token", post(auth::generate_token_handler))
         .route("/v1/backup/restore", post(backup::backup_restore))
         .route("/v1/backup/schedule", get(backup::get_backup_schedule).post(backup::update_backup_schedule))
+        .route("/v1/users", get(auth::list_users).post(auth::create_user))
+        .route("/v1/users/{username}", delete(auth::delete_user))
+        .route("/v1/users/{username}/password", put(auth::update_user_password))
         .layer(axum_middleware::from_fn(middleware::rbac_admin_middleware))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::client_auth_middleware));
 

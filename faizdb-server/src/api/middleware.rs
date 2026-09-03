@@ -24,6 +24,7 @@ use super::{AuthenticatedUser, BackupScheduleConfig};
 pub struct AppState {
     pub db: Arc<DatabaseContext>,
     pub auth: Arc<AuthManager>,
+    pub user_store: Arc<faizdb_security::UserStore>,
     pub backup_schedule: Arc<parking_lot::RwLock<BackupScheduleConfig>>,
     pub geo_replication: Arc<GeoReplicationEngine>,
     pub metrics: Arc<super::metrics::MetricsCollector>,

@@ -35,6 +35,7 @@ pub async fn run_multi_protocol_server(
     let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
         .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
     let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(jwt_secret.as_bytes()));
+    let user_store = std::sync::Arc::new(faizdb_security::UserStore::new());
 
     let local_region = std::env::var("FAIZDB_REGION").unwrap_or_else(|_| "default-region".to_string());
     let geo_replication = std::sync::Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(local_region));
@@ -42,6 +43,7 @@ pub async fn run_multi_protocol_server(
     let state = std::sync::Arc::new(AppState {
         db: db.clone(),
         auth,
+        user_store: user_store.clone(),
         backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(api::BackupScheduleConfig::default())),
         geo_replication,
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
@@ -97,10 +99,11 @@ pub async fn run_multi_protocol_server(
 
     let pg_addr_str = pg_addr.to_string();
     let db_for_pg = db.clone();
+    let user_store_for_pg = user_store.clone();
 
     // 3. Spawn PostgreSQL Wire Protocol server (Port 5432)
     let pg_handle = tokio::spawn(async move {
-        if let Err(e) = run_postgres_server(&pg_addr_str, db_for_pg).await {
+        if let Err(e) = run_postgres_server(&pg_addr_str, db_for_pg, user_store_for_pg).await {
             tracing::error!("PostgreSQL Wire server error: {e}");
         }
     });
@@ -112,6 +115,21 @@ pub async fn run_multi_protocol_server(
     let grpc_handle = tokio::spawn(async move {
         if let Err(e) = run_grpc_server(&grpc_addr_str, db_for_grpc).await {
             tracing::error!("gRPC server error: {e}");
+        }
+    });
+
+    // 5. Background TTL Sweeper: automatically purge expired documents every 30s
+    let db_for_ttl = db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            for (col_name, col) in db_for_ttl.all_collections() {
+                let purged = col.purge_expired();
+                if !purged.is_empty() {
+                    tracing::info!("[TTL Sweeper] Purged {} expired document(s) from collection '{}'", purged.len(), col_name);
+                }
+            }
         }
     });
 
@@ -180,6 +198,7 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
         .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
     let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(jwt_secret.as_bytes()));
+    let user_store = std::sync::Arc::new(faizdb_security::UserStore::new());
 
     let local_region = std::env::var("FAIZDB_REGION").unwrap_or_else(|_| "default-region".to_string());
     let geo_replication = std::sync::Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(local_region));
@@ -187,6 +206,7 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     let state = std::sync::Arc::new(AppState {
         db,
         auth,
+        user_store,
         backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(api::BackupScheduleConfig::default())),
         geo_replication,
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),

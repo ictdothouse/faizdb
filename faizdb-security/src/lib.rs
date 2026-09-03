@@ -9,10 +9,12 @@
 pub mod auth;
 pub mod encryption;
 pub mod tls;
+pub mod user_store;
 
 pub use auth::{AuthManager, Claims, Role};
 pub use encryption::{Cipher, EncryptedData};
 pub use tls::{create_rustls_server_config, generate_self_signed_cert, load_pem_cert_and_key};
+pub use user_store::{UserInfo, UserRecord, UserStore};
 
 /// Security engine version
 pub fn version() -> &'static str {

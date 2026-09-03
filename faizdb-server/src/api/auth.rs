@@ -41,22 +41,7 @@ pub async fn auth_login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    let admin_user = std::env::var("FAIZDB_ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
-    let admin_pass = std::env::var("FAIZDB_ADMIN_PASS").unwrap_or_else(|_| "faizdb-admin-2026".to_string());
-    let rw_user = std::env::var("FAIZDB_RW_USER").unwrap_or_default();
-    let rw_pass = std::env::var("FAIZDB_RW_PASS").unwrap_or_default();
-    let ro_user = std::env::var("FAIZDB_RO_USER").unwrap_or_default();
-    let ro_pass = std::env::var("FAIZDB_RO_PASS").unwrap_or_default();
-
-    let role = if payload.username == admin_user && payload.password == admin_pass {
-        Some(Role::Admin)
-    } else if !rw_user.is_empty() && payload.username == rw_user && payload.password == rw_pass {
-        Some(Role::ReadWrite)
-    } else if !ro_user.is_empty() && payload.username == ro_user && payload.password == ro_pass {
-        Some(Role::ReadOnly)
-    } else {
-        None
-    };
+    let role = state.user_store.authenticate(&payload.username, &payload.password);
 
     match role {
         Some(r) => {
@@ -110,5 +95,76 @@ pub async fn generate_token_handler(
             "valid_seconds": valid_seconds,
         })))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::err(e))).into_response(),
+    }
+}
+
+// ── User Management (Admin Only) ─────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub password: String,
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePasswordRequest {
+    pub password: String,
+}
+
+/// POST /v1/users — create a new user (Admin only)
+pub async fn create_user(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CreateUserRequest>,
+) -> impl IntoResponse {
+    let role = match payload.role.to_lowercase().as_str() {
+        "admin" => Role::Admin,
+        "readwrite" | "read_write" => Role::ReadWrite,
+        "readonly" | "read_only" => Role::ReadOnly,
+        _ => return (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err("Invalid role. Use Admin, ReadWrite, or ReadOnly"))).into_response(),
+    };
+
+    match state.user_store.create_user(&payload.username, &payload.password, role) {
+        Ok(_) => (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
+            "username": payload.username,
+            "role": format!("{:?}", role),
+            "created": true
+        })))).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err(e))).into_response(),
+    }
+}
+
+/// GET /v1/users — list all users (Admin only)
+pub async fn list_users(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let users = state.user_store.list_users();
+    Json(ApiResponse::ok(users)).into_response()
+}
+
+/// DELETE /v1/users/{username} — delete a user (Admin only)
+pub async fn delete_user(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(username): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    match state.user_store.delete_user(&username) {
+        Ok(deleted) => if deleted {
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({ "deleted": true, "username": username })))).into_response()
+        } else {
+            (StatusCode::NOT_FOUND, Json(ApiResponse::<()>::err(format!("User '{username}' not found")))).into_response()
+        },
+        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err(e))).into_response(),
+    }
+}
+
+/// PUT /v1/users/{username}/password — update a user's password (Admin only)
+pub async fn update_user_password(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(username): axum::extract::Path<String>,
+    Json(payload): Json<UpdatePasswordRequest>,
+) -> impl IntoResponse {
+    match state.user_store.update_password(&username, &payload.password) {
+        Ok(_) => (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({ "updated": true, "username": username })))).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::err(e))).into_response(),
     }
 }

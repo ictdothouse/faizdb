@@ -12,6 +12,7 @@ fn open_test_engine(dir: &Path) -> StorageEngine {
         memtable_size: 65536, // 64KB — triggers flushes quickly for testing
         sync_writes: false,
         enable_wal: true,
+        ..Default::default()
     })
     .expect("Failed to open storage engine")
 }

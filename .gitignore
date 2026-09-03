@@ -36,6 +36,7 @@ dist/
 docs/*audit*
 !docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md
 docs/faizdb-audit-report.md
+docs/*strategi*
 
 # ── Frontend & Studio ─────────────────────────────────────────────
 node_modules/

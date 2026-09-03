@@ -112,6 +112,8 @@ impl FilterExpr {
 pub struct VectorSearchClause {
     pub vector: Vec<f32>,
     pub top_k: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_name: Option<String>,
 }
 
 /// Graph Traversal Clause within a Query

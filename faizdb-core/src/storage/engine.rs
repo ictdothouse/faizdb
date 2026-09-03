@@ -31,6 +31,8 @@ pub struct StorageConfig {
     pub sync_writes: bool,
     /// Whether to enable WAL (disable for read-only or testing)
     pub enable_wal: bool,
+    /// Capacity of the ARC (Adaptive Replacement Cache) block cache
+    pub block_cache_size: usize,
 }
 
 impl Default for StorageConfig {
@@ -40,6 +42,7 @@ impl Default for StorageConfig {
             memtable_size: crate::DEFAULT_MEMTABLE_SIZE,
             sync_writes: true,
             enable_wal: true,
+            block_cache_size: 4096,
         }
     }
 }
@@ -73,6 +76,9 @@ pub struct StorageEngine {
 
     /// SSTable generation counter
     sstable_generation: AtomicU64,
+
+    /// ARC (Adaptive Replacement Cache) for SSTable block and key-value lookups
+    block_cache: parking_lot::Mutex<crate::storage::arc_cache::ArcCache<Vec<u8>, Option<Vec<u8>>>>,
 
     /// Whether the engine is open
     is_open: std::sync::atomic::AtomicBool,
@@ -169,6 +175,9 @@ impl StorageEngine {
             max_gen
         );
 
+        let cache_capacity = config.block_cache_size.max(16);
+        let block_cache = parking_lot::Mutex::new(crate::storage::arc_cache::ArcCache::new(cache_capacity));
+
         Ok(Self {
             config,
             wal,
@@ -176,6 +185,7 @@ impl StorageEngine {
             immutable_memtables: RwLock::new(Vec::new()),
             sstables: RwLock::new(sstables),
             sstable_generation: AtomicU64::new(max_gen),
+            block_cache,
             is_open: std::sync::atomic::AtomicBool::new(true),
         })
     }
@@ -190,10 +200,9 @@ impl StorageEngine {
 
     /// Put a key-value pair into the storage engine.
     ///
-    /// The write is:
-    /// 1. First logged to the WAL (for durability)
-    /// 2. Then inserted into the MemTable (for fast access)
-    /// 3. Eventually flushed to an SSTable (for persistence)
+    /// The write is logged to the WAL (if enabled) and inserted into the
+    /// active MemTable. If the MemTable exceeds its size limit, it is
+    /// scheduled for flushing to an SSTable.
     pub fn put(&self, key: &[u8], value: &[u8]) -> FaizResult<()> {
         self.check_open()?;
 
@@ -204,6 +213,9 @@ impl StorageEngine {
 
         // Step 2: Write to MemTable
         self.active_memtable.put(key.to_vec(), value.to_vec())?;
+
+        // Update block cache
+        self.block_cache.lock().put(key.to_vec(), Some(value.to_vec()));
 
         // Step 3: Check if MemTable needs flushing
         if self.active_memtable.should_flush() {
@@ -218,7 +230,8 @@ impl StorageEngine {
     /// Search order (most recent data first):
     /// 1. Active MemTable
     /// 2. Immutable MemTables (waiting to be flushed)
-    /// 3. SSTables (newest to oldest)
+    /// 3. Adaptive Replacement Cache (ARC) for warm SSTable data
+    /// 4. SSTables on disk (newest to oldest)
     pub fn get(&self, key: &[u8]) -> FaizResult<Option<Vec<u8>>> {
         self.check_open()?;
 
@@ -243,20 +256,37 @@ impl StorageEngine {
             }
         }
 
-        // Step 3: Check SSTables (newest first)
+        // Step 3: Check Adaptive Replacement Cache (ARC) for warm SSTable data
+        {
+            let mut cache = self.block_cache.lock();
+            if let Some(cached_val) = cache.get(&key.to_vec()) {
+                return Ok(cached_val);
+            }
+        }
+
+        // Step 4: Check SSTables (newest to oldest)
         {
             let sstables = self.sstables.read();
             for sst in sstables.iter() {
                 if let Some(entry) = sst.get(key)? {
-                    return match entry {
-                        MemEntry::Value(v) => Ok(Some(v)),
-                        MemEntry::Tombstone => Ok(None),
+                    let result = match entry {
+                        MemEntry::Value(v) => Some(v),
+                        MemEntry::Tombstone => None,
                     };
+                    self.block_cache.lock().put(key.to_vec(), result.clone());
+                    return Ok(result);
                 }
             }
         }
 
+        // Negative cache miss
+        self.block_cache.lock().put(key.to_vec(), None);
         Ok(None)
+    }
+
+    /// Get statistics for the ARC block cache (hits, misses, hit ratio)
+    pub fn cache_stats(&self) -> crate::storage::arc_cache::ArcCacheStats {
+        self.block_cache.lock().stats()
     }
 
     /// Delete a key from the storage engine.
@@ -273,6 +303,9 @@ impl StorageEngine {
 
         // Insert tombstone into MemTable
         self.active_memtable.delete(key.to_vec())?;
+
+        // Invalidate in block cache
+        self.block_cache.lock().put(key.to_vec(), None);
 
         if self.active_memtable.should_flush() {
             self.maybe_flush_memtable()?;
@@ -500,6 +533,7 @@ mod tests {
             memtable_size: 4096, // Small for testing
             sync_writes: false,
             enable_wal: true,
+            block_cache_size: 1024,
         })
         .unwrap()
     }
@@ -647,5 +681,22 @@ mod tests {
             assert_eq!(engine.get(b"key1").unwrap(), Some(b"value1".to_vec()));
             assert_eq!(engine.get(b"key2").unwrap(), Some(b"value2".to_vec()));
         }
+    }
+
+    #[test]
+    fn test_arc_cache_integration_in_storage_engine() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = test_engine(dir.path());
+
+        // Put populates the ARC cache
+        engine.put(b"cached_k1", b"val1").unwrap();
+        assert_eq!(engine.get(b"cached_k1").unwrap(), Some(b"val1".to_vec()));
+
+        let stats = engine.cache_stats();
+        assert_eq!(stats.evictions, 0);
+
+        // Delete invalidates in cache
+        engine.delete(b"cached_k1").unwrap();
+        assert_eq!(engine.get(b"cached_k1").unwrap(), None);
     }
 }

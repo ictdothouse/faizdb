@@ -1,7 +1,7 @@
 //! Parser for SQL, MongoDB, and FaizQL dialect statements into AST Statements.
 
 use faizdb_core::document::model::{Document, Value};
-use crate::ast::{FilterExpr, Operator, Statement, VectorSearchClause};
+use crate::ast::{FilterExpr, Operator, Statement, VectorSearchClause, TraverseClause};
 
 /// Parse any supported query string into a [`Statement`]
 pub fn parse_query(input: &str) -> Result<Statement, String> {
@@ -79,10 +79,31 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
 
     match *method {
         "find" => {
-            let filter = if args_str.is_empty() {
-                None
+            let (filter, traverse) = if args_str.is_empty() {
+                (None, None)
+            } else if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(args_str) {
+                let mut trav = None;
+                if let Some(obj) = v.as_object_mut() {
+                    if let Some(t_val) = obj.remove("$traverse") {
+                        if let Some(from_id) = t_val.get("from").and_then(|x| x.as_str()) {
+                            let depth = t_val.get("depth").and_then(|x| x.as_u64()).unwrap_or(1) as usize;
+                            let via = t_val.get("via").and_then(|x| x.as_str()).map(|s| s.to_string());
+                            trav = Some(TraverseClause {
+                                start_id: from_id.to_string(),
+                                max_depth: depth,
+                                relation: via,
+                            });
+                        }
+                    }
+                }
+                let f = if v.as_object().map_or(false, |m| m.is_empty()) {
+                    None
+                } else {
+                    Some(parse_json_filter(&v.to_string())?)
+                };
+                (f, trav)
             } else {
-                Some(parse_json_filter(args_str)?)
+                (Some(parse_json_filter(args_str)?), None)
             };
             Ok(Statement::Find {
                 collection,
@@ -91,7 +112,7 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                 limit: None,
                 skip: None,
                 vector_search: None,
-                traverse: None,
+                traverse,
             })
         }
         "insert" | "insertOne" => {
@@ -232,6 +253,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     let mut limit = None;
     let mut skip = None;
     let mut vector_search = None;
+    let mut traverse = None;
 
     while i < tokens.len() {
         let token_upper = tokens[i].to_uppercase();
@@ -241,7 +263,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             let mut where_tokens = Vec::new();
             while i < tokens.len() {
                 let next_upper = tokens[i].to_uppercase();
-                if ["LIMIT", "SKIP", "ORDER", "VECTOR"].contains(&next_upper.as_str()) {
+                if ["LIMIT", "SKIP", "OFFSET", "ORDER", "VECTOR", "TRAVERSE"].contains(&next_upper.as_str()) {
                     break;
                 }
                 where_tokens.push(tokens[i]);
@@ -263,15 +285,19 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
                 i += 1;
             }
         } else if token_upper == "VECTOR" {
-            // VECTOR NEAR [0.1, 0.2] TOP 10
+            // VECTOR NEAR [0.1, 0.2] TOP 10 [USING INDEX index_name]
             i += 1;
-            // look for NEAR
             if i < tokens.len() && tokens[i].eq_ignore_ascii_case("NEAR") {
                 i += 1;
             }
             // parse array string
             let mut vec_str = String::new();
-            while i < tokens.len() && !tokens[i].eq_ignore_ascii_case("TOP") && !tokens[i].eq_ignore_ascii_case("LIMIT") {
+            while i < tokens.len()
+                && !tokens[i].eq_ignore_ascii_case("TOP")
+                && !tokens[i].eq_ignore_ascii_case("LIMIT")
+                && !tokens[i].eq_ignore_ascii_case("USING")
+                && !tokens[i].eq_ignore_ascii_case("TRAVERSE")
+            {
                 vec_str.push_str(tokens[i]);
                 vec_str.push(' ');
                 i += 1;
@@ -285,9 +311,56 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
                 10
             };
 
+            let mut index_name = None;
+            if i + 2 < tokens.len()
+                && tokens[i].eq_ignore_ascii_case("USING")
+                && tokens[i + 1].eq_ignore_ascii_case("INDEX")
+            {
+                index_name = Some(tokens[i + 2].trim_matches(|c| c == '\'' || c == '"' || c == ';').to_string());
+                i += 3;
+            }
+
             let vec_parsed: Result<Vec<f32>, _> = serde_json::from_str(vec_str.trim());
             if let Ok(v) = vec_parsed {
-                vector_search = Some(VectorSearchClause { vector: v, top_k });
+                vector_search = Some(VectorSearchClause { vector: v, top_k, index_name });
+            }
+        } else if token_upper == "TRAVERSE" {
+            // Sintaks: TRAVERSE FROM "start_id" DEPTH <n> [VIA "relation_type"]
+            i += 1;
+            let mut start_id = String::new();
+            let mut max_depth = 1usize;
+            let mut relation = None;
+
+            if i < tokens.len() && tokens[i].eq_ignore_ascii_case("FROM") {
+                i += 1;
+                if i < tokens.len() {
+                    start_id = tokens[i].trim_matches(|c| c == '\'' || c == '"' || c == ';').to_string();
+                    i += 1;
+                }
+            }
+
+            if i < tokens.len() && tokens[i].eq_ignore_ascii_case("DEPTH") {
+                i += 1;
+                if i < tokens.len() {
+                    max_depth = tokens[i].trim_matches(';').parse::<usize>().unwrap_or(1);
+                    i += 1;
+                }
+            }
+
+            if i < tokens.len() && tokens[i].eq_ignore_ascii_case("VIA") {
+                i += 1;
+                if i < tokens.len() {
+                    relation = Some(tokens[i].trim_matches(|c| c == '\'' || c == '"' || c == ';').to_string());
+                    i += 1;
+                }
+            }
+
+            if !start_id.is_empty() {
+                traverse = Some(TraverseClause {
+                    start_id,
+                    max_depth,
+                    relation,
+                });
             }
         } else {
             i += 1;
@@ -301,7 +374,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
         limit,
         skip,
         vector_search,
-        traverse: None,
+        traverse,
     })
 }
 
@@ -570,6 +643,69 @@ mod tests {
                 assert_eq!(documents[0].get("title").unwrap().as_str(), Some("FaizDB AI"));
             }
             _ => panic!("Expected Statement::Insert"),
+        }
+    }
+
+    #[test]
+    fn test_parse_faizql_traverse() {
+        let stmt = parse_query("FIND prod TRAVERSE FROM 'p1' DEPTH 2").unwrap();
+        match stmt {
+            Statement::Find { collection, traverse, filter, .. } => {
+                assert_eq!(collection, "prod");
+                assert!(filter.is_none());
+                let trav = traverse.expect("TRAVERSE clause should be parsed");
+                assert_eq!(trav.start_id, "p1");
+                assert_eq!(trav.max_depth, 2);
+                assert_eq!(trav.relation, None);
+            }
+            _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_faizql_where_and_traverse() {
+        let stmt = parse_query("FIND prod WHERE cat = 'tech' TRAVERSE FROM 'p1' DEPTH 3 VIA 'related'").unwrap();
+        match stmt {
+            Statement::Find { collection, filter, traverse, .. } => {
+                assert_eq!(collection, "prod");
+                assert!(filter.is_some(), "WHERE filter must not be eaten by TRAVERSE");
+                let trav = traverse.expect("TRAVERSE clause should be parsed");
+                assert_eq!(trav.start_id, "p1");
+                assert_eq!(trav.max_depth, 3);
+                assert_eq!(trav.relation, Some("related".to_string()));
+            }
+            _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_faizql_vector_using_index() {
+        let stmt = parse_query("FIND prod WHERE cat = 'tech' VECTOR NEAR [1.0, 0.5] TOP 3 USING INDEX 'custom_emb'").unwrap();
+        match stmt {
+            Statement::Find { collection, filter, vector_search, .. } => {
+                assert_eq!(collection, "prod");
+                assert!(filter.is_some());
+                let vec_clause = vector_search.expect("VECTOR clause should be parsed");
+                assert_eq!(vec_clause.top_k, 3);
+                assert_eq!(vec_clause.index_name, Some("custom_emb".to_string()));
+            }
+            _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_mongo_traverse() {
+        let stmt = parse_query(r#"db.prod.find({"cat": "tech", "$traverse": {"from": "p1", "depth": 2, "via": "knows"}})"#).unwrap();
+        match stmt {
+            Statement::Find { collection, filter, traverse, .. } => {
+                assert_eq!(collection, "prod");
+                assert!(filter.is_some());
+                let trav = traverse.expect("TRAVERSE clause should be parsed from Mongo syntax");
+                assert_eq!(trav.start_id, "p1");
+                assert_eq!(trav.max_depth, 2);
+                assert_eq!(trav.relation, Some("knows".to_string()));
+            }
+            _ => panic!("Expected Statement::Find"),
         }
     }
 }

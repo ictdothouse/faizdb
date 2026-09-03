@@ -21,6 +21,7 @@ fn test_chaos_wal_crash_recovery_resilience() {
             memtable_size: 1024 * 1024,
             sync_writes: false,
             enable_wal: true,
+            ..Default::default()
         };
         let engine = StorageEngine::open(config).expect("Failed to open engine");
 
@@ -40,6 +41,7 @@ fn test_chaos_wal_crash_recovery_resilience() {
             memtable_size: 1024 * 1024,
             sync_writes: false,
             enable_wal: true,
+            ..Default::default()
         };
         let engine = StorageEngine::open(config).expect("Failed to recover engine from WAL");
 

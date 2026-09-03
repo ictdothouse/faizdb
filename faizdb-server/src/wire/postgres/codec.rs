@@ -68,6 +68,15 @@ pub fn encode_auth_ok() -> Vec<u8> {
     buf.to_vec()
 }
 
+/// Encode `AuthenticationCleartextPassword` message: 'R' + len (8) + code (3)
+pub fn encode_auth_cleartext_password() -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(9);
+    buf.put_u8(b'R');
+    buf.put_i32(8);
+    buf.put_i32(3);
+    buf.to_vec()
+}
+
 /// Encode `ParameterStatus` message: 'S' + len + name\0 + value\0
 pub fn encode_parameter_status(name: &str, value: &str) -> Vec<u8> {
     let payload_len = 4 + name.len() + 1 + value.len() + 1;

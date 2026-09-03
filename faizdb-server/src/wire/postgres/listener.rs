@@ -4,14 +4,17 @@
 //! Node.js `pg`, Prisma, GORM, Python asyncpg, etc.), handles the SSL and Startup handshake,
 //! parses queries, and routes them to the FaizDB query execution engine.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
 use faizdb_query::DatabaseContext;
+use faizdb_security::UserStore;
 use super::codec::{
-    encode_auth_ok, encode_backend_key_data, encode_parameter_status, encode_ready_for_query,
+    encode_auth_cleartext_password, encode_auth_ok, encode_backend_key_data, encode_error_response,
+    encode_parameter_status, encode_ready_for_query,
 };
 use super::handler::handle_postgres_query;
 
@@ -25,6 +28,7 @@ const PG_PROTOCOL_V3: i32 = 196608;
 pub async fn run_postgres_server(
     addr: &str,
     db: Arc<DatabaseContext>,
+    user_store: Arc<UserStore>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind(addr).await?;
     info!("🐘 PostgreSQL Wire Protocol Server running on postgresql://{addr}");
@@ -33,8 +37,9 @@ pub async fn run_postgres_server(
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
                 let db_clone = db.clone();
+                let store_clone = user_store.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_postgres_connection(socket, db_clone, peer_addr.to_string()).await {
+                    if let Err(e) = handle_postgres_connection(socket, db_clone, store_clone, peer_addr.to_string()).await {
                         warn!("Postgres connection closed for {peer_addr}: {e}");
                     }
                 });
@@ -49,6 +54,7 @@ pub async fn run_postgres_server(
 async fn handle_postgres_connection(
     mut stream: TcpStream,
     db: Arc<DatabaseContext>,
+    user_store: Arc<UserStore>,
     client_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut in_transaction = false;
@@ -82,6 +88,79 @@ async fn handle_postgres_connection(
         }
 
         if code == PG_PROTOCOL_V3 {
+            // Parse startup parameters (null-terminated key-value pairs)
+            let mut params = HashMap::new();
+            let mut start = 4;
+            while start < body_buf.len() {
+                if body_buf[start] == 0 {
+                    break;
+                }
+                if let Some(null_pos) = body_buf[start..].iter().position(|&b| b == 0) {
+                    let key = String::from_utf8_lossy(&body_buf[start..start + null_pos]).to_string();
+                    start += null_pos + 1;
+                    if let Some(val_null_pos) = body_buf[start..].iter().position(|&b| b == 0) {
+                        let val = String::from_utf8_lossy(&body_buf[start..start + val_null_pos]).to_string();
+                        start += val_null_pos + 1;
+                        params.insert(key, val);
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            let username = params.get("user").map(|s| s.as_str()).unwrap_or("admin");
+            let no_auth = std::env::var("FAIZDB_NO_AUTH")
+                .map(|v| v == "1" || v == "true")
+                .unwrap_or(false);
+
+            if !no_auth {
+                // Request password from client via AuthenticationCleartextPassword
+                stream.write_all(&encode_auth_cleartext_password()).await?;
+                stream.flush().await?;
+
+                // Read PasswordMessage ('p')
+                let mut p_type = [0u8; 1];
+                if let Err(e) = stream.read_exact(&mut p_type).await {
+                    return Err(format!("Client closed connection waiting for password: {e}").into());
+                }
+
+                if p_type[0] != b'p' {
+                    let err = encode_error_response("FATAL", "28000", "Expected password response from client");
+                    stream.write_all(&err).await?;
+                    stream.flush().await?;
+                    return Err("Client did not send PasswordMessage".into());
+                }
+
+                let mut p_len_buf = [0u8; 4];
+                stream.read_exact(&mut p_len_buf).await?;
+                let p_len = i32::from_be_bytes(p_len_buf);
+                if p_len < 4 || p_len > 4096 {
+                    return Err("Invalid password message length".into());
+                }
+
+                let mut p_body = vec![0u8; (p_len - 4) as usize];
+                stream.read_exact(&mut p_body).await?;
+                if let Some(&0) = p_body.last() {
+                    p_body.pop();
+                }
+                let password = String::from_utf8_lossy(&p_body).to_string();
+
+                if user_store.authenticate(username, &password).is_none() {
+                    warn!("Authentication failed for user '{username}' from {client_addr}");
+                    let err = encode_error_response(
+                        "FATAL",
+                        "28P01",
+                        &format!("password authentication failed for user \"{username}\""),
+                    );
+                    stream.write_all(&err).await?;
+                    stream.flush().await?;
+                    return Err(format!("Password authentication failed for user '{username}'").into());
+                }
+                info!("🔐 User '{username}' authenticated successfully via PostgreSQL wire from {client_addr}");
+            }
+
             // Send AuthenticationOk
             stream.write_all(&encode_auth_ok()).await?;
 

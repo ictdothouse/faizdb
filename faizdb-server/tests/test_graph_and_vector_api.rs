@@ -17,6 +17,7 @@ fn setup_test_app() -> (axum::Router, String) {
     let state = std::sync::Arc::new(AppState {
         db,
         auth,
+        user_store: std::sync::Arc::new(faizdb_security::UserStore::new()),
         backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(Default::default())),
         geo_replication: geo,
         metrics: std::sync::Arc::new(Default::default()),

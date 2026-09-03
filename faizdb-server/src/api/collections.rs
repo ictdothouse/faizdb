@@ -10,7 +10,8 @@ use axum::{
 };
 use serde::Deserialize;
 
-use faizdb_core::document::model::Document;
+use std::collections::BTreeMap;
+use faizdb_core::document::model::{Document, DocumentId, Value};
 use faizdb_core::stream::ChangeEvent;
 use faizdb_query::parse_query;
 
@@ -168,6 +169,103 @@ pub async fn delete_document(
         Ok(_) => {
             state.db.change_stream_bus().publish(ChangeEvent::delete(&name, &id));
             (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({ "deleted": true, "id": id }))))
+        }
+        Err(e) => (StatusCode::NOT_FOUND, Json(ApiResponse::err(e.to_string()))),
+    }
+}
+
+pub async fn update_document_put(
+    State(state): State<Arc<AppState>>,
+    Path((name, id)): Path<(String, String)>,
+    Json(doc_val): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let actual_doc_val = if let Some(inner) = doc_val.get("document").cloned() {
+        if inner.is_object() { inner } else { doc_val }
+    } else {
+        doc_val
+    };
+
+    let mut doc = match Document::from_json_value(actual_doc_val) {
+        Some(d) => d,
+        None => return (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Expected JSON object for document"))),
+    };
+    doc.id = DocumentId::from(id.clone());
+
+    let col = state.db.get_or_create_collection(&name);
+    let res = col.update_by_id(&id, |existing| {
+        *existing = doc.clone();
+    });
+
+    match res {
+        Ok(updated) => {
+            let mut diff = BTreeMap::new();
+            for (k, v) in &updated.fields {
+                diff.insert(k.clone(), v.clone());
+            }
+            state.db.change_stream_bus().publish(ChangeEvent::update(&name, &id, diff, Some(updated.clone())));
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::to_value(updated).unwrap_or_default())))
+        }
+        Err(e) => (StatusCode::NOT_FOUND, Json(ApiResponse::err(e.to_string()))),
+    }
+}
+
+pub async fn update_document_patch(
+    State(state): State<Arc<AppState>>,
+    Path((name, id)): Path<(String, String)>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let payload_obj = match payload.as_object() {
+        Some(obj) => obj,
+        None => return (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Expected JSON object for PATCH"))),
+    };
+
+    let col = state.db.get_or_create_collection(&name);
+    let mut diff = BTreeMap::new();
+
+    let res = col.update_by_id(&id, |doc| {
+        // Support MongoDB-style $set, $inc, $unset operators
+        if payload_obj.contains_key("$set") || payload_obj.contains_key("$inc") || payload_obj.contains_key("$unset") {
+            if let Some(set_obj) = payload_obj.get("$set").and_then(|v| v.as_object()) {
+                for (k, v) in set_obj {
+                    let val = Value::from(v.clone());
+                    diff.insert(k.clone(), val.clone());
+                    doc.set(k.clone(), val);
+                }
+            }
+            if let Some(inc_obj) = payload_obj.get("$inc").and_then(|v| v.as_object()) {
+                for (k, v) in inc_obj {
+                    let inc_amount = v.as_f64().unwrap_or(0.0);
+                    let current_val = doc.get(k).and_then(|val| match val {
+                        Value::Integer(i) => Some(*i as f64),
+                        Value::Float(f) => Some(*f),
+                        _ => None,
+                    }).unwrap_or(0.0);
+                    let new_val = Value::Float(current_val + inc_amount);
+                    diff.insert(k.clone(), new_val.clone());
+                    doc.set(k.clone(), new_val);
+                }
+            }
+            if let Some(unset_obj) = payload_obj.get("$unset").and_then(|v| v.as_object()) {
+                for k in unset_obj.keys() {
+                    doc.fields.remove(k);
+                }
+            }
+        } else {
+            // Direct field merge
+            for (k, v) in payload_obj {
+                if k != "_id" {
+                    let val = Value::from(v.clone());
+                    diff.insert(k.clone(), val.clone());
+                    doc.set(k.clone(), val);
+                }
+            }
+        }
+    });
+
+    match res {
+        Ok(updated) => {
+            state.db.change_stream_bus().publish(ChangeEvent::update(&name, &id, diff, Some(updated.clone())));
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::to_value(updated).unwrap_or_default())))
         }
         Err(e) => (StatusCode::NOT_FOUND, Json(ApiResponse::err(e.to_string()))),
     }

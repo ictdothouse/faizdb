@@ -483,8 +483,25 @@ impl DatabaseContext {
 
                 // Vector search ranking if specified
                 if let Some(v_clause) = vector_search {
-                    // Check if an accelerated HNSW index exists for this collection
-                    if let Some(idx_lock) = self.vector_indexes.get(&collection) {
+                    // Check if an accelerated HNSW index exists:
+                    // 1. Check v_clause.index_name if explicitly provided
+                    // 2. Otherwise check collection name
+                    // 3. Otherwise if there is exactly 1 index registered, use it as fallback
+                    let resolved_idx_opt = if let Some(ref custom_idx) = v_clause.index_name {
+                        if let Some(idx_lock) = self.vector_indexes.get(custom_idx) {
+                            Some(idx_lock.clone())
+                        } else {
+                            return Err(format!("Vector index '{custom_idx}' not found"));
+                        }
+                    } else if let Some(idx_lock) = self.vector_indexes.get(&collection) {
+                        Some(idx_lock.clone())
+                    } else if self.vector_indexes.len() == 1 {
+                        self.vector_indexes.iter().next().map(|entry| entry.value().clone())
+                    } else {
+                        None
+                    };
+
+                    if let Some(idx_lock) = resolved_idx_opt {
                         let idx = idx_lock.read();
                         let candidate_k = if filter.is_some() || traverse.is_some() {
                             std::cmp::max(v_clause.top_k * 10, 100).min(idx.len().max(v_clause.top_k))
@@ -641,5 +658,106 @@ impl DatabaseContext {
                 Ok(QueryResult::Success("ACID Transaction rolled back and changes discarded".into()))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_query;
+
+    #[test]
+    fn test_executor_graphrag_traverse_exact_nodes() {
+        let ctx = DatabaseContext::new();
+        let col = ctx.get_or_create_collection("prod");
+
+        // Insert documents p1, p2, p3
+        let mut d1 = Document::new();
+        d1.set("_id", "p1");
+        d1.set("cat", "tech");
+        col.insert(d1).unwrap();
+
+        let mut d2 = Document::new();
+        d2.set("_id", "p2");
+        d2.set("cat", "tech");
+        col.insert(d2).unwrap();
+
+        let mut d3 = Document::new();
+        d3.set("_id", "p3");
+        d3.set("cat", "tech");
+        col.insert(d3).unwrap();
+
+        // Connect p1 -> p2 in graph store
+        ctx.graph_store.write().add_vertex(faizdb_graph::Vertex::new("p1", "Product"));
+        ctx.graph_store.write().add_vertex(faizdb_graph::Vertex::new("p2", "Product"));
+        ctx.graph_store.write().add_vertex(faizdb_graph::Vertex::new("p3", "Product"));
+        ctx.graph_store.write().add_edge(faizdb_graph::Edge::new("p1", "p2", "related"));
+
+        // 1. FIND prod TRAVERSE FROM "p1" DEPTH 1
+        // Must return p1 and p2, NOT p3!
+        let stmt = parse_query("FIND prod TRAVERSE FROM 'p1' DEPTH 1").unwrap();
+        let res = ctx.execute(stmt).unwrap();
+        match res {
+            QueryResult::Documents(docs) => {
+                let ids: Vec<String> = docs.iter().map(|d| d.id.as_str().to_string()).collect();
+                assert!(ids.contains(&"p1".to_string()));
+                assert!(ids.contains(&"p2".to_string()));
+                assert!(!ids.contains(&"p3".to_string()), "p3 has no edge from p1 and must not be returned!");
+                assert_eq!(docs.len(), 2);
+            }
+            _ => panic!("Expected QueryResult::Documents"),
+        }
+
+        // 2. FIND prod WHERE cat = 'tech' TRAVERSE FROM "p1" DEPTH 1
+        // Both filter and graph traversal must be satisfied!
+        let stmt = parse_query("FIND prod WHERE cat = 'tech' TRAVERSE FROM 'p1' DEPTH 1").unwrap();
+        let res = ctx.execute(stmt).unwrap();
+        match res {
+            QueryResult::Documents(docs) => {
+                let ids: Vec<String> = docs.iter().map(|d| d.id.as_str().to_string()).collect();
+                assert!(ids.contains(&"p1".to_string()));
+                assert!(ids.contains(&"p2".to_string()));
+                assert!(!ids.contains(&"p3".to_string()));
+                assert_eq!(docs.len(), 2);
+            }
+            _ => panic!("Expected QueryResult::Documents"),
+        }
+    }
+
+    #[test]
+    fn test_executor_vector_using_index_and_error_handling() {
+        let ctx = DatabaseContext::new();
+        let col = ctx.get_or_create_collection("prod");
+
+        let mut d1 = Document::new();
+        d1.set("_id", "p1");
+        d1.set("name", "Doc 1");
+        col.insert(d1).unwrap();
+
+        // Create vector index named 'custom_emb' (different from collection name 'prod')
+        let config = faizdb_vector::HnswConfig {
+            dimensions: 2,
+            metric: faizdb_vector::DistanceMetric::Cosine,
+            ..Default::default()
+        };
+        let idx = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(config)));
+        idx.write().insert("p1", vec![1.0, 0.0]).unwrap();
+        ctx.vector_indexes().insert("custom_emb".to_string(), idx);
+
+        // Query with USING INDEX 'custom_emb'
+        let stmt = parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'custom_emb'").unwrap();
+        let res = ctx.execute(stmt).unwrap();
+        match res {
+            QueryResult::Documents(docs) => {
+                assert_eq!(docs.len(), 1);
+                assert_eq!(docs[0].id.as_str(), "p1");
+            }
+            _ => panic!("Expected QueryResult::Documents"),
+        }
+
+        // Query with missing index returns clear error
+        let stmt = parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'missing_index'").unwrap();
+        let err = ctx.execute(stmt).unwrap_err();
+        assert!(err.contains("Vector index 'missing_index' not found"));
     }
 }

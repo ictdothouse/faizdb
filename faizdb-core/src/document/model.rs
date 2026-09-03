@@ -396,7 +396,14 @@ impl Document {
 
     /// Set a field on an existing document
     pub fn set(&mut self, key: impl Into<String>, value: impl Into<Value>) {
-        self.fields.insert(key.into(), value.into());
+        let k = key.into();
+        let v = value.into();
+        if k == "_id" {
+            if let Some(s) = v.as_str() {
+                self.id = DocumentId::from(s);
+            }
+        }
+        self.fields.insert(k, v);
         if let Some(meta) = &mut self.metadata {
             meta.updated_at = Utc::now();
             meta.version += 1;
