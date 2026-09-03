@@ -415,9 +415,8 @@ impl Collection {
         let updated = entry.value().clone();
         if let Some(storage) = &self.storage {
             let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
-            if let Ok(val) = serde_json::to_vec(&updated) {
-                let _ = storage.put(&key, &val);
-            }
+            let val = serde_json::to_vec(&updated)?;
+            storage.put(&key, &val)?;
         }
 
         Ok(updated)
@@ -477,7 +476,7 @@ impl Collection {
         // If storage engine is connected, persist tombstone through WAL and MemTable
         if let Some(storage) = &self.storage {
             let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
-            let _ = storage.delete(&key);
+            storage.delete(&key)?;
         }
 
         Ok(doc)

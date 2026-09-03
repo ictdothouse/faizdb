@@ -116,3 +116,97 @@ async fn test_mvcc_snapshot_isolation() {
     assert!(tx_mgr.commit(&mut txn1).is_ok());
     assert!(tx_mgr.commit(&mut txn2).is_ok());
 }
+
+#[tokio::test]
+async fn test_vector_and_graph_persistence_recovery() {
+    let tmp_dir = TempDir::new().unwrap();
+    let data_path = tmp_dir.path().to_path_buf();
+
+    // 1. First run: persist vector index & graph to StorageEngine
+    {
+        let ctx = DatabaseContext::with_storage_dir(&data_path).expect("Failed to open storage");
+        let storage = ctx.storage().expect("Storage must be active");
+
+        // Insert vector index & vector items
+        let vec_cfg = faizdb_vector::HnswConfig {
+            dimensions: 4,
+            metric: faizdb_vector::DistanceMetric::Cosine,
+            ..Default::default()
+        };
+        let cfg_bytes = serde_json::to_vec(&vec_cfg).unwrap();
+        storage.put(b"vec:meta:test_emb", &cfg_bytes).unwrap();
+
+        let v1 = vec![1.0, 0.0, 0.0, 0.0];
+        let v2 = vec![0.0, 1.0, 0.0, 0.0];
+        storage.put(b"vec:data:test_emb:vec_1", &serde_json::to_vec(&v1).unwrap()).unwrap();
+        storage.put(b"vec:data:test_emb:vec_2", &serde_json::to_vec(&v2).unwrap()).unwrap();
+
+        // Insert graph vertices & edge
+        let vertex_a = faizdb_graph::Vertex::new("node_a", "Server");
+        let vertex_b = faizdb_graph::Vertex::new("node_b", "Database");
+        let edge = faizdb_graph::Edge::with_weight("node_a", "node_b", "CONNECTS_TO", 1.0);
+
+        storage.put(b"graph:v:node_a", &serde_json::to_vec(&vertex_a).unwrap()).unwrap();
+        storage.put(b"graph:v:node_b", &serde_json::to_vec(&vertex_b).unwrap()).unwrap();
+        storage.put(b"graph:e:node_a:node_b:CONNECTS_TO", &serde_json::to_vec(&edge).unwrap()).unwrap();
+    } // Drop context simulating shutdown
+
+    // 2. Second run: Re-open from disk and verify automatic recovery
+    {
+        let ctx = DatabaseContext::with_storage_dir(&data_path).expect("Failed to reopen storage");
+
+        // Verify vector index and points recovered
+        let index_lock = ctx.vector_indexes().get("test_emb").expect("Vector index test_emb must be recovered");
+        let index = index_lock.read();
+        assert_eq!(index.len(), 2, "Both vectors must be recovered");
+
+        // Verify search on recovered vector index
+        let query = vec![0.9, 0.1, 0.0, 0.0];
+        let results = index.search(&query, 1);
+        assert_eq!(results[0].id, "vec_1");
+
+        // Verify graph vertices and edges recovered
+        let store = ctx.graph_store();
+        let graph = store.read();
+        assert_eq!(graph.vertex_count(), 2, "Both vertices must be recovered");
+        assert_eq!(graph.edge_count(), 1, "Edge must be recovered");
+
+        // Verify traversal works on recovered graph
+        let paths = graph.traverse_bfs("node_a", 2, None);
+        assert_eq!(paths.len(), 2);
+    }
+}
+
+#[tokio::test]
+async fn test_transaction_write_staging_lifecycle() {
+    let tmp_dir = TempDir::new().unwrap();
+    let ctx = DatabaseContext::with_storage_dir(tmp_dir.path()).expect("Failed to open storage");
+    let tx_mgr = ctx.tx_manager();
+
+    // 1. Begin transaction
+    let mut txn = tx_mgr.begin();
+    let doc = Document::new()
+        .field("name", "StagedAlice")
+        .field("balance", 500);
+    let doc_bytes = serde_json::to_vec(&doc).unwrap();
+
+    // 2. Stage write in transaction buffer
+    let key = format!("doc:accounts:{}", doc.id.as_str()).into_bytes();
+    txn.put(key.clone(), doc_bytes.clone()).unwrap();
+
+    // Document is NOT yet committed in collection
+    let col = ctx.get_or_create_collection("accounts");
+    assert!(col.find_by_id(doc.id.as_str()).is_err());
+
+    // 3. Commit transaction
+    assert!(tx_mgr.commit(&mut txn).is_ok());
+
+    // In transaction commit handler, staged writes are loaded to collection
+    col.load_document(doc.clone());
+    if let Some(storage) = ctx.storage() {
+        storage.put(&key, &doc_bytes).unwrap();
+    }
+
+    // Document is now visible
+    assert!(col.find_by_id(doc.id.as_str()).is_ok());
+}

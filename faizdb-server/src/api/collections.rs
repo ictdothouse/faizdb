@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -36,17 +36,64 @@ pub struct QueryRequest {
     pub query: String,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct TxnQuery {
+    pub txn_id: Option<String>,
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 pub async fn insert_document(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-    Json(doc_val): Json<serde_json::Value>,
+    headers: HeaderMap,
+    Query(query): Query<TxnQuery>,
+    Json(mut doc_val): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    let txn_id = headers
+        .get("x-txn-id")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .or(query.txn_id)
+        .or_else(|| {
+            if let Some(obj) = doc_val.as_object_mut() {
+                obj.remove("_txn_id")
+                    .or_else(|| obj.remove("txn_id"))
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+            } else {
+                None
+            }
+        });
+
     let doc = match Document::from_json_value(doc_val) {
         Some(d) => d,
         None => return (StatusCode::BAD_REQUEST, Json(ApiResponse::err("Expected JSON object"))),
     };
+
+    // If client supplied a transaction ID, stage the mutation into the transaction write buffer
+    if let Some(ref tid) = txn_id {
+        if let Some(txn_mutex) = state.db.active_txns().get(tid) {
+            let doc_id = doc.id.as_str().to_string();
+            let key = format!("doc:{}:{}", name, doc_id);
+            let val = match serde_json::to_vec(&doc) {
+                Ok(b) => b,
+                Err(e) => return (StatusCode::BAD_REQUEST, Json(ApiResponse::err(e.to_string()))),
+            };
+            let mut txn = txn_mutex.lock();
+            if let Err(e) = txn.put(key.into_bytes(), val) {
+                return (StatusCode::BAD_REQUEST, Json(ApiResponse::err(e.to_string())));
+            }
+            return (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                "id": doc_id,
+                "staged": true,
+                "txn_id": tid,
+                "collection": name,
+            }))));
+        } else {
+            return (StatusCode::NOT_FOUND, Json(ApiResponse::err(format!("Transaction '{tid}' not found or already closed"))));
+        }
+    }
+
     let col = state.db.get_or_create_collection(&name);
     let doc_clone = doc.clone();
     match col.insert(doc) {
@@ -77,7 +124,35 @@ pub async fn get_collection_documents(
 pub async fn delete_document(
     State(state): State<Arc<AppState>>,
     Path((name, id)): Path<(String, String)>,
+    headers: HeaderMap,
+    Query(query): Query<TxnQuery>,
 ) -> impl IntoResponse {
+    let txn_id = headers
+        .get("x-txn-id")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .or(query.txn_id);
+
+    // If client supplied a transaction ID, stage deletion into the transaction write buffer
+    if let Some(ref tid) = txn_id {
+        if let Some(txn_mutex) = state.db.active_txns().get(tid) {
+            let key = format!("doc:{}:{}", name, id);
+            let mut txn = txn_mutex.lock();
+            if let Err(e) = txn.delete(key.into_bytes()) {
+                return (StatusCode::BAD_REQUEST, Json(ApiResponse::err(e.to_string())));
+            }
+            return (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                "deleted": true,
+                "staged": true,
+                "id": id,
+                "txn_id": tid,
+                "collection": name,
+            }))));
+        } else {
+            return (StatusCode::NOT_FOUND, Json(ApiResponse::err(format!("Transaction '{tid}' not found or already closed"))));
+        }
+    }
+
     let col = state.db.get_or_create_collection(&name);
     match col.delete_by_id(&id) {
         Ok(_) => {
@@ -257,6 +332,32 @@ pub async fn transaction_commit(
             let writes = txn.write_buffer().clone();
             match state.db.tx_manager().commit(&mut txn) {
                 Ok(()) => {
+                    // Apply all staged mutations into in-memory collections
+                    for (key_bytes, write) in &writes {
+                        if let Ok(key_str) = std::str::from_utf8(key_bytes) {
+                            if key_str.starts_with("doc:") {
+                                let parts: Vec<&str> = key_str.splitn(3, ':').collect();
+                                if parts.len() == 3 {
+                                    let col_name = parts[1];
+                                    let doc_id = parts[2];
+                                    let col = state.db.get_or_create_collection(col_name);
+                                    match write {
+                                        faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
+                                            if let Ok(doc) = serde_json::from_slice::<Document>(val) {
+                                                col.load_document(doc.clone());
+                                                state.db.change_stream_bus().publish(ChangeEvent::insert(col_name, doc));
+                                            }
+                                        }
+                                        faizdb_core::transaction::mvcc::TxnWrite::Delete => {
+                                            let _ = col.delete_by_id(doc_id);
+                                            state.db.change_stream_bus().publish(ChangeEvent::delete(col_name, doc_id));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(storage) = state.db.storage() {
                         for (key, write) in &writes {
                             match write {
@@ -272,6 +373,7 @@ pub async fn transaction_commit(
                     (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
                         "txn_id": id,
                         "status": "Committed",
+                        "staged_writes_count": writes.len(),
                         "message": "All staged mutations verified with snapshot isolation and written to WAL",
                     }))))
                 }

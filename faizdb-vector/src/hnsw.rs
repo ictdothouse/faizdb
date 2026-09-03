@@ -177,8 +177,8 @@ impl HnswIndex {
 
     /// Generate random layer level according to exponential distribution
     fn random_level(&self) -> usize {
-        let mut rng = rand::thread_rng();
-        let r: f64 = rng.gen_range(0.0..1.0);
+        let mut rng = rand::rng();
+        let r: f64 = rng.random_range(0.0..1.0);
         let level = (-r.ln() * self.config.ml).floor() as usize;
         level.min(16) // Limit max levels to 16
     }
@@ -539,9 +539,9 @@ mod tests {
         let mut index = HnswIndex::new(config);
 
         // Insert 100 random vectors
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..100 {
-            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.random_range(-1.0..1.0)).collect();
             crate::distance::normalize_in_place(&mut v);
             index.insert(format!("doc_{i}"), v).unwrap();
         }
@@ -587,10 +587,10 @@ mod tests {
         let mut index = HnswIndex::new(config);
 
         // Insert 50 random vectors
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut vectors = Vec::new();
         for i in 0..50 {
-            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.random_range(-1.0..1.0)).collect();
             crate::distance::normalize_in_place(&mut v);
             vectors.push(v.clone());
             index.insert(format!("item_{i}"), v).unwrap();
@@ -609,7 +609,7 @@ mod tests {
     fn test_quantized_hnsw_memory_reduction() {
         let dim = 128;
         let count = 100;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // 1. Raw f32 index
         let raw_config = HnswConfig::new(dim, DistanceMetric::Cosine);
@@ -621,7 +621,7 @@ mod tests {
         let mut q_index = HnswIndex::new(q_config);
 
         for i in 0..count {
-            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.random_range(-1.0..1.0)).collect();
             crate::distance::normalize_in_place(&mut v);
             raw_index.insert(format!("doc_{i}"), v.clone()).unwrap();
             q_index.insert(format!("doc_{i}"), v).unwrap();
@@ -641,7 +641,7 @@ mod tests {
     fn test_binary_quantized_hnsw_32x_reduction() {
         let dim = 128;
         let count = 60;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let bin_config = HnswConfig::new(dim, DistanceMetric::Cosine)
             .with_quantization(QuantizationType::Binary1);
@@ -649,7 +649,7 @@ mod tests {
 
         let mut vectors = Vec::new();
         for i in 0..count {
-            let mut v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+            let mut v: Vec<f32> = (0..dim).map(|_| rng.random_range(-1.0..1.0)).collect();
             crate::distance::normalize_in_place(&mut v);
             vectors.push(v.clone());
             bin_index.insert(format!("bin_doc_{i}"), v).unwrap();

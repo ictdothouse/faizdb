@@ -50,7 +50,14 @@ pub async fn create_vertex(
         .unwrap_or_default();
 
     let vertex = Vertex::with_properties(payload.id.clone(), payload.label.clone(), doc);
-    state.db.graph_store().write().add_vertex(vertex);
+    state.db.graph_store().write().add_vertex(vertex.clone());
+
+    if let Some(storage) = state.db.storage() {
+        let key = format!("graph:v:{}", payload.id);
+        if let Ok(val) = serde_json::to_vec(&vertex) {
+            let _ = storage.put(key.as_bytes(), &val);
+        }
+    }
 
     (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
         "id": payload.id,
@@ -93,7 +100,14 @@ pub async fn create_edge(
         payload.weight.unwrap_or(1.0),
     );
     edge.properties = doc;
-    state.db.graph_store().write().add_edge(edge);
+    state.db.graph_store().write().add_edge(edge.clone());
+
+    if let Some(storage) = state.db.storage() {
+        let key = format!("graph:e:{}:{}:{}", payload.from, payload.to, payload.relation);
+        if let Ok(val) = serde_json::to_vec(&edge) {
+            let _ = storage.put(key.as_bytes(), &val);
+        }
+    }
 
     (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
         "from": payload.from,

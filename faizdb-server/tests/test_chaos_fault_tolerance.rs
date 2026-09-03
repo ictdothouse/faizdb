@@ -7,7 +7,6 @@
 
 use faizdb_core::cluster::crdt::{CrdtLwwRegister, CrdtPnCounter};
 use faizdb_core::storage::engine::{StorageConfig, StorageEngine};
-use std::collections::HashMap;
 use tempfile::tempdir;
 
 #[test]

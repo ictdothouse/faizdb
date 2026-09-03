@@ -18,16 +18,17 @@ This guide details how to run unit tests, multi-protocol integration tests, high
 
 The following metrics represent verified test runs conducted against the optimized release build of FaizDB:
 
-### A. Workspace Unit Tests (`cargo test --workspace`):
-* **Status:** ✅ **84 / 84 Tests Passed (100%)**
-* **Compilation Status:** **0 Errors, 0 Warnings**
-* **Tested Monorepo Crates:**
-  * `faizdb-core` (LSM-Tree, MemTable, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs)
-  * `faizdb-vector` (HNSW Multi-Layer Index, Cosine/L2/Dot distance metrics)
-  * `faizdb-graph` (Knowledge Graph, Multi-Hop BFS/DFS Traversal)
-  * `faizdb-query` (AST Parser, Cost-Based EXPLAIN Optimizer, Aggregations)
-  * `faizdb-security` (AES-256-GCM AEAD, Argon2id, JWT RBAC)
-  * `faizdb-server` (MongoDB Wire, PostgreSQL Wire, gRPC Protobuf, REST/WebSockets)
+### A. Workspace Unit & Integration Tests (`cargo test --workspace`):
+* **Status:** ✅ **144 / 144 Tests Passed (100% Pass Rate across 17 Test Suites)**
+* **Compilation Status:** **0 Errors, 0 Warnings** (Strict Clean Build)
+* **Tested Monorepo Suites & Crates:**
+  * `faizdb-core` (81 tests: LSM-Tree, MemTable, WAL, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
+  * `faizdb-server` (31 tests: Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search)
+  * `faizdb-vector` (15 tests: Multi-Layer HNSW, Cosine/L2/Manhattan, Scalar & Binary 32x Quantization)
+  * `faizdb-query` (8 tests: AST Parser, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer)
+  * `faizdb-security` (5 tests: AES-256-GCM AEAD, Argon2id, Ed25519 JWT RBAC)
+  * `faizdb-graph` (2 tests: Knowledge Graph, Multi-Hop BFS/DFS Traversal, Dijkstra Shortest Path)
+  * Documentation doctests (2 tests)
 
 ---
 

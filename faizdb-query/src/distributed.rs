@@ -6,7 +6,6 @@
 //! - **Coordinator Reduction:** The receiving coordinator node reduces partial responses into a final unified result set.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// An individual shard target in the cluster
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

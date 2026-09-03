@@ -106,6 +106,29 @@ impl DatabaseContext {
         ctx
     }
 
+    /// Create cluster DatabaseContext with persistent StorageEngine
+    pub fn with_node_and_storage(node_id: &str, address: &str, storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Self {
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new(node_id, address));
+        let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
+        shards.register_node(node_id, address);
+
+        let ctx = Self {
+            collections: DashMap::new(),
+            bus: Arc::new(ChangeStreamBus::new()),
+            raft,
+            shards,
+            storage: Some(storage),
+            tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
+            active_txns: DashMap::new(),
+            vector_indexes: DashMap::new(),
+            graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            collection_stats: DashMap::new(),
+        };
+
+        ctx.recover_from_storage();
+        ctx
+    }
+
     /// Open or create storage engine at given data directory and recover existing data
     pub fn with_storage_dir(data_dir: impl AsRef<std::path::Path>) -> Result<Self, String> {
         let config = faizdb_core::storage::engine::StorageConfig {
@@ -117,9 +140,10 @@ impl DatabaseContext {
         Ok(Self::with_storage(Arc::new(storage)))
     }
 
-    /// Recover all collections and documents from storage on startup
+    /// Recover all collections, documents, vector indexes, and knowledge graph from storage on startup
     pub fn recover_from_storage(&self) {
         if let Some(storage) = &self.storage {
+            // 1. Recover documents
             if let Ok(entries) = storage.prefix_scan(b"doc:") {
                 for (key_bytes, val_bytes) in entries {
                     if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
@@ -131,6 +155,60 @@ impl DatabaseContext {
                                 col.load_document(doc);
                             }
                         }
+                    }
+                }
+            }
+
+            // 2. Recover vector index definitions
+            if let Ok(meta_entries) = storage.prefix_scan(b"vec:meta:") {
+                for (key_bytes, val_bytes) in meta_entries {
+                    if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
+                        if let Some(index_name) = key_str.strip_prefix("vec:meta:") {
+                            if let Ok(config) = serde_json::from_slice::<faizdb_vector::HnswConfig>(&val_bytes) {
+                                let index = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(config)));
+                                self.vector_indexes.insert(index_name.to_string(), index);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Recover vector data points
+            if let Ok(data_entries) = storage.prefix_scan(b"vec:data:") {
+                for (key_bytes, val_bytes) in data_entries {
+                    if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
+                        // format: vec:data:<index_name>:<id>
+                        let parts: Vec<&str> = key_str.splitn(4, ':').collect();
+                        if parts.len() == 4 {
+                            let index_name = parts[2];
+                            let vector_id = parts[3];
+                            if let Ok(vector) = serde_json::from_slice::<Vec<f32>>(&val_bytes) {
+                                if let Some(index_lock) = self.vector_indexes.get(index_name) {
+                                    let mut index = index_lock.write();
+                                    let _ = index.insert(vector_id.to_string(), vector);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Recover graph vertices
+            if let Ok(v_entries) = storage.prefix_scan(b"graph:v:") {
+                let mut graph = self.graph_store.write();
+                for (_key_bytes, val_bytes) in v_entries {
+                    if let Ok(vertex) = serde_json::from_slice::<faizdb_graph::Vertex>(&val_bytes) {
+                        graph.add_vertex(vertex);
+                    }
+                }
+            }
+
+            // 5. Recover graph edges
+            if let Ok(e_entries) = storage.prefix_scan(b"graph:e:") {
+                let mut graph = self.graph_store.write();
+                for (_key_bytes, val_bytes) in e_entries {
+                    if let Ok(edge) = serde_json::from_slice::<faizdb_graph::Edge>(&val_bytes) {
+                        graph.add_edge(edge);
                     }
                 }
             }

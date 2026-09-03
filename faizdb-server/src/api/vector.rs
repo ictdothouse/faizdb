@@ -64,8 +64,15 @@ pub async fn create_vector_index(
         ml: 1.0 / (m as f64).ln(),
     };
 
-    let index = Arc::new(parking_lot::RwLock::new(HnswIndex::new(config)));
+    let index = Arc::new(parking_lot::RwLock::new(HnswIndex::new(config.clone())));
     state.db.vector_indexes().insert(payload.name.clone(), index);
+
+    if let Some(storage) = state.db.storage() {
+        let key = format!("vec:meta:{}", payload.name);
+        if let Ok(val) = serde_json::to_vec(&config) {
+            let _ = storage.put(key.as_bytes(), &val);
+        }
+    }
 
     (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
         "index_name": payload.name,
@@ -88,6 +95,12 @@ pub async fn insert_vector(
                 metric: DistanceMetric::Cosine,
                 ..Default::default()
             };
+            if let Some(storage) = state.db.storage() {
+                let key = format!("vec:meta:{}", payload.index_name);
+                if let Ok(val) = serde_json::to_vec(&config) {
+                    let _ = storage.put(key.as_bytes(), &val);
+                }
+            }
             let new_idx = Arc::new(parking_lot::RwLock::new(HnswIndex::new(config)));
             state.db.vector_indexes().insert(payload.index_name.clone(), new_idx.clone());
             new_idx
@@ -96,12 +109,20 @@ pub async fn insert_vector(
 
     let mut index = index_lock.write();
     let total_nodes = index.len() + 1;
-    match index.insert(payload.id.clone(), payload.vector) {
-        Ok(_) => (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-            "id": payload.id,
-            "index_name": payload.index_name,
-            "total_nodes": total_nodes,
-        })))),
+    match index.insert(payload.id.clone(), payload.vector.clone()) {
+        Ok(_) => {
+            if let Some(storage) = state.db.storage() {
+                let key = format!("vec:data:{}:{}", payload.index_name, payload.id);
+                if let Ok(val) = serde_json::to_vec(&payload.vector) {
+                    let _ = storage.put(key.as_bytes(), &val);
+                }
+            }
+            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+                "id": payload.id,
+                "index_name": payload.index_name,
+                "total_nodes": total_nodes,
+            }))))
+        }
         Err(e) => (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Failed to insert vector: {e}")))),
     }
 }
