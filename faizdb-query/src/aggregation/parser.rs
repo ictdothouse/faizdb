@@ -43,6 +43,22 @@ pub fn parse_pipeline(json: &JsonValue) -> Result<Vec<PipelineStage>, String> {
         } else if let Some(count_val) = obj.get("$count") {
             let count_field = count_val.as_str().unwrap_or("count").to_string();
             stages.push(PipelineStage::Count(count_field));
+        } else if let Some(unwind_val) = obj.get("$unwind") {
+            let (path, preserve_null_and_empty_arrays) = match unwind_val {
+                JsonValue::String(s) => (s.clone(), false),
+                JsonValue::Object(opts) => {
+                    let path = opts.get("path")
+                        .and_then(|p| p.as_str())
+                        .ok_or("$unwind object must contain 'path' string")?
+                        .to_string();
+                    let preserve = opts.get("preserveNullAndEmptyArrays")
+                        .and_then(|b| b.as_bool())
+                        .unwrap_or(false);
+                    (path, preserve)
+                }
+                _ => return Err("Invalid $unwind expression: expected string or object".to_string()),
+            };
+            stages.push(PipelineStage::Unwind { path, preserve_null_and_empty_arrays });
         }
     }
 

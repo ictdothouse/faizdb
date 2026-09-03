@@ -31,6 +31,10 @@ prost = { workspace = true }
 tokio-stream = { workspace = true }
 tower-http = { version = "0.6", features = ["timeout"] }
 parking_lot = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -82,16 +82,69 @@ pub async fn run_multi_protocol_server(
     });
 
     // 4. Run HTTP & WebSocket API with graceful shutdown on CTRL+C / SIGTERM
+    let http_addr_str = http_addr.to_string();
     let http_handle = tokio::spawn(async move {
-        let service = http_router.into_make_service_with_connect_info::<std::net::SocketAddr>();
-        axum::serve(http_listener, service)
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-            .unwrap_or_else(|e| tracing::error!("HTTP/WS server error: {e}"));
+        if let Some(tls_config) = get_server_tls_config().await {
+            let handle = axum_server::Handle::new();
+            let shutdown_handle = handle.clone();
+            tokio::spawn(async move {
+                shutdown_signal().await;
+                shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
+            });
+            tracing::info!("🔒 FaizDB HTTP/WS Server running with TLS on https://{http_addr_str}");
+            if let Ok(socket_addr) = http_addr_str.parse::<std::net::SocketAddr>() {
+                let _ = axum_server::bind_rustls(socket_addr, tls_config)
+                    .handle(handle)
+                    .serve(http_router.into_make_service_with_connect_info::<std::net::SocketAddr>())
+                    .await;
+            }
+        } else {
+            let service = http_router.into_make_service_with_connect_info::<std::net::SocketAddr>();
+            axum::serve(http_listener, service)
+                .with_graceful_shutdown(shutdown_signal())
+                .await
+                .unwrap_or_else(|e| tracing::error!("HTTP/WS server error: {e}"));
+        }
     });
 
     let _ = tokio::try_join!(mongo_handle, pg_handle, grpc_handle, http_handle)?;
     Ok(())
+}
+
+/// Helper function to load TLS configuration from environment variables
+pub async fn get_server_tls_config() -> Option<axum_server::tls_rustls::RustlsConfig> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    if let (Ok(cert_path), Ok(key_path)) = (std::env::var("FAIZDB_TLS_CERT"), std::env::var("FAIZDB_TLS_KEY")) {
+        match axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert_path, &key_path).await {
+            Ok(config) => {
+                tracing::info!("🔒 TLS enabled with certificates from '{cert_path}'");
+                return Some(config);
+            }
+            Err(e) => tracing::error!("Failed to load TLS certificates from '{cert_path}': {e}"),
+        }
+    } else if std::env::var("FAIZDB_ENABLE_TLS").map(|v| v == "true" || v == "1").unwrap_or(false) {
+        match faizdb_security::generate_self_signed_cert(&["localhost".into(), "127.0.0.1".into()]) {
+            Ok((certs, key)) => {
+                let certs_der: Vec<Vec<u8>> = certs.into_iter().map(|c| c.to_vec()).collect();
+                let key_der = match key {
+                    rustls_pki_types::PrivateKeyDer::Pkcs8(p) => p.secret_pkcs8_der().to_vec(),
+                    rustls_pki_types::PrivateKeyDer::Pkcs1(p) => p.secret_pkcs1_der().to_vec(),
+                    rustls_pki_types::PrivateKeyDer::Sec1(p) => p.secret_sec1_der().to_vec(),
+                    _ => Vec::new(),
+                };
+                match axum_server::tls_rustls::RustlsConfig::from_der(certs_der, key_der).await {
+                    Ok(config) => {
+                        tracing::info!("🔒 TLS enabled with auto-generated self-signed certificate (HTTPS/WSS ready)");
+                        return Some(config);
+                    }
+                    Err(e) => tracing::error!("Failed to initialize TLS config from DER: {e}"),
+                }
+            }
+            Err(e) => tracing::error!("Failed to generate self-signed TLS cert: {e}"),
+        }
+    }
+    None
 }
 
 /// Run the dual FaizDB server (MongoDB Wire Protocol on `wire_addr` + HTTP & WebSocket on `http_addr`)
@@ -131,12 +184,29 @@ pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
     let app = create_router(state);
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("🔥 FaizDB Server running on http://{addr}");
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    if let Some(tls_config) = get_server_tls_config().await {
+        let handle = axum_server::Handle::new();
+        let shutdown_handle = handle.clone();
+        tokio::spawn(async move {
+            shutdown_signal().await;
+            shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
+        });
+
+        tracing::info!("🔒 FaizDB Server running with TLS on https://{addr}");
+        let socket_addr: std::net::SocketAddr = addr.parse().map_err(|e| format!("Invalid address '{addr}': {e}"))?;
+        axum_server::bind_rustls(socket_addr, tls_config)
+            .handle(handle)
+            .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+            .await?;
+    } else {
+        tracing::info!("🔥 FaizDB Server running on http://{addr}");
+        let listener = tokio::net::TcpListener::bind(addr).await?;
+        axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
+    }
+
     Ok(())
 }
 

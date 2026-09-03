@@ -360,13 +360,22 @@ pub async fn transaction_commit(
 
                     if let Some(storage) = state.db.storage() {
                         for (key, write) in &writes {
-                            match write {
+                            let res = match write {
                                 faizdb_core::transaction::mvcc::TxnWrite::Put(val) => {
-                                    let _ = storage.put(key, val.as_slice());
+                                    storage.put(key, val.as_slice())
                                 }
                                 faizdb_core::transaction::mvcc::TxnWrite::Delete => {
-                                    let _ = storage.delete(key);
+                                    storage.delete(key)
                                 }
+                            };
+                            if let Err(e) = res {
+                                return (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(ApiResponse::err(format!(
+                                        "Transaction commit failed to persist write for key '{}': {e}",
+                                        String::from_utf8_lossy(key)
+                                    ))),
+                                );
                             }
                         }
                     }

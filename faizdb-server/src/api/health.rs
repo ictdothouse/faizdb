@@ -24,9 +24,13 @@ pub async fn server_info() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "creator": "Ahmad Faiz",
         "features": [
-            "document", "vector", "graph", "acid", "faizql",
-            "change_streams", "websockets", "raft_clustering", "auto_sharding"
+            "document", "vector_hnsw", "knowledge_graph", "acid_transactions", "faizql",
+            "change_streams", "websockets"
         ],
+        "experimental_features": [
+            "raft_consensus_clustering", "auto_sharding"
+        ],
+        "consensus_mode": "single_process_raft_verified",
     }))
 }
 

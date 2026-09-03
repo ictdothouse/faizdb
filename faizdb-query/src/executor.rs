@@ -65,22 +65,28 @@ impl DatabaseContext {
     }
 
     pub fn with_node(node_id: &str, address: &str) -> Self {
-        let raft = Arc::new(faizdb_core::cluster::RaftNode::new(node_id, address));
+        let storage_path = format!("faizdb_node_{}_data", node_id);
+        let storage = faizdb_core::storage::engine::StorageEngine::open_default(&storage_path)
+            .ok()
+            .map(Arc::new);
+
         let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
         shards.register_node(node_id, address);
 
-        Self {
+        let ctx = Self {
             collections: DashMap::new(),
             bus: Arc::new(ChangeStreamBus::new()),
-            raft,
+            raft: Arc::new(faizdb_core::cluster::RaftNode::new(node_id, address)),
             shards,
-            storage: None,
+            storage,
             tx_manager: Arc::new(faizdb_core::transaction::mvcc::TransactionManager::new()),
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
             collection_stats: DashMap::new(),
-        }
+        };
+        ctx.recover_from_storage();
+        ctx
     }
 
     /// Create DatabaseContext with an active persistent StorageEngine
@@ -449,27 +455,41 @@ impl DatabaseContext {
 
                 // Vector search ranking if specified
                 if let Some(v_clause) = vector_search {
-                    let mut scored: Vec<(Document, f32)> = filtered
-                        .into_iter()
-                        .filter_map(|doc| {
-                            if let Some(val) = doc.get("vector").or_else(|| doc.get("embedding")) {
-                                if let Some(arr) = val.as_array() {
-                                    let vec: Vec<f32> = arr.iter().filter_map(|x| match x {
-                                        faizdb_core::document::model::Value::Float(f) => Some(*f as f32),
-                                        faizdb_core::document::model::Value::Integer(i) => Some(*i as f32),
-                                        _ => None,
-                                    }).collect();
-                                    if vec.len() == v_clause.vector.len() {
-                                        let dist = faizdb_vector::cosine_distance(&vec, &v_clause.vector);
-                                        return Some((doc, dist));
+                    // Check if an accelerated HNSW index exists for this collection
+                    if let Some(idx_lock) = self.vector_indexes.get(&collection) {
+                        let idx = idx_lock.read();
+                        let hits = idx.search(&v_clause.vector, v_clause.top_k);
+                        let id_rank: std::collections::HashMap<String, usize> = hits
+                            .into_iter()
+                            .enumerate()
+                            .map(|(rank, hit)| (hit.id, rank))
+                            .collect();
+
+                        filtered.retain(|d| id_rank.contains_key(d.id.as_str()));
+                        filtered.sort_by_key(|d| id_rank.get(d.id.as_str()).copied().unwrap_or(usize::MAX));
+                    } else {
+                        let mut scored: Vec<(Document, f32)> = filtered
+                            .into_iter()
+                            .filter_map(|doc| {
+                                if let Some(val) = doc.get("vector").or_else(|| doc.get("embedding")) {
+                                    if let Some(arr) = val.as_array() {
+                                        let vec: Vec<f32> = arr.iter().filter_map(|x| match x {
+                                            faizdb_core::document::model::Value::Float(f) => Some(*f as f32),
+                                            faizdb_core::document::model::Value::Integer(i) => Some(*i as f32),
+                                            _ => None,
+                                        }).collect();
+                                        if vec.len() == v_clause.vector.len() {
+                                            let dist = faizdb_vector::cosine_distance(&vec, &v_clause.vector);
+                                            return Some((doc, dist));
+                                        }
                                     }
                                 }
-                            }
-                            None
-                        })
-                        .collect();
-                    scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-                    filtered = scored.into_iter().take(v_clause.top_k).map(|(d, _)| d).collect();
+                                None
+                            })
+                            .collect();
+                        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                        filtered = scored.into_iter().take(v_clause.top_k).map(|(d, _)| d).collect();
+                    }
                 }
 
                 let final_docs = filtered

@@ -69,8 +69,21 @@ pub async fn create_vector_index(
 
     if let Some(storage) = state.db.storage() {
         let key = format!("vec:meta:{}", payload.name);
-        if let Ok(val) = serde_json::to_vec(&config) {
-            let _ = storage.put(key.as_bytes(), &val);
+        match serde_json::to_vec(&config) {
+            Ok(val) => {
+                if let Err(e) = storage.put(key.as_bytes(), &val) {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::err(format!("Failed to persist vector index metadata: {e}"))),
+                    );
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::err(format!("Failed to serialize vector index configuration: {e}"))),
+                );
+            }
         }
     }
 
@@ -98,7 +111,12 @@ pub async fn insert_vector(
             if let Some(storage) = state.db.storage() {
                 let key = format!("vec:meta:{}", payload.index_name);
                 if let Ok(val) = serde_json::to_vec(&config) {
-                    let _ = storage.put(key.as_bytes(), &val);
+                    if let Err(e) = storage.put(key.as_bytes(), &val) {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::err(format!("Failed to persist auto-created vector index metadata: {e}"))),
+                        );
+                    }
                 }
             }
             let new_idx = Arc::new(parking_lot::RwLock::new(HnswIndex::new(config)));
@@ -113,8 +131,21 @@ pub async fn insert_vector(
         Ok(_) => {
             if let Some(storage) = state.db.storage() {
                 let key = format!("vec:data:{}:{}", payload.index_name, payload.id);
-                if let Ok(val) = serde_json::to_vec(&payload.vector) {
-                    let _ = storage.put(key.as_bytes(), &val);
+                match serde_json::to_vec(&payload.vector) {
+                    Ok(val) => {
+                        if let Err(e) = storage.put(key.as_bytes(), &val) {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(ApiResponse::err(format!("Failed to persist vector to storage engine: {e}"))),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(ApiResponse::err(format!("Failed to serialize vector payload: {e}"))),
+                        );
+                    }
                 }
             }
             (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({

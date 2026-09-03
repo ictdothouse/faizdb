@@ -35,6 +35,10 @@ pub enum PipelineStage {
     Limit(usize),
     Skip(usize),
     Count(String), // Output field name for count
+    Unwind {
+        path: String,
+        preserve_null_and_empty_arrays: bool,
+    },
 }
 
 /// Execute a sequence of pipeline stages over input documents
@@ -106,6 +110,30 @@ pub fn execute_pipeline(mut docs: Vec<Document>, stages: &[PipelineStage]) -> Ve
                 let mut doc = Document::new();
                 doc.set(output_field.clone(), docs.len() as i64);
                 vec![doc]
+            }
+
+            PipelineStage::Unwind { path, preserve_null_and_empty_arrays } => {
+                let clean_path = path.strip_prefix('$').unwrap_or(path);
+                let mut unwound = Vec::new();
+                for doc in docs {
+                    match doc.get_nested(clean_path) {
+                        Some(Value::Array(arr)) if !arr.is_empty() => {
+                            for item in arr {
+                                let mut new_doc = doc.clone();
+                                new_doc.set(clean_path, item.clone());
+                                unwound.push(new_doc);
+                            }
+                        }
+                        _ => {
+                            if *preserve_null_and_empty_arrays {
+                                let mut new_doc = doc.clone();
+                                new_doc.set(clean_path, Value::Null);
+                                unwound.push(new_doc);
+                            }
+                        }
+                    }
+                }
+                unwound
             }
         };
     }
@@ -266,4 +294,47 @@ fn execute_group_stage(
     }
 
     result_docs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unwind_pipeline_stage() {
+        let mut d1 = Document::new();
+        d1.set("name", "Faiz");
+        d1.set("skills", Value::Array(vec![
+            Value::String("Rust".into()),
+            Value::String("Databases".into()),
+            Value::String("AI".into()),
+        ]));
+
+        let mut d2 = Document::new();
+        d2.set("name", "Solo");
+        d2.set("skills", Value::Array(vec![]));
+
+        let docs = vec![d1, d2];
+        let stages = vec![
+            PipelineStage::Unwind {
+                path: "$skills".into(),
+                preserve_null_and_empty_arrays: false,
+            }
+        ];
+
+        let res = execute_pipeline(docs.clone(), &stages);
+        assert_eq!(res.len(), 3);
+        assert_eq!(res[0].get("skills").unwrap().as_str().unwrap(), "Rust");
+        assert_eq!(res[1].get("skills").unwrap().as_str().unwrap(), "Databases");
+        assert_eq!(res[2].get("skills").unwrap().as_str().unwrap(), "AI");
+
+        let stages_preserve = vec![
+            PipelineStage::Unwind {
+                path: "$skills".into(),
+                preserve_null_and_empty_arrays: true,
+            }
+        ];
+        let res_preserve = execute_pipeline(docs, &stages_preserve);
+        assert_eq!(res_preserve.len(), 4);
+    }
 }

@@ -17,7 +17,7 @@ authors = ["Ahmad Faiz <faiz@ict.house>"]
 license = "Apache-2.0"
 repository = "https://github.com/ictdothouse/faizdb"
 description = "The AI-Native NoSQL Database Engine — Fast, Secure, Run Everywhere"
-rust-version = "1.80"
+rust-version = "1.88"
 
 [workspace.dependencies]
 # Serialization
@@ -39,7 +39,10 @@ futures-util = "0.3"
 
 # Crypto & Security
 ring = "0.17"
-rustls = "0.23"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls-pki-types = "1.10"
+tokio-rustls = "0.26"
+rcgen = "0.13"
 argon2 = "0.5"
 jsonwebtoken = "9.3"
 pem = "3.0"

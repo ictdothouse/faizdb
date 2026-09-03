@@ -54,8 +54,21 @@ pub async fn create_vertex(
 
     if let Some(storage) = state.db.storage() {
         let key = format!("graph:v:{}", payload.id);
-        if let Ok(val) = serde_json::to_vec(&vertex) {
-            let _ = storage.put(key.as_bytes(), &val);
+        match serde_json::to_vec(&vertex) {
+            Ok(val) => {
+                if let Err(e) = storage.put(key.as_bytes(), &val) {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::err(format!("Failed to persist vertex to storage engine: {e}"))),
+                    );
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::err(format!("Failed to serialize vertex: {e}"))),
+                );
+            }
         }
     }
 
@@ -104,8 +117,21 @@ pub async fn create_edge(
 
     if let Some(storage) = state.db.storage() {
         let key = format!("graph:e:{}:{}:{}", payload.from, payload.to, payload.relation);
-        if let Ok(val) = serde_json::to_vec(&edge) {
-            let _ = storage.put(key.as_bytes(), &val);
+        match serde_json::to_vec(&edge) {
+            Ok(val) => {
+                if let Err(e) = storage.put(key.as_bytes(), &val) {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::err(format!("Failed to persist edge to storage engine: {e}"))),
+                    );
+                }
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::err(format!("Failed to serialize edge: {e}"))),
+                );
+            }
         }
     }
 
