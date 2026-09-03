@@ -725,57 +725,57 @@
     </div>
 
     <div class="card-grid">
-      <!-- Card 1 -->
+      <!-- Card 1: Killer Feature GraphRAG -->
       <div class="card col-8">
+        <div class="card-icon">🧠</div>
+        <h3 class="card-title">Transactional GraphRAG: Single Query & Single Binary</h3>
+        <p class="card-text">
+          Eliminate the painful <strong>Neo4j + Qdrant synchronization tax</strong>. Traverse multi-hop knowledge graph relationships and rank matching context by high-dimensional vector embeddings in a single ACID transaction within one 6.3MB binary. Query using FaizQL <code>FIND col TRAVERSE FROM 'id' DEPTH 2 VECTOR [...] USING INDEX name</code> or MongoDB <code>$traverse</code>.
+        </p>
+      </div>
+
+      <!-- Card 2: 32x Quantization -->
+      <div class="card col-4">
         <div class="card-icon">⚡</div>
-        <h3 class="card-title">8-Wide SIMD & 32x Binary Quantization (BQ)</h3>
+        <h3 class="card-title">8-Wide SIMD & 32x Binary Quantization</h3>
         <p class="card-text">
           Hardware-accelerated Cosine & Euclidean distances with AVX2/AVX-512 & ARM NEON loop unrolling. 1-bit binary compression packs 1536-dim vectors into 192 bytes with instant bitwise XOR + <code>POPCNT</code> execution.
         </p>
       </div>
 
-      <!-- Card 2 -->
+      <!-- Card 3: Embedded & Footprint -->
       <div class="card col-4">
         <div class="card-icon">🪶</div>
-        <h3 class="card-title">Embedded SQLite-Style Mode</h3>
+        <h3 class="card-title">23.28 MB Kernel RAM & Embedded Mode</h3>
         <p class="card-text">
-          Link <code>faizdb-core</code> directly into your process with zero background daemons. Ideal for Raspberry Pi, edge gateways, iOS/Android apps, and local desktop software.
+          Empirically verified <strong>23.28 MB idle VmRSS</strong> on Linux kernel while serving all 4 network protocols. Standalone release binary is only <strong>6.30 MB</strong>. Link <code>faizdb-core</code> directly into your process with zero background daemons.
         </p>
       </div>
 
-      <!-- Card 3 -->
-      <div class="card col-4">
-        <div class="card-icon">🐘</div>
-        <h3 class="card-title">Petabyte Lakehouse & S3 Offloader</h3>
-        <p class="card-text">
-          Zero-copy <code>ColumnarBatch</code> scans with SIMD aggregation, automated SSTable cold data tiering, and direct parallel multipart S3/GCS object storage uploads.
-        </p>
-      </div>
-
-      <!-- Card 4 -->
+      <!-- Card 4: Dual Wire Protocols -->
       <div class="card col-8">
         <div class="card-icon">🌐</div>
-        <h3 class="card-title">Universal Drop-in Wire Protocols</h3>
+        <h3 class="card-title">Dual Native Wire Protocols with Argon2id Auth</h3>
         <p class="card-text">
-          Connect existing tools seamlessly. FaizDB speaks <strong>MongoDB Wire (Port 27017)</strong> for Mongoose/PyMongo, <strong>PostgreSQL Wire (Port 5432)</strong> for psql & DBeaver, <strong>gRPC Protobuf (Port 50051)</strong> for microservices, and <strong>REST / WebSocket (Port 27018)</strong> for web apps.
+          Connect existing tools with zero code rewrites. FaizDB speaks native <strong>PostgreSQL Wire (Port 5432)</strong> with Argon2id password authentication challenge, and <strong>MongoDB Wire (Port 27017)</strong> with multi-collection <code>$lookup</code> joins. Plus <strong>gRPC (Port 50051)</strong> and full <strong>REST CRUD (Port 27018)</strong> with <code>PUT</code>, <code>PATCH</code>, and user management.
         </p>
       </div>
 
-      <!-- Card 5 -->
+      <!-- Card 5: ARC Cache & LSM -->
       <div class="card col-6">
-        <div class="card-icon">🌍</div>
-        <h3 class="card-title">Global Active-Active Geo-Replication</h3>
+        <div class="card-icon">🌲</div>
+        <h3 class="card-title">LSM-Tree with Self-Tuning ARC Cache</h3>
         <p class="card-text">
-          Conflict-Free Replicated Data Types (LWW-Register & PN-Counters) provide mathematically provable Strong Eventual Consistency (SEC) across multi-continent clusters with automatic network partition healing.
+          Self-tuning <strong>Adaptive Replacement Cache (ARC)</strong> balances Recency (LRU) and Frequency (LFU) automatically without manual tuning. Delivers 476,000+ reads/sec with write-ahead log (WAL) durability and streaming SSTable compaction.
         </p>
       </div>
 
-      <!-- Card 6 -->
+      <!-- Card 6: Zero-Trust Security & TTL -->
       <div class="card col-6">
         <div class="card-icon">🛡️</div>
-        <h3 class="card-title">Enterprise Zero-Trust & SOC2 Compliance</h3>
+        <h3 class="card-title">Enterprise Zero-Trust & Autonomous TTL Sweeper</h3>
         <p class="card-text">
-          Asymmetric Ed25519 (EdDSA) JWT authentication, Argon2id password hashing, AES-256-GCM AEAD encrypted snapshots, and automated append-only JSONL audit logs.
+          Asymmetric Ed25519 (EdDSA) JWT authentication, Argon2id user password store, AES-256-GCM AEAD encrypted snapshots, and an <strong>autonomous 30-second background TTL sweeper</strong> that purges expired session tokens automatically.
         </p>
       </div>
     </div>

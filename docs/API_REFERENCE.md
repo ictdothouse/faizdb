@@ -124,7 +124,51 @@ Generates custom service account API tokens with granular role scoping (`Admin`,
 
 ---
 
-## 🗄️ 4. Query & Document Operations
+## 👥 4. User Management API (`/v1/users`)
+
+All user management endpoints require an authenticated `Admin` token.
+
+### 1. `GET /v1/users`
+Lists all active database user accounts and their assigned RBAC roles.
+* **Response:**
+  ```json
+  {
+    "success": true,
+    "data": [
+      { "username": "admin", "role": "Admin", "created_at": 1700000000 },
+      { "username": "analyst", "role": "ReadOnly", "created_at": 1700001000 }
+    ]
+  }
+  ```
+
+### 2. `POST /v1/users`
+Creates a new user account with an Argon2id-hashed password.
+* **Request:**
+  ```json
+  {
+    "username": "developer",
+    "password": "SuperSecretPassword2026",
+    "role": "readwrite"
+  }
+  ```
+
+### 3. `PUT /v1/users/:username/password`
+Updates the password for an existing user account.
+* **Request:**
+  ```json
+  {
+    "password": "NewUpdatedPassword2026"
+  }
+  ```
+
+### 4. `DELETE /v1/users/:username`
+Deletes a user account. Protected by a safety guard: cannot delete the last remaining administrator.
+
+---
+
+## 🗄️ 5. Query & Full Document CRUD Operations
+
+FaizDB provides full REST document operations alongside multi-dialect query processing.
 
 ### 1. `POST /v1/query`
 Executes multi-dialect SQL, MongoDB JSON, FaizQL, or EXPLAIN plan queries.
@@ -137,28 +181,88 @@ Executes multi-dialect SQL, MongoDB JSON, FaizQL, or EXPLAIN plan queries.
   ```json
   { "query": "EXPLAIN SELECT * FROM users WHERE email = 'faiz@ict.house'" }
   ```
-* **EXPLAIN Response:**
+
+### 2. `POST /v1/collections/:name/documents`
+Inserts a single document or multiple documents into a collection.
+
+### 3. `PUT /v1/collections/:name/documents/:id` (Full Replacement)
+Replaces the entire document body while preserving or validating the document `_id`.
+* **Request:**
   ```json
   {
-    "success": true,
-    "data": {
-      "Explain": {
-        "plan_type": "IndexScan(idx_email)",
-        "collection": "users",
-        "index_used": "idx_email",
-        "execution_time_us": 74,
-        "documents_examined": 1,
-        "documents_returned": 1,
-        "is_unique": true,
-        "estimated_cost_score": 1.05
-      }
-    }
+    "name": "Faiz Aziz",
+    "role": "Chief Architect",
+    "tier": "Enterprise"
+  }
+  ```
+
+### 4. `PATCH /v1/collections/:name/documents/:id` (Partial Update & Operators)
+Performs partial field merges or executes atomic MongoDB operators (`$set`, `$inc`, `$unset`).
+* **Operator Request Example:**
+  ```json
+  {
+    "$set": { "verified": true, "status": "active" },
+    "$inc": { "login_count": 1, "credits": 50 },
+    "$unset": { "temporary_token": "" }
+  }
+  ```
+* **Direct Field Merge Example:**
+  ```json
+  {
+    "last_login_at": "2026-09-04T06:30:00Z"
+  }
+  ```
+
+### 5. `DELETE /v1/collections/:name/documents/:id`
+Deletes a document by ID and emits a `delete` ChangeStream event.
+
+### 6. `POST /v1/collections/:name/aggregate`
+Runs a multi-stage aggregation pipeline across collections with `$lookup` joins, `$match`, `$group`, `$sort`, `$project`, and `$unwind`.
+* **Request:**
+  ```json
+  {
+    "pipeline": [
+      { "$match": { "active": true } },
+      {
+        "$lookup": {
+          "from": "profiles",
+          "localField": "user_id",
+          "foreignField": "_id",
+          "as": "user_profile"
+        }
+      },
+      { "$limit": 20 }
+    ]
   }
   ```
 
 ---
 
-## 📥 5. Bulk Data Migration & Ingestion
+## 🧠 6. AI Vector Search & Transactional GraphRAG
+
+FaizDB is the first engine to unify multi-hop graph traversal and vector ranking in a single query.
+
+### 1. Vector Management Endpoints:
+* **`POST /v1/vector/index`**: Creates an HNSW index with metric (`cosine`, `euclidean`, `dot`) and dimensions (e.g. 1536).
+* **`POST /v1/vector/insert`**: Inserts an embedding vector (`[0.12, 0.45, ...]`) associated with a document ID.
+* **`POST /v1/vector/search`**: Executes sub-millisecond Top-K ANN search with optional scalar/binary quantization.
+
+### 2. Knowledge Graph Endpoints:
+* **`POST /v1/graph/vertices`**: Adds or updates graph nodes with metadata.
+* **`POST /v1/graph/edges`**: Creates directed relationships between vertices (e.g. `source`, `target`, `relationship: "cites"`).
+
+### 3. Transactional GraphRAG Unified Query:
+Execute multi-hop traversal and vector ranking in a single FaizQL statement:
+```sql
+FIND research_papers 
+TRAVERSE FROM "paper_01" DEPTH 2 VIA "cites" 
+VECTOR [0.12, 0.45, 0.88, 0.05] USING INDEX paper_embeddings 
+LIMIT 5;
+```
+
+---
+
+## 📥 7. Bulk Data Migration & Ingestion
 
 ### 1. `POST /v1/collections/:name/import`
 Fast bulk import supporting either JSON documents array or CSV string with automatic type inference.
@@ -192,7 +296,7 @@ Fast bulk import supporting either JSON documents array or CSV string with autom
 
 ---
 
-## ⚡ 6. Secondary Indexes & Unique Constraints
+## ⚡ 8. Secondary Indexes & Unique Constraints
 
 * **`POST /v1/collections/:name/indexes`** — Creates an $O(\log N)$ B-Tree secondary index (`{ "field": "email", "unique": true }`).
 * **`GET /v1/collections/:name/indexes`** — Lists all active secondary indexes.
@@ -200,7 +304,7 @@ Fast bulk import supporting either JSON documents array or CSV string with autom
 
 ---
 
-## 💳 7. Multi-Document ACID Transactions
+## 💳 9. Multi-Document ACID Transactions
 
 * **`POST /v1/transaction/begin`** — Starts an isolated snapshot transaction.
 * **`POST /v1/transaction/commit`** — Atomically flushes staged mutations to the Write-Ahead Log (WAL).
@@ -208,9 +312,26 @@ Fast bulk import supporting either JSON documents array or CSV string with autom
 
 ---
 
-## 🔒 8. Disaster Recovery & Automated Backup Scheduler (SOC2)
+## 🔒 10. Disaster Recovery & Automated Backup Scheduler (SOC2)
 
 * **`POST /v1/backup/create`** — Creates an atomic consistent point-in-time snapshot.
 * **`GET /v1/backup/schedule`** — Fetches the active automated backup schedule.
 * **`POST /v1/backup/schedule`** — Updates backup schedule and retention policy.
 * **`POST /v1/backup/restore`** — Restores database state from a snapshot archive.
+
+---
+
+## 🔌 11. Native Wire Protocols (PostgreSQL & MongoDB)
+
+FaizDB operates native wire protocol listeners alongside HTTP REST:
+
+### 1. 🐘 PostgreSQL Wire Protocol (`Port 5432`):
+* **Authentication Challenge**: Employs PostgreSQL `AuthenticationCleartextPassword` ('R', code 3).
+* **Verification**: Checks credentials against `UserStore` with Argon2id hashing.
+* **Rejection**: Invalid credentials or missing passwords trigger PostgreSQL `FATAL 28P01` error response and connection termination.
+* **Connection String**: `postgresql://admin:password@localhost:5432/faizdb`
+
+### 2. 🍃 MongoDB Wire Protocol (`Port 27017`):
+* **Driver Support**: Compatible with PyMongo, Mongoose, MongoDB Shell (`mongosh`), and Prisma.
+* **OP_MSG Support**: Handles document insert, find, update, and multi-stage `aggregate` pipelines including `$lookup` cross-collection joins.
+* **Connection String**: `mongodb://localhost:27017/faizdb`

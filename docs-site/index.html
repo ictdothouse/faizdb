@@ -569,11 +569,11 @@
               <td><strong>100% Rust (Memory-Safe, 0 GC pauses)</strong></td>
             </tr>
             <tr>
-              <td><strong>Drop-in Wire Protocol</strong></td>
-              <td>Native</td>
-              <td>Postgres Wire</td>
-              <td>Redis RESP</td>
-              <td><strong>Native MongoDB Wire (Port 27017)</strong></td>
+              <td><strong>Dual Wire Protocols</strong></td>
+              <td>MongoDB Wire only</td>
+              <td>Postgres Wire only</td>
+              <td>Redis RESP only</td>
+              <td><strong>4-Way Native: Mongo (27017) with $lookup, Postgres (5432) with Argon2id Auth, gRPC (50051), REST (27018)</strong></td>
             </tr>
             <tr>
               <td><strong>Document Memory & Payload</strong></td>
@@ -587,7 +587,7 @@
               <td>Add-on / Atlas Cloud only</td>
               <td>Requires <code>pgvector</code> extension</td>
               <td>Requires RedisSearch</td>
-              <td><strong>Native HNSW (Cosine, L2, Dot) &lt; 1ms</strong></td>
+              <td><strong>Native HNSW (Cosine, L2, Dot) &lt; 1ms with 32x Quantization</strong></td>
             </tr>
             <tr>
               <td><strong>Full-Text Search</strong></td>
@@ -597,25 +597,25 @@
               <td><strong>Native Okapi BM25 with Fuzzy Matching</strong></td>
             </tr>
             <tr>
-              <td><strong>Graph &amp; GraphRAG</strong></td>
+              <td><strong>Transactional GraphRAG</strong></td>
               <td>External Graph DB required</td>
               <td>Requires Apache AGE extension</td>
               <td>Requires RedisGraph</td>
-              <td><strong>Native Knowledge Graph &amp; Traversal</strong></td>
+              <td><strong>Single-query TRAVERSE + VECTOR in 1 ACID binary (Zero Neo4j + Qdrant sync tax)</strong></td>
             </tr>
             <tr>
-              <td><strong>In-Memory Cache (TTL)</strong></td>
-              <td>Slow periodic TTL sweeper</td>
-              <td>Requires external Redis</td>
+              <td><strong>Storage Engine &amp; ARC Cache</strong></td>
+              <td>WiredTiger (LRU only)</td>
+              <td>Shared buffers (Clock-sweep)</td>
               <td>In-memory only</td>
-              <td><strong>Unified Database + $O(\log N)$ Min-Heap Cache</strong></td>
+              <td><strong>LSM-Tree + Self-Tuning ARC Cache (LRU+LFU) + Autonomous 30s TTL Sweeper</strong></td>
             </tr>
             <tr>
-              <td><strong>Real-Time WebSockets</strong></td>
+              <td><strong>Real-Time WebSockets &amp; REST</strong></td>
               <td>Requires Change Stream cluster</td>
               <td>Requires Supabase / LISTEN-NOTIFY</td>
               <td>Pub/Sub only</td>
-              <td><strong>Native WebSocket Change Data Capture (CDC)</strong></td>
+              <td><strong>Native WebSocket CDC + Full REST CRUD (PUT, PATCH, DELETE, /v1/users)</strong></td>
             </tr>
           </tbody>
         </table>
