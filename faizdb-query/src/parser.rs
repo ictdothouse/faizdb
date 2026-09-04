@@ -53,6 +53,10 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
         return parse_insert_query(trimmed);
     }
 
+    if upper.starts_with("UPDATE") {
+        return parse_update_query(trimmed);
+    }
+
     if upper.starts_with("DELETE") {
         return parse_delete_query(trimmed);
     }
@@ -71,13 +75,29 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
     let collection = without_db[..dot_pos].to_string();
 
     let remainder = &without_db[dot_pos + 1..];
-    let paren_open = remainder.find('(').ok_or("Expected '(' after method name")?;
-    let paren_close = remainder.rfind(')').ok_or("Expected ')' at end of statement")?;
+    let (remainder_method, remainder_args, sort_args) = if let Some(sort_idx) = remainder.find(".sort(") {
+        let first_call = remainder[..sort_idx].trim();
+        let sort_part = remainder[sort_idx + 6..].trim();
+        let sort_close = sort_part.rfind(')').unwrap_or(sort_part.len());
+        let s_args = sort_part[..sort_close].trim().to_string();
 
-    let method = &remainder[..paren_open].trim();
-    let args_str = &remainder[paren_open + 1..paren_close].trim();
+        let p_open = first_call.find('(').ok_or("Expected '(' after method name")?;
+        let p_close = first_call.rfind(')').ok_or("Expected ')' after method args")?;
+        let m = first_call[..p_open].trim().to_string();
+        let a = first_call[p_open + 1..p_close].trim().to_string();
+        (m, a, Some(s_args))
+    } else {
+        let paren_open = remainder.find('(').ok_or("Expected '(' after method name")?;
+        let paren_close = remainder.rfind(')').ok_or("Expected ')' at end of statement")?;
+        let m = remainder[..paren_open].trim().to_string();
+        let a = remainder[paren_open + 1..paren_close].trim().to_string();
+        (m, a, None)
+    };
 
-    match *method {
+    let method = remainder_method.as_str();
+    let args_str = remainder_args.as_str();
+
+    match method {
         "find" => {
             let (filter, traverse) = if args_str.is_empty() {
                 (None, None)
@@ -105,14 +125,73 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
             } else {
                 (Some(parse_json_filter(args_str)?), None)
             };
+
+            let sort_by = if let Some(ref s_str) = sort_args {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(s_str) {
+                    if let Some(obj) = val.as_object() {
+                        if let Some((field, dir_val)) = obj.iter().next() {
+                            let dir = dir_val.as_i64().unwrap_or(1) as i8;
+                            Some((field.clone(), dir))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             Ok(Statement::Find {
                 collection,
                 filter,
-                sort_by: None,
+                sort_by,
                 limit: None,
                 skip: None,
                 vector_search: None,
                 traverse,
+            })
+        }
+        "update" | "updateOne" | "updateMany" => {
+            let wrapped = format!("[{args_str}]");
+            let arr: serde_json::Value = serde_json::from_str(&wrapped)
+                .map_err(|e| format!("Invalid JSON arguments in update: {e}"))?;
+            let items = arr.as_array().ok_or("Expected JSON array of arguments")?;
+            if items.is_empty() {
+                return Err("update requires filter and update documents".to_string());
+            }
+
+            let filter = if let Some(f_val) = items.get(0) {
+                if f_val.as_object().map_or(false, |m| m.is_empty()) {
+                    FilterExpr::AlwaysTrue
+                } else {
+                    parse_json_filter(&f_val.to_string())?
+                }
+            } else {
+                FilterExpr::AlwaysTrue
+            };
+
+            let mut updates = Vec::new();
+            if let Some(u_val) = items.get(1) {
+                if let Some(u_obj) = u_val.as_object() {
+                    let fields_obj = if let Some(set_val) = u_obj.get("$set").and_then(|s| s.as_object()) {
+                        set_val
+                    } else {
+                        u_obj
+                    };
+                    for (k, v) in fields_obj {
+                        updates.push((k.clone(), Value::from(v.clone())));
+                    }
+                }
+            }
+
+            Ok(Statement::Update {
+                collection,
+                filter,
+                updates,
             })
         }
         "insert" | "insertOne" => {
@@ -254,6 +333,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     let mut skip = None;
     let mut vector_search = None;
     let mut traverse = None;
+    let mut sort_by = None;
 
     while i < tokens.len() {
         let token_upper = tokens[i].to_uppercase();
@@ -283,6 +363,28 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             if i < tokens.len() {
                 skip = tokens[i].trim_matches(';').parse::<usize>().ok();
                 i += 1;
+            }
+        } else if token_upper == "ORDER" {
+            // ORDER BY field [ASC|DESC]
+            i += 1;
+            if i < tokens.len() && tokens[i].eq_ignore_ascii_case("BY") {
+                i += 1;
+            }
+            if i < tokens.len() {
+                let field = tokens[i].trim_matches(|c| c == ';' || c == ',' || c == '"' || c == '\'').to_string();
+                i += 1;
+                let mut dir = 1i8;
+                if i < tokens.len() {
+                    let next_up = tokens[i].to_uppercase();
+                    if next_up.starts_with("DESC") {
+                        dir = -1;
+                        i += 1;
+                    } else if next_up.starts_with("ASC") {
+                        dir = 1;
+                        i += 1;
+                    }
+                }
+                sort_by = Some((field, dir));
             }
         } else if token_upper == "VECTOR" {
             // VECTOR NEAR [0.1, 0.2] TOP 10 [USING INDEX index_name]
@@ -370,7 +472,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     Ok(Statement::Find {
         collection,
         filter,
-        sort_by: None,
+        sort_by,
         limit,
         skip,
         vector_search,
@@ -534,6 +636,65 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
     }
 
     Err("INSERT requires JSON body or VALUES clause: INSERT INTO <table> (cols) VALUES (vals)".to_string())
+}
+
+/// Parse UPDATE <table> SET col1 = val1, col2 = val2 [WHERE ...]
+fn parse_update_query(input: &str) -> Result<Statement, String> {
+    let clean = input.trim_end_matches(';').trim();
+    let upper = clean.to_uppercase();
+
+    let tokens: Vec<&str> = clean.split_whitespace().collect();
+    if tokens.len() < 4 || !tokens[0].eq_ignore_ascii_case("UPDATE") {
+        return Err("Expected 'UPDATE <collection> SET ...'".to_string());
+    }
+
+    let collection = tokens[1].trim_matches(';').to_string();
+
+    let set_pos = upper.find("SET").ok_or("Expected 'SET' clause in UPDATE statement")?;
+    let after_set = clean[set_pos + 3..].trim();
+
+    let (set_part, where_part) = if let Some(where_pos) = after_set.to_uppercase().find("WHERE") {
+        let set_str = after_set[..where_pos].trim();
+        let where_str = after_set[where_pos + 5..].trim();
+        (set_str, Some(where_str))
+    } else {
+        (after_set, None)
+    };
+
+    let mut updates = Vec::new();
+    for pair_str in set_part.split(',') {
+        let pair_str = pair_str.trim();
+        if pair_str.is_empty() {
+            continue;
+        }
+        let eq_pos = pair_str
+            .find('=')
+            .ok_or_else(|| format!("Expected 'field = value' in SET clause, got '{pair_str}'"))?;
+        let field = pair_str[..eq_pos]
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        let val_str = pair_str[eq_pos + 1..].trim();
+        let val = parse_literal(val_str);
+        updates.push((field, val));
+    }
+
+    if updates.is_empty() {
+        return Err("UPDATE statement requires at least one field assignment in SET clause".to_string());
+    }
+
+    let filter = if let Some(w) = where_part {
+        parse_sql_where(w)?
+    } else {
+        FilterExpr::AlwaysTrue
+    };
+
+    Ok(Statement::Update {
+        collection,
+        filter,
+        updates,
+    })
 }
 
 /// Parse DELETE FROM <table> WHERE ...
@@ -704,6 +865,68 @@ mod tests {
                 assert_eq!(trav.start_id, "p1");
                 assert_eq!(trav.max_depth, 2);
                 assert_eq!(trav.relation, Some("knows".to_string()));
+            }
+            _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_sql_update() {
+        let stmt = parse_query("UPDATE users SET age = 30, city = 'Kuala Lumpur' WHERE name = 'Alice'").unwrap();
+        match stmt {
+            Statement::Update { collection, filter, updates } => {
+                assert_eq!(collection, "users");
+                assert_eq!(updates.len(), 2);
+                assert_eq!(updates[0].0, "age");
+                assert_eq!(updates[0].1, Value::Integer(30));
+                assert_eq!(updates[1].0, "city");
+                assert_eq!(updates[1].1, Value::String("Kuala Lumpur".to_string()));
+                match filter {
+                    FilterExpr::Field { field, value, .. } => {
+                        assert_eq!(field, "name");
+                        assert_eq!(value, Value::String("Alice".to_string()));
+                    }
+                    _ => panic!("Expected field filter"),
+                }
+            }
+            _ => panic!("Expected Statement::Update"),
+        }
+    }
+
+    #[test]
+    fn test_parse_mongo_update() {
+        let stmt = parse_query(r#"db.users.updateOne({"name": "Alice"}, {"$set": {"age": 31}})"#).unwrap();
+        match stmt {
+            Statement::Update { collection, updates, .. } => {
+                assert_eq!(collection, "users");
+                assert_eq!(updates.len(), 1);
+                assert_eq!(updates[0].0, "age");
+                assert_eq!(updates[0].1, Value::Integer(31));
+            }
+            _ => panic!("Expected Statement::Update"),
+        }
+    }
+
+    #[test]
+    fn test_parse_sql_order_by() {
+        let stmt = parse_query("SELECT * FROM users WHERE age >= 21 ORDER BY age DESC LIMIT 10").unwrap();
+        match stmt {
+            Statement::Find { collection, sort_by, limit, .. } => {
+                assert_eq!(collection, "users");
+                assert_eq!(sort_by, Some(("age".to_string(), -1)));
+                assert_eq!(limit, Some(10));
+            }
+            _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_mongo_sort() {
+        let stmt = parse_query(r#"db.users.find({"active": true}).sort({"score": 1})"#).unwrap();
+        match stmt {
+            Statement::Find { collection, sort_by, .. } => {
+                assert_eq!(collection, "users");
+                assert_eq!(sort_by, Some(("score".to_string(), 1)));
             }
             _ => panic!("Expected Statement::Find"),
         }

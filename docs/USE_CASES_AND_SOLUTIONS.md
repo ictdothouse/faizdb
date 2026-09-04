@@ -153,7 +153,9 @@ In modern gaming architectures (Unreal Engine 5, Unity, Godot, Discord Bots, Web
 | **High-Speed TTL In-Memory Engine** | Server RAM overflows with abandoned matchmaking lobbies and stale room sessions. | Lobbies and temporary session tokens expire automatically via $O(\log N)$ min-heap eviction. |
 | **Safe Rust Zero-GC (No Garbage Collection)** | Java/Go database engines suffer from GC stop-the-world pauses (game freezes for 200–500ms). | Rust manages memory deterministically. **Zero GC lag spikes**, ensuring smooth 60/120 FPS gameplay. |
 
-#### 💻 Game Server Telemetry Code Example (Python / gRPC):
+#### 💻 Game Server Telemetry Code Examples:
+
+**Option A: SQL / gRPC (Sub-millisecond player score mutation & rank retrieval):**
 ```python
 from faizdb import FaizDbGrpcClient
 
@@ -165,6 +167,32 @@ client.execute_query("""
     SET score = score + 500, kills = kills + 2 
     WHERE player_id = 'player_cyber_99'
 """)
+
+# High-speed Top-10 Global Leaderboard retrieval
+leaderboard = client.execute_query("""
+    SELECT player_id, score, kills 
+    FROM leaderboards 
+    ORDER BY score DESC 
+    LIMIT 10
+""")
+```
+
+**Option B: Native MongoDB Wire (Port 27017 with PyMongo):**
+```python
+from pymongo import MongoClient
+
+client = MongoClient("mongodb://admin:faizdb-admin-2026@127.0.0.1:27017")
+db = client["game_realm"]
+col = db["leaderboards"]
+
+# Atomic player score update
+col.update_one(
+    {"player_id": "player_cyber_99"},
+    {"$set": {"kills": 20}}
+)
+
+# Sub-millisecond sorted leaderboard (3,390 ops/sec, p50: 262 µs)
+top_players = list(col.find({}, {"_id": 0, "player_id": 1, "score": 1}).sort("score", -1).limit(10))
 ```
 
 ---

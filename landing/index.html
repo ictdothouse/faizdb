@@ -752,12 +752,12 @@
         </p>
       </div>
 
-      <!-- Card 4: Dual Wire Protocols -->
+      <!-- Card 4: 4-Way Multi-Protocol Gateways -->
       <div class="card col-8">
         <div class="card-icon">🌐</div>
-        <h3 class="card-title">Dual Native Wire Protocols with Argon2id Auth</h3>
+        <h3 class="card-title">4-Way Multi-Protocol Wire Gateways with Zero-Trust RBAC</h3>
         <p class="card-text">
-          Connect existing tools with zero code rewrites. FaizDB speaks native <strong>PostgreSQL Wire (Port 5432)</strong> with Argon2id password authentication challenge, and <strong>MongoDB Wire (Port 27017)</strong> with multi-collection <code>$lookup</code> joins. Plus <strong>gRPC (Port 50051)</strong> and full <strong>REST CRUD (Port 27018)</strong> with <code>PUT</code>, <code>PATCH</code>, and user management.
+          Connect existing tools with zero code rewrites. FaizDB speaks native <strong>MongoDB Wire (Port 27017)</strong> at 3,390 ops/s (p50: 262µs), <strong>PostgreSQL Wire (Port 5432)</strong> with Argon2id authentication, <strong>gRPC (Port 50051)</strong> with Bearer JWT / Basic Auth, and <strong>REST CRUD (Port 27018)</strong> with streaming pagination (<code>?limit=N&amp;offset=N</code>).
         </p>
       </div>
 
@@ -986,8 +986,8 @@
 
       <div class="card" style="border-left: 4px solid #8b5cf6;">
         <span class="type-overline" style="color: #8b5cf6;">Strict Verification Rigor</span>
-        <h3 style="font-size: 26px; font-weight: 800; margin: 6px 0;">148 / 148 Tests (100%)</h3>
-        <p class="type-small">100% pass rate across 18 test suites (Unit, Integration, Chaos CRDTs, Storage Durability, Fuzz Testing, TLS Transport, and CBO Query Optimizer) with 0 compiler errors and 0 warnings.</p>
+        <h3 style="font-size: 26px; font-weight: 800; margin: 6px 0;">183 / 183 Tests (100%)</h3>
+        <p class="type-small">100% pass rate across 23 test suites (Unit, Multi-Protocol Wire Benchmarks, Audit Gap Remediation, Chaos CRDTs, Storage Durability, Fuzz Testing, and CBO Optimizer) with 0 errors.</p>
       </div>
     </div>
   </section>

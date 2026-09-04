@@ -477,7 +477,64 @@ impl StorageEngine {
             entries.len()
         );
 
+        // Automatic compaction trigger: when Level 0 accumulates >= 4 SSTables
+        let sst_len = { self.sstables.read().len() };
+        if sst_len >= 4 {
+            if let Err(e) = self.compact() {
+                tracing::warn!("Automatic SSTable compaction failed: {e}");
+            }
+        }
+
         Ok(())
+    }
+
+    /// Perform LSM-Tree compaction: merge multiple SSTables into a single sorted SSTable,
+    /// dropping tombstones and reclaiming disk space.
+    pub fn compact(&self) -> FaizResult<usize> {
+        self.check_open()?;
+
+        let (sst_paths, count) = {
+            let ssts = self.sstables.read();
+            if ssts.len() < 2 {
+                return Ok(0);
+            }
+            let paths: Vec<std::path::PathBuf> = ssts.iter().map(|s| s.path().to_path_buf()).collect();
+            let count = ssts.len();
+            (paths, count)
+        };
+
+        let gen_num = self.sstable_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let merged_path = self
+            .config
+            .data_dir
+            .join("sst")
+            .join(format!("sst_{gen_num:06}_compacted.sst"));
+
+        // Merge input SSTables (dropping tombstones for compacted layer)
+        crate::storage::compaction::merge_sstables(&sst_paths, &merged_path, true)?;
+
+        // Open newly merged SSTable reader
+        let merged_reader = SSTableReader::open(&merged_path)?;
+
+        // Atomically update SSTables list with merged reader
+        {
+            let mut sstables = self.sstables.write();
+            sstables.retain(|s| !sst_paths.contains(&s.path().to_path_buf()));
+            sstables.push(merged_reader);
+        }
+
+        // Delete old SSTable files from disk
+        for p in &sst_paths {
+            let _ = std::fs::remove_file(p);
+        }
+
+        tracing::info!(
+            "Compacted {} SSTables into: {}",
+            count,
+            merged_path.display()
+        );
+
+        Ok(count)
     }
 }
 

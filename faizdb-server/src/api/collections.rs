@@ -42,6 +42,13 @@ pub struct TxnQuery {
     pub txn_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct PaginationQuery {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub skip: Option<usize>,
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 pub async fn insert_document(
@@ -119,16 +126,25 @@ pub async fn insert_document(
 pub async fn get_collection_documents(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
+    Query(pagination): Query<PaginationQuery>,
 ) -> impl IntoResponse {
     let col = state.db.get_or_create_collection(&name);
+    let skip_count = pagination.offset.or(pagination.skip).unwrap_or(0);
+    let limit_count = pagination.limit.unwrap_or(usize::MAX);
+
     let docs = col.find_all(None);
-    let output: Vec<serde_json::Value> = docs.into_iter().map(|d| {
-        let mut val = serde_json::to_value(&d.fields).unwrap_or(serde_json::Value::Null);
-        if let Some(obj) = val.as_object_mut() {
-            obj.insert("_id".to_string(), serde_json::Value::String(d.id.as_str().to_string()));
-        }
-        val
-    }).collect();
+    let output: Vec<serde_json::Value> = docs
+        .into_iter()
+        .skip(skip_count)
+        .take(limit_count)
+        .map(|d| {
+            let mut val = serde_json::to_value(&d.fields).unwrap_or(serde_json::Value::Null);
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("_id".to_string(), serde_json::Value::String(d.id.as_str().to_string()));
+            }
+            val
+        })
+        .collect();
     Json(ApiResponse::ok(output))
 }
 
@@ -634,4 +650,21 @@ pub async fn import_collection_data(
         "failed_count": errors.len(),
         "errors": if errors.is_empty() { None } else { Some(errors) },
     }))))
+}
+
+pub async fn system_compact(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match state.db.compact() {
+        Ok(count) => (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
+                "compacted": true,
+                "sstables_compacted": count,
+                "message": format!("Successfully compacted {count} SSTables into persistent sorted storage"),
+            }))),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(format!("Compaction failed: {e}"))),
+        ),
+    }
 }

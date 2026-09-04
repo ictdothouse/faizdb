@@ -49,7 +49,7 @@ pub async fn run_multi_protocol_server(
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
 
-    let http_router = create_router(state);
+    let http_router = create_router(state.clone());
     let http_addr_str = http_addr.to_string();
     let tls_config_opt = get_server_tls_config().await;
 
@@ -89,10 +89,11 @@ pub async fn run_multi_protocol_server(
 
     let wire_addr_str = wire_addr.to_string();
     let db_for_mongo = db.clone();
+    let user_store_for_mongo = user_store.clone();
 
     // 2. Spawn MongoDB Wire Protocol server (Port 27017)
     let mongo_handle = tokio::spawn(async move {
-        if let Err(e) = run_wire_server(&wire_addr_str, db_for_mongo).await {
+        if let Err(e) = run_wire_server(&wire_addr_str, db_for_mongo, user_store_for_mongo).await {
             tracing::error!("MongoDB Wire server error: {e}");
         }
     });
@@ -110,10 +111,12 @@ pub async fn run_multi_protocol_server(
 
     let grpc_addr_str = grpc_addr.to_string();
     let db_for_grpc = db.clone();
+    let auth_for_grpc = state.auth.clone();
+    let user_store_for_grpc = user_store.clone();
 
     // 4. Spawn gRPC / Protocol Buffers server (Port 50051)
     let grpc_handle = tokio::spawn(async move {
-        if let Err(e) = run_grpc_server(&grpc_addr_str, db_for_grpc).await {
+        if let Err(e) = run_grpc_server(&grpc_addr_str, db_for_grpc, auth_for_grpc, user_store_for_grpc).await {
             tracing::error!("gRPC server error: {e}");
         }
     });

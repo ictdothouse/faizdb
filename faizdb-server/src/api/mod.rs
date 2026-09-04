@@ -131,6 +131,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/v1/graph/vertices", post(graph::create_vertex))
         .route("/v1/graph/edges", post(graph::create_edge))
         .route("/v1/backup/create", post(backup::backup_create))
+        .route("/v1/system/compact", post(collections::system_compact))
         .layer(axum_middleware::from_fn(middleware::rbac_write_middleware))
         .layer(axum_middleware::from_fn_with_state(state.clone(), middleware::client_auth_middleware));
 

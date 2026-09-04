@@ -10,15 +10,45 @@ use faizdb_core::document::model::{Document as FaizDocument, Value as FaizValue}
 use faizdb_query::DatabaseContext;
 use super::op_msg::OpMsg;
 
+/// Session state for a MongoDB Wire Protocol connection
+#[derive(Debug, Clone)]
+pub struct MongoSession {
+    pub client_addr: String,
+    pub authenticated_user: Option<String>,
+    pub role: Option<faizdb_security::Role>,
+}
+
+impl MongoSession {
+    pub fn new(client_addr: String) -> Self {
+        let no_auth = std::env::var("FAIZDB_NO_AUTH")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or(false);
+        Self {
+            client_addr,
+            authenticated_user: if no_auth { Some("admin".to_string()) } else { None },
+            role: if no_auth { Some(faizdb_security::Role::Admin) } else { None },
+        }
+    }
+
+    pub fn is_authenticated(&self) -> bool {
+        self.authenticated_user.is_some()
+    }
+}
+
 /// Dispatch and execute an incoming OP_MSG command
-pub fn handle_op_msg(db: &Arc<DatabaseContext>, msg: &OpMsg, client_addr: &str) -> OpMsg {
+pub fn handle_op_msg(
+    db: &Arc<DatabaseContext>,
+    msg: &OpMsg,
+    session: &mut MongoSession,
+    user_store: &Arc<faizdb_security::UserStore>,
+) -> OpMsg {
     let req_id = msg.header.request_id;
     let primary_doc = match msg.primary_document() {
         Some(d) => d,
         None => return OpMsg::response(0, req_id, doc! { "ok": 0.0, "errmsg": "Missing command document" }),
     };
 
-    let response_body = dispatch_command(db, primary_doc, msg, client_addr);
+    let response_body = dispatch_command(db, primary_doc, msg, session, user_store);
     OpMsg::response(0, req_id, response_body)
 }
 
@@ -27,9 +57,10 @@ fn dispatch_command(
     db: &Arc<DatabaseContext>,
     cmd: &BsonDocument,
     msg: &OpMsg,
-    client_addr: &str,
+    session: &mut MongoSession,
+    user_store: &Arc<faizdb_security::UserStore>,
 ) -> BsonDocument {
-    // 1. Handshake & Cluster Info
+    // 1. Handshake & Cluster Info (Allowed without authentication)
     if cmd.contains_key("isMaster") || cmd.contains_key("ismaster") || cmd.contains_key("hello") {
         return handle_is_master();
     }
@@ -40,7 +71,7 @@ fn dispatch_command(
 
     if cmd.contains_key("whatsmyuri") {
         return doc! {
-            "you": client_addr,
+            "you": session.client_addr.clone(),
             "ok": 1.0
         };
     }
@@ -57,7 +88,55 @@ fn dispatch_command(
         };
     }
 
-    // 2. Database & Collection Metadata
+    // 2. Authentication Handshake Commands
+    if cmd.contains_key("authenticate") {
+        return handle_authenticate(cmd, session, user_store);
+    }
+
+    if cmd.contains_key("saslStart") {
+        return handle_sasl_start(cmd, session, user_store);
+    }
+
+    if cmd.contains_key("saslContinue") {
+        return handle_sasl_continue(session);
+    }
+
+    if cmd.contains_key("logout") {
+        session.authenticated_user = None;
+        session.role = None;
+        return doc! { "ok": 1.0 };
+    }
+
+    // 3. Security Guard: All operational and metadata commands require authentication
+    if !session.is_authenticated() {
+        let cmd_name = cmd.keys().next().map(|s| s.as_str()).unwrap_or("unknown");
+        tracing::warn!("Unauthorized MongoDB command '{cmd_name}' rejected from {}", session.client_addr);
+        return doc! {
+            "ok": 0.0,
+            "errmsg": format!("command '{cmd_name}' requires authentication"),
+            "code": 13,
+            "codeName": "Unauthorized"
+        };
+    }
+
+    // 4. RBAC Guard: ReadOnly users cannot perform write operations
+    if session.role == Some(faizdb_security::Role::ReadOnly) {
+        if let Some(cmd_name) = ["insert", "update", "delete", "drop"].iter().find(|k| cmd.contains_key(**k)) {
+            tracing::warn!(
+                "ReadOnly user '{}' attempted write command '{cmd_name}' from {}",
+                session.authenticated_user.as_deref().unwrap_or("unknown"),
+                session.client_addr
+            );
+            return doc! {
+                "ok": 0.0,
+                "errmsg": format!("not authorized on collection to execute write command '{cmd_name}'"),
+                "code": 13,
+                "codeName": "Unauthorized"
+            };
+        }
+    }
+
+    // 5. Database & Collection Metadata
     if cmd.contains_key("listDatabases") {
         return doc! {
             "databases": [
@@ -69,17 +148,20 @@ fn dispatch_command(
         };
     }
 
-    if let Ok(col_name) = cmd.get_str("listCollections") {
-        let _ = col_name;
+    if cmd.contains_key("listCollections") {
         let db_name = cmd.get_str("$db").unwrap_or("default");
+        let collections = db.list_collections();
+        let first_batch: Vec<bson::Bson> = collections
+            .into_iter()
+            .map(|name| {
+                bson::to_bson(&doc! { "name": name, "type": "collection" }).unwrap_or(bson::Bson::Null)
+            })
+            .collect();
         return doc! {
             "cursor": doc! {
                 "id": 0i64,
                 "ns": format!("{db_name}.$cmd.listCollections"),
-                "firstBatch": [
-                    doc! { "name": "users", "type": "collection" },
-                    doc! { "name": "default", "type": "collection" }
-                ]
+                "firstBatch": first_batch
             },
             "ok": 1.0
         };
@@ -95,7 +177,7 @@ fn dispatch_command(
         };
     }
 
-    // 3. CRUD Operations
+    // 6. CRUD Operations
     if let Ok(col_name) = cmd.get_str("insert") {
         return handle_insert(db, col_name, cmd, msg);
     }
@@ -121,13 +203,118 @@ fn dispatch_command(
     }
 
     if let Ok(col_name) = cmd.get_str("drop") {
-        let _ = col_name;
-        return doc! { "nIndexesWas": 1, "ok": 1.0 };
+        let db_name = cmd.get_str("$db").unwrap_or("default");
+        let dropped = db.drop_collection(col_name);
+        return doc! {
+            "nIndexesWas": 1,
+            "ns": format!("{db_name}.{col_name}"),
+            "ok": if dropped { 1.0 } else { 0.0 }
+        };
     }
 
     // Generic fallback for unhandled commands to avoid driver crashes
     tracing::debug!("Received unhandled MongoDB command: {:?}", cmd);
     doc! { "ok": 1.0 }
+}
+
+fn handle_authenticate(
+    cmd: &BsonDocument,
+    session: &mut MongoSession,
+    user_store: &Arc<faizdb_security::UserStore>,
+) -> BsonDocument {
+    let user = cmd.get_str("user").unwrap_or("");
+    let pwd = cmd.get_str("pwd").unwrap_or("");
+
+    if let Some(role) = user_store.authenticate(user, pwd) {
+        session.authenticated_user = Some(user.to_string());
+        session.role = Some(role);
+        tracing::info!("🔐 User '{user}' authenticated successfully via MongoDB wire from {}", session.client_addr);
+        doc! { "ok": 1.0 }
+    } else {
+        tracing::warn!("MongoDB wire authentication failed for user '{user}' from {}", session.client_addr);
+        doc! {
+            "ok": 0.0,
+            "errmsg": "Authentication failed.",
+            "code": 18,
+            "codeName": "AuthenticationFailed"
+        }
+    }
+}
+
+fn handle_sasl_start(
+    cmd: &BsonDocument,
+    session: &mut MongoSession,
+    user_store: &Arc<faizdb_security::UserStore>,
+) -> BsonDocument {
+    let mechanism = cmd.get_str("mechanism").unwrap_or("PLAIN");
+    if mechanism != "PLAIN" && mechanism != "SCRAM-SHA-256" {
+        return doc! {
+            "ok": 0.0,
+            "errmsg": format!("Unsupported authentication mechanism '{mechanism}'"),
+            "code": 18,
+            "codeName": "AuthenticationFailed"
+        };
+    }
+
+    let payload_bytes = match cmd.get("payload") {
+        Some(Bson::Binary(b)) => b.bytes.clone(),
+        Some(Bson::String(s)) => s.as_bytes().to_vec(),
+        _ => Vec::new(),
+    };
+
+    let parts: Vec<&[u8]> = payload_bytes.split(|&b| b == 0).collect();
+    let (user_opt, pass_opt) = match parts.len() {
+        3 => {
+            let u = if parts[1].is_empty() { parts[0] } else { parts[1] };
+            (String::from_utf8(u.to_vec()).ok(), String::from_utf8(parts[2].to_vec()).ok())
+        }
+        2 => {
+            (String::from_utf8(parts[0].to_vec()).ok(), String::from_utf8(parts[1].to_vec()).ok())
+        }
+        _ => (None, None),
+    };
+
+    if let (Some(user), Some(pass)) = (user_opt, pass_opt) {
+        if !user.is_empty() && !pass.is_empty() {
+            if let Some(role) = user_store.authenticate(&user, &pass) {
+                session.authenticated_user = Some(user.clone());
+                session.role = Some(role);
+                tracing::info!("🔐 User '{user}' authenticated successfully via MongoDB SASL PLAIN from {}", session.client_addr);
+                return doc! {
+                    "conversationId": 1,
+                    "done": true,
+                    "payload": bson::Binary { subtype: bson::spec::BinarySubtype::Generic, bytes: vec![] },
+                    "ok": 1.0
+                };
+            }
+        }
+    }
+
+    tracing::warn!("MongoDB SASL PLAIN authentication failed from {}", session.client_addr);
+    doc! {
+        "ok": 0.0,
+        "errmsg": "Authentication failed.",
+        "code": 18,
+        "codeName": "AuthenticationFailed"
+    }
+}
+
+fn handle_sasl_continue(session: &MongoSession) -> BsonDocument {
+    if session.is_authenticated() {
+        doc! {
+            "conversationId": 1,
+            "done": true,
+            "payload": bson::Binary { subtype: bson::spec::BinarySubtype::Generic, bytes: vec![] },
+            "ok": 1.0
+        }
+    } else {
+        doc! {
+            "ok": 0.0,
+            "errmsg": "Authentication failed.",
+            "code": 18,
+            "codeName": "AuthenticationFailed"
+        }
+    }
 }
 
 fn handle_is_master() -> BsonDocument {
@@ -142,6 +329,7 @@ fn handle_is_master() -> BsonDocument {
         "minWireVersion": 0,
         "maxWireVersion": 21, // Supports modern MongoDB 7.0/8.0 wire protocols
         "readOnly": false,
+        "saslSupportedMechs": ["PLAIN"],
         "faizdb": "The AI-Native NoSQL Database Engine",
         "ok": 1.0
     }
@@ -217,7 +405,7 @@ fn handle_find(
 
     let filter_doc = cmd.get_document("filter").ok();
 
-    let filtered: Vec<BsonDocument> = all_docs
+    let mut matched_docs: Vec<faizdb_core::document::model::Document> = all_docs
         .into_iter()
         .filter(|d| {
             if let Some(filter) = filter_doc {
@@ -248,6 +436,45 @@ fn handle_find(
             }
             true
         })
+        .collect();
+
+    // Sort documents if "sort" document was supplied
+    if let Ok(sort_doc) = cmd.get_document("sort") {
+        if let Some((k, dir_val)) = sort_doc.iter().next() {
+            let dir = match dir_val {
+                bson::Bson::Int32(i) => *i as i8,
+                bson::Bson::Int64(i) => *i as i8,
+                bson::Bson::Double(f) => *f as i8,
+                _ => 1,
+            };
+            matched_docs.sort_by(|a, b| {
+                let va = a.get_nested(k);
+                let vb = b.get_nested(k);
+                let cmp = match (va, vb) {
+                    (Some(x), Some(y)) => match (x, y) {
+                        (faizdb_core::document::model::Value::Integer(ix), faizdb_core::document::model::Value::Integer(iy)) => ix.cmp(iy),
+                        (faizdb_core::document::model::Value::Float(fx), faizdb_core::document::model::Value::Float(fy)) => fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
+                        (faizdb_core::document::model::Value::Integer(ix), faizdb_core::document::model::Value::Float(fy)) => (*ix as f64).partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
+                        (faizdb_core::document::model::Value::Float(fx), faizdb_core::document::model::Value::Integer(iy)) => fx.partial_cmp(&(*iy as f64)).unwrap_or(std::cmp::Ordering::Equal),
+                        (faizdb_core::document::model::Value::String(sx), faizdb_core::document::model::Value::String(sy)) => sx.cmp(sy),
+                        (faizdb_core::document::model::Value::Boolean(bx), faizdb_core::document::model::Value::Boolean(by)) => bx.cmp(by),
+                        _ => std::cmp::Ordering::Equal,
+                    },
+                    (Some(_), None) => std::cmp::Ordering::Greater,
+                    (None, Some(_)) => std::cmp::Ordering::Less,
+                    (None, None) => std::cmp::Ordering::Equal,
+                };
+                if dir < 0 {
+                    cmp.reverse()
+                } else {
+                    cmp
+                }
+            });
+        }
+    }
+
+    let filtered: Vec<BsonDocument> = matched_docs
+        .into_iter()
         .skip(skip.unwrap_or(0))
         .take(limit.unwrap_or(usize::MAX))
         .map(|d| faiz_document_to_bson(&d))
@@ -318,10 +545,46 @@ fn handle_aggregate(
 fn handle_count(
     db: &Arc<DatabaseContext>,
     collection_name: &str,
-    _cmd: &BsonDocument,
+    cmd: &BsonDocument,
 ) -> BsonDocument {
     let col = db.get_or_create_collection(collection_name);
-    let count = col.stats().document_count;
+    let filter_doc = cmd.get_document("query").ok().or_else(|| cmd.get_document("filter").ok());
+
+    let count = if let Some(filter) = filter_doc {
+        if filter.is_empty() {
+            col.stats().document_count
+        } else {
+            col.find_all(None)
+                .into_iter()
+                .filter(|d| {
+                    for (k, v) in filter {
+                        if k == "_id" {
+                            let id_str = d.id.as_str();
+                            let matches_id = match v {
+                                bson::Bson::String(s) => s.as_str() == id_str,
+                                bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                                _ => false,
+                            };
+                            if !matches_id {
+                                return false;
+                            }
+                        } else if let Some(val) = d.get_nested(k) {
+                            let b_val = faiz_val_to_bson(val);
+                            if &b_val != v {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .count() as u64
+        }
+    } else {
+        col.stats().document_count
+    };
+
     doc! {
         "n": count as i64,
         "ok": 1.0
@@ -566,6 +829,10 @@ mod tests {
     #[test]
     fn test_insert_and_find_flow() {
         let db = Arc::new(DatabaseContext::new());
+        let user_store = Arc::new(faizdb_security::UserStore::new());
+        let mut session = MongoSession::new("127.0.0.1:12345".to_string());
+        session.authenticated_user = Some("admin".to_string());
+        session.role = Some(faizdb_security::Role::Admin);
 
         // Insert
         let insert_cmd = doc! {
@@ -576,7 +843,7 @@ mod tests {
             ]
         };
         let op_msg = OpMsg::response(1, 0, insert_cmd);
-        let insert_res = handle_op_msg(&db, &op_msg, "127.0.0.1:12345");
+        let insert_res = handle_op_msg(&db, &op_msg, &mut session, &user_store);
         let primary = insert_res.primary_document().unwrap();
         assert_eq!(primary.get_i32("n"), Ok(2));
 
@@ -586,7 +853,7 @@ mod tests {
             "filter": doc! { "city": "KL" }
         };
         let find_msg = OpMsg::response(2, 0, find_cmd);
-        let find_res = handle_op_msg(&db, &find_msg, "127.0.0.1:12345");
+        let find_res = handle_op_msg(&db, &find_msg, &mut session, &user_store);
         let primary = find_res.primary_document().unwrap();
         let cursor = primary.get_document("cursor").unwrap();
         let batch = cursor.get_array("firstBatch").unwrap();

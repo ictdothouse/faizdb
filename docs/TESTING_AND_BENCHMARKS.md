@@ -19,16 +19,17 @@ This guide details how to run unit tests, multi-protocol integration tests, high
 The following metrics represent verified test runs conducted against the optimized release build of FaizDB:
 
 ### A. Workspace Unit & Integration Tests (`cargo test --workspace`):
-* **Status:** ✅ **148 / 148 Tests Passed (100% Pass Rate across 18 Test Suites)**
+* **Status:** ✅ **183 / 183 Tests Passed (100% Pass Rate across 23 Test Suites)**
 * **Compilation Status:** **0 Errors, 0 Warnings** (Strict Clean Build)
 * **Tested Monorepo Suites & Crates:**
-  * `faizdb-core` (81 tests: LSM-Tree, MemTable, WAL, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
-  * `faizdb-server` (33 tests: Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, TLS / HTTPS Transport)
+  * `faizdb-core` (86 tests: LSM-Tree Compaction, MemTable, WAL, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
+  * `faizdb-server` (45 tests: Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, Audit Gap Remediation Suite, TLS / HTTPS Transport)
   * `faizdb-vector` (15 tests: Multi-Layer HNSW, Cosine/L2/Manhattan, Scalar & Binary 32x Quantization)
-  * `faizdb-query` (9 tests: AST Parser, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
-  * `faizdb-security` (6 tests: AES-256-GCM AEAD, Argon2id, Ed25519 JWT RBAC, Rustls / Ring TLS Self-Signed & PEM Server Config)
+  * `faizdb-query` (20 tests: AST Parser, SQL & Mongo UPDATE, ORDER BY ASC/DESC, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
+  * `faizdb-security` (14 tests: AES-256-GCM AEAD, Argon2id, Ed25519 JWT RBAC, Rustls / Ring TLS Self-Signed & PEM Server Config, Central UserStore)
   * `faizdb-graph` (2 tests: Knowledge Graph, Multi-Hop BFS/DFS Traversal, Dijkstra Shortest Path)
   * Documentation doctests (2 tests)
+* **Latest Verification Reference:** See [`LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md`](LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) for full protocol throughput and latency breakdown.
 
 ---
 

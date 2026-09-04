@@ -15,7 +15,11 @@ use super::op_query::{OpQuery, OpReply};
 use super::handler::handle_op_msg;
 
 /// Run the MongoDB Wire Protocol server on the given address (e.g. "0.0.0.0:27017")
-pub async fn run_wire_server(addr: &str, db: Arc<DatabaseContext>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_wire_server(
+    addr: &str,
+    db: Arc<DatabaseContext>,
+    user_store: Arc<faizdb_security::UserStore>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind(addr).await?;
     info!("🍃 MongoDB Wire Protocol Server running on mongodb://{addr}");
 
@@ -23,8 +27,9 @@ pub async fn run_wire_server(addr: &str, db: Arc<DatabaseContext>) -> Result<(),
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
                 let db_clone = db.clone();
+                let user_store_clone = user_store.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(socket, db_clone, peer_addr.to_string()).await {
+                    if let Err(e) = handle_connection(socket, db_clone, user_store_clone, peer_addr.to_string()).await {
                         error!("Connection error from {peer_addr}: {e}");
                     }
                 });
@@ -39,9 +44,11 @@ pub async fn run_wire_server(addr: &str, db: Arc<DatabaseContext>) -> Result<(),
 async fn handle_connection(
     mut stream: TcpStream,
     db: Arc<DatabaseContext>,
+    user_store: Arc<faizdb_security::UserStore>,
     client_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut header_buf = [0u8; HEADER_LEN];
+    let mut session = super::handler::MongoSession::new(client_addr.clone());
 
     loop {
         // Read 16-byte header
@@ -65,7 +72,7 @@ async fn handle_connection(
         match header.op_code {
             OpCode::OpMsg => {
                 let op_msg = OpMsg::decode(&full_msg)?;
-                let reply_msg = handle_op_msg(&db, &op_msg, &client_addr);
+                let reply_msg = handle_op_msg(&db, &op_msg, &mut session, &user_store);
                 let reply_bytes = reply_msg.encode()?;
                 stream.write_all(&reply_bytes).await?;
                 stream.flush().await?;
@@ -74,7 +81,7 @@ async fn handle_connection(
                 let op_query = OpQuery::decode(&full_msg)?;
                 // Convert legacy OP_QUERY into a dummy OP_MSG and reply with OP_REPLY
                 let dummy_msg = OpMsg::response(op_query.header.request_id, 0, op_query.query);
-                let reply_msg = handle_op_msg(&db, &dummy_msg, &client_addr);
+                let reply_msg = handle_op_msg(&db, &dummy_msg, &mut session, &user_store);
 
                 let reply_doc = reply_msg.primary_document().cloned().unwrap_or_default();
                 let op_reply = OpReply::new(0, op_query.header.request_id, vec![reply_doc]);

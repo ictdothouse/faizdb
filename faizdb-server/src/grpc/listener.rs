@@ -13,11 +13,13 @@ use super::service::FaizDbGrpcService;
 pub async fn run_grpc_server(
     addr: &str,
     db: Arc<DatabaseContext>,
+    auth: Arc<faizdb_security::auth::AuthManager>,
+    user_store: Arc<faizdb_security::UserStore>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let socket_addr: SocketAddr = addr.parse()?;
     info!("⚡ gRPC / Protocol Buffers Server running on grpc://{addr}");
 
-    let svc = FaizDbGrpcService::new(db);
+    let svc = FaizDbGrpcService::new(db, auth, user_store);
     let server = FaizDbServiceServer::new(svc);
 
     Server::builder()

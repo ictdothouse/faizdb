@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 
 use faizdb_core::document::collection::Collection;
-use faizdb_core::document::model::Document;
+use faizdb_core::document::model::{Document, Value};
 use faizdb_core::stream::{ChangeEvent, ChangeStreamBus};
 use crate::ast::{ExplainPlan, FilterExpr, Operator, Statement};
 
@@ -278,6 +278,24 @@ impl DatabaseContext {
             .clone()
     }
 
+    /// Drop a collection from DatabaseContext
+    pub fn drop_collection(&self, name: &str) -> bool {
+        let removed = self.collections.remove(name).is_some();
+        if removed {
+            self.bus.publish(ChangeEvent::drop_collection(name));
+        }
+        removed
+    }
+
+    /// Trigger LSM-Tree compaction on persistent storage engine if open
+    pub fn compact(&self) -> faizdb_core::error::FaizResult<usize> {
+        if let Some(storage) = &self.storage {
+            storage.compact()
+        } else {
+            Ok(0)
+        }
+    }
+
     /// Access underlying persistent StorageEngine
     pub fn storage(&self) -> Option<Arc<faizdb_core::storage::engine::StorageEngine>> {
         self.storage.clone()
@@ -428,11 +446,11 @@ impl DatabaseContext {
             Statement::Find {
                 collection,
                 filter,
+                sort_by,
                 limit,
                 skip,
                 vector_search,
                 traverse,
-                ..
             } => {
                 let col = self.get_or_create_collection(&collection);
                 let stats = self.get_or_compute_stats(&collection);
@@ -543,6 +561,33 @@ impl DatabaseContext {
                     }
                 }
 
+                // Apply sort_by if specified
+                if let Some((ref field, dir)) = sort_by {
+                    filtered.sort_by(|a, b| {
+                        let va = a.get_nested(field);
+                        let vb = b.get_nested(field);
+                        let cmp = match (va, vb) {
+                            (Some(x), Some(y)) => match (x, y) {
+                                (Value::Integer(ix), Value::Integer(iy)) => ix.cmp(iy),
+                                (Value::Float(fx), Value::Float(fy)) => fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
+                                (Value::Integer(ix), Value::Float(fy)) => (*ix as f64).partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
+                                (Value::Float(fx), Value::Integer(iy)) => fx.partial_cmp(&(*iy as f64)).unwrap_or(std::cmp::Ordering::Equal),
+                                (Value::String(sx), Value::String(sy)) => sx.cmp(sy),
+                                (Value::Boolean(bx), Value::Boolean(by)) => bx.cmp(by),
+                                _ => std::cmp::Ordering::Equal,
+                            },
+                            (Some(_), None) => std::cmp::Ordering::Greater,
+                            (None, Some(_)) => std::cmp::Ordering::Less,
+                            (None, None) => std::cmp::Ordering::Equal,
+                        };
+                        if dir < 0 {
+                            cmp.reverse()
+                        } else {
+                            cmp
+                        }
+                    });
+                }
+
                 let final_docs = filtered
                     .into_iter()
                     .skip(skip.unwrap_or(0))
@@ -613,6 +658,33 @@ impl DatabaseContext {
 
                     let res = col.update_by_id(&id, |doc| {
                         for (k, v) in &updates {
+                            if let Value::String(s) = v {
+                                let trimmed_s = s.trim();
+                                if let Some(rest) = trimmed_s.strip_prefix(k.as_str()) {
+                                    let rest = rest.trim();
+                                    if let Some(num_str) = rest.strip_prefix('+') {
+                                        if let Ok(delta) = num_str.trim().parse::<i64>() {
+                                            let cur = doc.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+                                            doc.set(k.clone(), Value::Integer(cur + delta));
+                                            continue;
+                                        } else if let Ok(delta) = num_str.trim().parse::<f64>() {
+                                            let cur = doc.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+                                            doc.set(k.clone(), Value::Float(cur + delta));
+                                            continue;
+                                        }
+                                    } else if let Some(num_str) = rest.strip_prefix('-') {
+                                        if let Ok(delta) = num_str.trim().parse::<i64>() {
+                                            let cur = doc.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+                                            doc.set(k.clone(), Value::Integer(cur - delta));
+                                            continue;
+                                        } else if let Ok(delta) = num_str.trim().parse::<f64>() {
+                                            let cur = doc.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+                                            doc.set(k.clone(), Value::Float(cur - delta));
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
                             doc.set(k.clone(), v.clone());
                         }
                     });
@@ -759,5 +831,49 @@ mod tests {
         let stmt = parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'missing_index'").unwrap();
         let err = ctx.execute(stmt).unwrap_err();
         assert!(err.contains("Vector index 'missing_index' not found"));
+    }
+
+    #[test]
+    fn test_executor_sql_update_and_order_by() {
+        let ctx = DatabaseContext::new();
+        let col = ctx.get_or_create_collection("leaderboards");
+
+        let mut d1 = Document::new();
+        d1.set("player_id", "p1");
+        d1.set("score", 100);
+        col.insert(d1).unwrap();
+
+        let mut d2 = Document::new();
+        d2.set("player_id", "p2");
+        d2.set("score", 300);
+        col.insert(d2).unwrap();
+
+        let mut d3 = Document::new();
+        d3.set("player_id", "p3");
+        d3.set("score", 200);
+        col.insert(d3).unwrap();
+
+        // 1. Test UPDATE with arithmetic increment
+        let update_stmt = parse_query("UPDATE leaderboards SET score = score + 500 WHERE player_id = 'p1'").unwrap();
+        let update_res = ctx.execute(update_stmt).unwrap();
+        match update_res {
+            QueryResult::Updated(count) => assert_eq!(count, 1),
+            _ => panic!("Expected QueryResult::Updated"),
+        }
+
+        // 2. Test ORDER BY score DESC
+        let query_stmt = parse_query("SELECT * FROM leaderboards ORDER BY score DESC").unwrap();
+        let query_res = ctx.execute(query_stmt).unwrap();
+        match query_res {
+            QueryResult::Documents(docs) => {
+                assert_eq!(docs.len(), 3);
+                // p1 now has 600, p2 has 300, p3 has 200
+                assert_eq!(docs[0].get("player_id"), Some(&Value::String("p1".to_string())));
+                assert_eq!(docs[0].get("score"), Some(&Value::Integer(600)));
+                assert_eq!(docs[1].get("player_id"), Some(&Value::String("p2".to_string())));
+                assert_eq!(docs[2].get("player_id"), Some(&Value::String("p3".to_string())));
+            }
+            _ => panic!("Expected QueryResult::Documents"),
+        }
     }
 }
