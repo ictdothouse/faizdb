@@ -15,20 +15,23 @@ Dokumen ini merekodkan secara terperinci doktrin seni bina berdikari (**Standalo
 
 ---
 
-## 🏛️ Doktrin Seni Bina Berdikari: FaizQL Natif vs. Adapter Wayar Pilihan
+## 🏛️ Doktrin Seni Bina Berdaulat: Teknologi Berdikari Penuh dengan Keupayaan Bersembang Poliglot Autonomi
 
-Salah satu salah faham biasa ialah menganggap FaizDB bergantung kepada ekosistem luar atau mengandungi salinan penuh enjin legasi pihak ketiga (seperti PostgreSQL atau MongoDB). Realitinya:
+Salah satu prinsip teras FaizDB ialah **kedaulatan teknologi mutlak (*absolute technological sovereignty*)**. FaizDB bukan sekadar alat tambahan, parasit, atau pembungkus (*wrapper*) kepada pangkalan data lain:
 
-1. **FaizDB Adalah Enjin Berdiri Sendiri Tulen (*100% Standalone Pure-Rust Engine*):**
-   - FaizDB dibina dari asas (*clean-slate microkernel architecture*) tanpa sebarang baris kod C/C++ daripada PostgreSQL, SQLite, atau MongoDB.
-   - Mempunyai enjin storan natif sendiri (`faizdb-core`: MemTable berasaskan SkipList/BTreeMap, Write-Ahead Log berputar, dan pemformatan SSTable mikron).
-   - Mempunyai bahasa kueri natif sendiri: **FaizQL** (`faizdb-query`), lengkap dengan tokenizer, AST parser, Cost-Based Optimizer (CBO), dan executor natif.
-   - Mempunyai protokol pengeluaran natif sendiri: **FaizDB Native gRPC (Port 50051) & REST API (Port 8080)**.
+1. **FaizDB Adalah Teknologi Baharu Berdiri Sendiri (*100% Autonomous Sovereign Technology*):**
+   - FaizDB **TIDAK MEMERLUKAN** PostgreSQL, MongoDB, Redis, Neo4j, atau mana-mana pangkalan data lain untuk dipasang atau beroperasi.
+   - Dari lapisan paling bawah hingga paling atas, FaizDB mengandungi komponen ciptaan tersendiri:
+     * Enjin storan natif sendiri (`faizdb-core`: MemTable SkipList, LSM SSTable, dan WAL atomik berasaskan 100% Safe Rust).
+     * Bahasa kueri natif sendiri: **FaizQL** (`faizdb-query`), lengkap dengan tokenizer, AST parser, Cost-Based Optimizer (CBO), dan executor natif.
+     * Enjin keselamatan kriptografi natif (Argon2id + Ed25519) dan enjin konsensus teragih natif (Raft + CRDT).
+     * Protokol pengeluaran natif berprestasi tinggi: **FaizDB Native gRPC (Port 50051) & REST API (Port 8080)**.
 
-2. **Adapter Protokol Wayar (Port 5432 & 27017) Hanyalah Pintu Masuk Pilihan (*Optional Ingress Adapters*):**
-   - Pembangun **TIDAK DIWAJIBKAN** menggunakan port PostgreSQL atau MongoDB.
-   - Pintu masuk ini diwujudkan semata-mata sebagai kemudahan integrasi (*developer ergonomics*), membolehkan aplikasi sedia ada menyambung ke FaizDB menggunakan pemacu (drivers) dan alatan GUI popular (DBeaver, TablePlus, Compass, Prisma, Drizzle) tanpa perlu mempelajari protokol baharu pada hari pertama.
-   - Adapter ini hanya menguraikan bingkai TCP (*packet framing*) dan menterjemahkannya terus ke dalam AST FaizQL tanpa membawa beban (*zero bloat*). Inilah rahsia bagaimana binari keluaran FaizDB kekal sangat padat (**7.70 MB**) berbanding pangkalan data legasi yang memerlukan ratusan megabait.
+2. **Keupayaan 'Bersembang' Secara Automatik dengan Ekosistem Luar (*Autonomous Polyglot Interoperability*):**
+   - Walaupun FaizDB berdaulat dan berdikari penuh, ia direka dengan kecerdasan untuk **berkomunikasi dan bersembang secara automatik** dengan seluruh dunia pangkalan data tanpa memerlukan perisian tengah (*middleware*):
+     * **Automatik Mendengar & Memahami Protokol Lain (Port 5432 & 27017):** Apabila aplikasi legasi atau pemacu luaran (seperti Prisma, DBeaver, SQLAlchemy, PyMongo) berhubung, FaizDB menterjemah paket PostgreSQL Wire dan MongoDB Wire masuk secara automatik ke dalam AST FaizQL tanpa pengguna perlu mengubah sebaris kod pun.
+     * **Automatik Menyalur ke Saluran Terbuka (*Open-Format Streaming*):** FaizDB boleh menstrim data secara berterusan (*CDC*) ke Kafka, Apache Spark, BigQuery, dan Snowflake melalui format terbuka (JSONL dan SQL piawai).
+   - Pendekatan ini memastikan organisasi tidak terperangkap dalam *vendor lock-in* dan tidak perlu membuang pelaburan lama mereka apabila beralih kepada teknologi baharu FaizDB.
 
 3. **Dualiti Teorem CAP yang Jelas (CP Mode vs. AP Mode):**
    - **Mod CP (Linearizable Strict Consistency):** Dioptimumkan untuk lejar kewangan, perbankan, dan pengurusan inventori menggunakan enjin ACID MVCC penuh, WAL atomik, dan konsensus teragih Raft. Transaksi partition ditolak demi menjamin sifar perbelanjaan berganda (*zero double-spending*).
