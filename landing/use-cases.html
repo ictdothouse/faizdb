@@ -379,9 +379,9 @@
               <div class="card-icon" style="background: var(--rose-subtle);">🎮</div>
               <span class="card-tag tag-realtime">Gaming</span>
             </div>
-            <h2 class="type-subhead">7. 128Hz Multiplayer Tick Sync &amp; Leaderboards</h2>
+            <h2 class="type-subhead">7. Multiplayer Game State &amp; Leaderboards</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Lock-free MemTable (<code style="color:var(--primary);">crossbeam-skiplist</code>) sustains <strong>323,424 ops/sec</strong> with zero mutex contention. Safe Rust zero-GC architecture eliminates garbage collection stop-the-world pauses, guaranteeing smooth 120 FPS frame timing.
+              Physics calculations execute in game server volatile RAM. FaizDB embedded mode (<code style="color:var(--primary);">faizdb-core</code>) acts as the zero-network, zero-GC-stall state persistence layer for match session snapshots, anti-duplication inventory, and HNSW skill matchmaking.
             </p>
             <div class="code-snippet">
               <span class="code-comment"># Atomic score update + Top-10 leaderboard</span><br/>
@@ -497,7 +497,7 @@
             </div>
             <h2 class="type-subhead">11. Dual-Stack Modernization (Postgres + Mongo)</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Prisma, DBeaver, and SQLAlchemy connect through PostgreSQL wire port 5432, while Python, Node.js, and Compass connect through MongoDB wire port 27017. Both stacks read and write the <strong>exact same data simultaneously</strong> with zero ETL pipelines.
+              Collection-level paradigm isolation: relational collections with strict schemas for PostgreSQL wire (5432) and flexible JSON document collections for MongoDB wire (27017). Cross-functional teams use their native tooling without maintaining two separate database servers.
             </p>
             <div class="code-snippet">
               <span class="code-comment"># Prisma connects to:</span> postgresql://user:pass@127.0.0.1:5432/db<br/>
@@ -546,9 +546,9 @@
               <div class="card-icon" style="background: var(--secondary-subtle);">🏦</div>
               <span class="card-tag tag-enterprise">Fintech &amp; Banking</span>
             </div>
-            <h2 class="type-subhead">13. Core Banking &amp; Immutable Ledgers</h2>
+            <h2 class="type-subhead">13. Core Banking &amp; Strict Linearizable Ledgers</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Strict mathematical precision and crash recovery. Write-Ahead Log (WAL) with group commit writes up to 100,000 durable txns/sec, while AES-256-GCM authenticated snapshots and Point-In-Time-Recovery (PITR) guarantee regulatory compliance.
+              Strict CP linearizability with Raft quorum and multi-document MVCC ACID (zero double-spending). CRDTs are strictly excluded from banking ledgers. Vectorized WAL group commit handles 100k+ durable txns/sec with microsecond Point-In-Time-Recovery (PITR).
             </p>
             <div class="code-snippet">
               <span class="code-comment"># Point-In-Time Disaster Recovery to exact microsecond</span><br/>

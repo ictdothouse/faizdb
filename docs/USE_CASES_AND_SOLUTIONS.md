@@ -103,24 +103,25 @@ This document details **20 real-world production use cases** where **FaizDB** re
 
 ## ⚡ Real-Time Systems, Gaming & High-Frequency Telemetry
 
-### 7. 128Hz Multiplayer Gaming Tick Sync, Leaderboards & Anti-Duplication Inventory
-* **The Problem:** Fast-paced multiplayer game servers (Unreal Engine 5, Unity) freeze when concurrent database writes lock player records, while garbage collection (GC) pauses cause devastating 200–500ms lag spikes.
+### 7. Multiplayer Game Server In-Process State Persistence, Leaderboards & Anti-Duplication Inventory
+* **Architectural Demarcation:** In high-tick multiplayer gaming (Unreal Engine 5, Unity dedicated servers running 64Hz–128Hz), player physics calculations and continuous spatial vectors are processed strictly in the game server's volatile RAM. FaizDB is **never** placed in the synchronous physics rendering path.
+* **The Persistence Challenge:** Game backends struggle when saving match outcome states, persistent inventory wallets, and leaderboards: traditional Java/Go databases (e.g. Cassandra) cause devastating 200–500ms lag spikes due to Garbage Collection (GC) pauses.
 * **FaizDB Solution:**
-  * Lock-free MemTable (`crossbeam-skiplist`) sustains **323,424 ops/sec** with zero mutex lock contention.
-  * Safe Rust zero-GC architecture eliminates garbage collection pauses completely, guaranteeing smooth 120 FPS frame rates.
-  * Multi-document ACID transactions eliminate item duplication exploits during player trading.
+  * **Zero-GC In-Process Engine:** FaizDB's embedded mode (`faizdb-core`) runs in the game server process with zero GC pauses, ensuring consistent 120+ FPS player experience.
+  * **Skill-Based Matchmaking (SBMM):** Sub-millisecond HNSW vector search matches players dynamically by playstyle embeddings.
+  * **Multi-document ACID MVCC:** Guarantees zero item duplication exploits during player-to-player trades.
 
 ---
 
 ### 8. Native Real-Time Change Data Capture (CDC) to Kafka, ClickHouse & Snowflake
-* **The Problem:** Third-party CDC tools (Debezium connectors, Maxwell) add operational complexity, separate JVM clusters, and replication latency.
-* **FaizDB Solution:** Native CDC streams database mutations directly from the Write-Ahead Log (WAL) over WebSockets or gRPC streams into Apache Kafka, ClickHouse, or Snowflake with zero replication lag and sub-millisecond propagation.
+* **The Problem:** Streaming database updates to downstream analytical warehouses (ClickHouse, Snowflake) requires fragile external Debezium/Kafka Connect clusters that introduce high maintenance overhead.
+* **FaizDB Solution:** Native built-in Change Streams push atomic mutation envelopes directly into Kafka and downstream queues via open-format JSONL with sub-millisecond serialization.
 
 ---
 
 ### 9. Real-Time Collaborative Workspaces (Figma/Notion-Style CRDT Document Editing)
-* **The Problem:** Collaborative apps require real-time synchronization of cursor coordinates and rich document state without merge conflicts.
-* **FaizDB Solution:** Built-in Conflict-Free Replicated Data Types (CRDTs: Observed-Remove Sets, Last-Write-Wins Registers, PN-Counters) automatically converge concurrent user edits in memory with instantaneous WebSocket broadcasts.
+* **The Problem:** Concurrent document editing across global teams suffers from merge conflicts or requires slow distributed locks.
+* **FaizDB Solution:** Leverages built-in Conflict-Free Replicated Data Types (CRDTs) — PN-Counters, LWW-Registers, and OR-Sets — strictly for non-monetary collaborative documents. Global team members write locally with sub-millisecond latency and converge deterministically across WAN links.
 
 ---
 
@@ -133,11 +134,11 @@ This document details **20 real-world production use cases** where **FaizDB** re
 ## 🛍️ Enterprise, Fintech & Dual-Protocol Modernization
 
 ### 11. Dual-Stack Modernization: Native Drop-In PostgreSQL & MongoDB Wire Co-Existence
-* **The Problem:** Organizations maintain fragmented systems where analytics and relational services use PostgreSQL while modern web apps use MongoDB, requiring fragile bidirectional ETL sync scripts.
-* **FaizDB Solution:**
-  * PostgreSQL applications (Prisma, DBeaver, SQLAlchemy, `psql`) connect on port 5432.
-  * MongoDB applications (PyMongo, Mongoose, MongoDB Compass) connect on port 27017.
-  * Both protocols read and write the **exact same underlying storage engine simultaneously** with zero ETL.
+* **The Problem:** Organizations maintain fragmented infrastructure where backend/BI teams use PostgreSQL while web/mobile teams use MongoDB, forcing DevOps to maintain two separate database servers.
+* **Collection-Level Paradigm Isolation:**
+  * **Relational Collections (Port 5432):** Governed by strict relational schemas, foreign keys, and typed constraints for financial ledgers and BI reporting tools (DBeaver, Prisma SQL, SQLAlchemy).
+  * **Document Collections (Port 27017):** Governed by flexible schema BSON/JSON semantics for rapid prototyping, dynamic user profiles, and event logs (PyMongo, Mongoose).
+  * Rather than mixing paradigms on the same table, both engineering teams interact with their respective collections within a **single unified storage engine** with zero ETL pipelines and zero dual-server licensing costs.
 
 ---
 
@@ -147,9 +148,10 @@ This document details **20 real-world production use cases** where **FaizDB** re
 
 ---
 
-### 13. Fintech, Core Banking & Immutable Ledgers with Point-In-Time Recovery (PITR)
-* **The Problem:** Banking ledgers demand zero data loss, strict audit compliance, and the ability to restore state to an exact microsecond prior to an erroneous transaction.
-* **FaizDB Solution:** Single-buffer vectorized WAL group commit writes up to 100,000 durable txns/sec. Encrypted snapshots (AES-256-GCM) paired with WAL replay enable microsecond Point-In-Time Disaster Recovery.
+### 13. Fintech, Core Banking & Immutable Ledgers (Strict CP Linearizability + PITR)
+* **The Problem:** Banking ledgers demand zero double-spending, absolute serializability, and the ability to restore state to an exact microsecond prior to an erroneous transaction.
+* **Strict CP Mode Enforcement:** Banking ledgers are strictly governed by **CP Mode (Raft Consensus Quorum + Multi-Document MVCC ACID + Atomic WAL)**. Network partitions reject writes if quorum cannot be achieved, mathematically eliminating negative account balances and double-spending. **FaizDB never uses CRDTs for banking transactions.**
+* **FaizDB Solution:** Vectorized WAL group commit writes up to 100,000 durable txns/sec. Encrypted snapshots (AES-256-GCM) paired with WAL replay enable microsecond Point-In-Time Disaster Recovery (PITR).
 
 ---
 

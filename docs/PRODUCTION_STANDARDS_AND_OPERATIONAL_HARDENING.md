@@ -34,8 +34,18 @@ FaizDB diarkitekkan berasaskan prinsip kebebasan teknologi yang tulen dan berpij
    - Pendekatan ini memastikan organisasi tidak terperangkap dalam *vendor lock-in* dan tidak perlu membuang pelaburan lama mereka apabila menggunakan teknologi FaizDB.
 
 3. **Dualiti Teorem CAP yang Jelas (CP Mode vs. AP Mode):**
-   - **Mod CP (Linearizable Strict Consistency):** Dioptimumkan untuk lejar kewangan, perbankan, dan pengurusan inventori menggunakan enjin ACID MVCC penuh, WAL atomik, dan konsensus teragih Raft. Transaksi partition ditolak demi menjamin sifar perbelanjaan berganda (*zero double-spending*).
-   - **Mod AP (High-Availability Eventual Consistency):** Dioptimumkan untuk nod multi-wilayah pinggir (*Edge*), kolaborasi dokumen serentak, dan telemetri IoT menggunakan struktur data bebas konflik (*Conflict-free Replicated Data Types - CRDTs* seperti PN-Counters, LWW-Registers, dan OR-Sets). Menjamin kependaman sub-milisaat tempatan tanpa kunci teragih (*zero distributed locking overhead*). Mod ini dipilih secara eksplisit mengikut jenis koleksi (*collection-level isolation*).
+   - **Mod CP (Linearizable Strict Consistency):** Wajib untuk lejar kewangan, perbankan, dan pengurusan inventori menggunakan enjin ACID MVCC penuh, WAL atomik, dan konsensus teragih Raft. Transaksi partition ditolak demi menjamin sifar perbelanjaan berganda (*zero double-spending*). **FaizDB tidak sesekali menggunakan CRDT untuk baki akaun atau tiket lelongan.**
+   - **Mod AP (High-Availability Eventual Consistency):** Khusus untuk data kolaboratif bukan kewangan seperti dokumen multi-pengguna (gaya Notion/Figma), status kehadiran, dan telemetri IoT menggunakan struktur data bebas konflik (*CRDTs* seperti PN-Counters, LWW-Registers, dan OR-Sets) dengan kependaman sub-milisaat tanpa kunci teragih.
+
+4. **Pengasingan Paradigma Peringkat Koleksi (*Collection-Level Paradigm Isolation*):**
+   - FaizDB mengasingkan model data secara berdisiplin:
+     * **Koleksi Relasional (Port 5432):** Menguatkuasakan skema ketat, kekunci asing (*foreign keys*), dan jenis data bertipe untuk alat SQL (DBeaver, Prisma, SQLAlchemy).
+     * **Koleksi Dokumen (Port 27017):** Menyokong skema fleksibel BSON/JSON untuk pembangunan pantas (PyMongo, Mongoose).
+   - Pengguna dilarang mencampurkan data JSON tanpa skema ke dalam jadual relasional bertipe ketat demi memelihara integriti data.
+
+5. **Sempadan Seni Bina Pelayan Permainan (*Gaming Architecture Demarcation*):**
+   - Dalam permainan multipemain berfrekuensi tinggi (64Hz–128Hz tick rates), pengiraan fizik dan koordinat ruang pemain dikendalikan sepenuhnya di dalam memori RAM pelayan permainan (*game server process*).
+   - FaizDB **tidak pernah** diletakkan di dalam gelung pemaparan fizik segerak (*synchronous tick loop*). Sebaliknya, FaizDB bertindak sebagai **lapisan kegigihan keadaan dalam-proses (*in-process state persistence layer*)** melalui `faizdb-core` untuk komit keputusan perlawanan, dompet inventori pemain, dan pemadanan pintar berasaskan vektor (SBMM) dengan jaminan **sifar kelengahan kutipan sampah (*Zero GC pauses*)**.
 
 ---
 
