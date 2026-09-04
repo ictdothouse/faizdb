@@ -15,23 +15,23 @@ Dokumen ini merekodkan secara terperinci doktrin seni bina berdikari (**Standalo
 
 ---
 
-## 🏛️ Doktrin Seni Bina Berdaulat: Teknologi Berdikari Penuh dengan Keupayaan Bersembang Poliglot Autonomi
+## 🏛️ Doktrin Kejuruteraan: Enjin Multi-Model Berdiri Sendiri dengan Keupayaan Memahami Protokol Lain Secara Automatik
 
-Salah satu prinsip teras FaizDB ialah **kedaulatan teknologi mutlak (*absolute technological sovereignty*)**. FaizDB bukan sekadar alat tambahan, parasit, atau pembungkus (*wrapper*) kepada pangkalan data lain:
+FaizDB diarkitekkan berasaskan prinsip kebebasan teknologi yang tulen dan berpijak di bumi nyata:
 
-1. **FaizDB Adalah Teknologi Baharu Berdiri Sendiri (*100% Autonomous Sovereign Technology*):**
+1. **FaizDB Adalah Enjin Pangkalan Data Berdiri Sendiri (*100% Standalone Engine*):**
    - FaizDB **TIDAK MEMERLUKAN** PostgreSQL, MongoDB, Redis, Neo4j, atau mana-mana pangkalan data lain untuk dipasang atau beroperasi.
    - Dari lapisan paling bawah hingga paling atas, FaizDB mengandungi komponen ciptaan tersendiri:
-     * Enjin storan natif sendiri (`faizdb-core`: MemTable SkipList, LSM SSTable, dan WAL atomik berasaskan 100% Safe Rust).
-     * Bahasa kueri natif sendiri: **FaizQL** (`faizdb-query`), lengkap dengan tokenizer, AST parser, Cost-Based Optimizer (CBO), dan executor natif.
-     * Enjin keselamatan kriptografi natif (Argon2id + Ed25519) dan enjin konsensus teragih natif (Raft + CRDT).
-     * Protokol pengeluaran natif berprestasi tinggi: **FaizDB Native gRPC (Port 50051) & REST API (Port 8080)**.
+     * **Enjin storan natif sendiri** (`faizdb-core`: MemTable SkipList, LSM SSTable, dan WAL atomik berasaskan 100% Safe Rust).
+     * **Bahasa kueri natif sendiri: FaizQL** (`faizdb-query`), lengkap dengan tokenizer, AST parser, Cost-Based Optimizer (CBO), dan executor natif.
+     * **Enjin keselamatan kriptografi natif** (Argon2id + Ed25519) dan enjin konsensus teragih natif (Raft + CRDT).
+     * **Protokol pengeluaran natif berprestasi tinggi**: **FaizDB Native gRPC (Port 50051) & REST API (Port 8080)**.
 
-2. **Keupayaan 'Bersembang' Secara Automatik dengan Ekosistem Luar (*Autonomous Polyglot Interoperability*):**
-   - Walaupun FaizDB berdaulat dan berdikari penuh, ia direka dengan kecerdasan untuk **berkomunikasi dan bersembang secara automatik** dengan seluruh dunia pangkalan data tanpa memerlukan perisian tengah (*middleware*):
+2. **Kelebihan Utama: Mampu Memahami Protokol Pangkalan Data Lain Secara Automatik (*Automatic Protocol Comprehension*):**
+   - Walaupun FaizDB beroperasi secara berdikari sepenuhnya, ia direka dengan kelebihan untuk **memahami dan berkomunikasi secara automatik** dengan seluruh dunia pangkalan data tanpa memerlukan perisian tengah (*middleware*):
      * **Automatik Mendengar & Memahami Protokol Lain (Port 5432 & 27017):** Apabila aplikasi legasi atau pemacu luaran (seperti Prisma, DBeaver, SQLAlchemy, PyMongo) berhubung, FaizDB menterjemah paket PostgreSQL Wire dan MongoDB Wire masuk secara automatik ke dalam AST FaizQL tanpa pengguna perlu mengubah sebaris kod pun.
      * **Automatik Menyalur ke Saluran Terbuka (*Open-Format Streaming*):** FaizDB boleh menstrim data secara berterusan (*CDC*) ke Kafka, Apache Spark, BigQuery, dan Snowflake melalui format terbuka (JSONL dan SQL piawai).
-   - Pendekatan ini memastikan organisasi tidak terperangkap dalam *vendor lock-in* dan tidak perlu membuang pelaburan lama mereka apabila beralih kepada teknologi baharu FaizDB.
+   - Pendekatan ini memastikan organisasi tidak terperangkap dalam *vendor lock-in* dan tidak perlu membuang pelaburan lama mereka apabila menggunakan teknologi FaizDB.
 
 3. **Dualiti Teorem CAP yang Jelas (CP Mode vs. AP Mode):**
    - **Mod CP (Linearizable Strict Consistency):** Dioptimumkan untuk lejar kewangan, perbankan, dan pengurusan inventori menggunakan enjin ACID MVCC penuh, WAL atomik, dan konsensus teragih Raft. Transaksi partition ditolak demi menjamin sifar perbelanjaan berganda (*zero double-spending*).
