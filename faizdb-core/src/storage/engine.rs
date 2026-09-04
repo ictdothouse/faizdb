@@ -513,6 +513,11 @@ impl StorageEngine {
             entries.len()
         );
 
+        // Reclaim older WAL segments now that data is persisted in SSTable
+        if let Some(wal) = &self.wal {
+            let _ = wal.checkpoint();
+        }
+
         // Automatic compaction trigger: when Level 0 accumulates >= 4 SSTables
         let sst_len = { self.sstables.read().len() };
         if sst_len >= 4 {
@@ -563,6 +568,11 @@ impl StorageEngine {
         // Delete old SSTable files from disk
         for p in &sst_paths {
             let _ = std::fs::remove_file(p);
+        }
+
+        // Reclaim older WAL segments after compaction
+        if let Some(wal) = &self.wal {
+            let _ = wal.checkpoint();
         }
 
         tracing::info!(

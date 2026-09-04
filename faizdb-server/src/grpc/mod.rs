@@ -4,6 +4,6 @@ pub mod listener;
 pub mod proto;
 pub mod service;
 
-pub use listener::run_grpc_server;
+pub use listener::{run_grpc_server, run_grpc_server_with_shutdown};
 pub use proto::*;
 pub use service::FaizDbGrpcService;

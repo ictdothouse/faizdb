@@ -12,8 +12,11 @@ pub mod stream;
 pub mod wire;
 
 pub use api::{create_router, middleware::AppState, BackupScheduleConfig};
-pub use grpc::run_grpc_server;
-pub use wire::{run_postgres_server, run_wire_server};
+pub use grpc::{run_grpc_server, run_grpc_server_with_shutdown};
+pub use wire::{
+    run_postgres_server, run_postgres_server_with_shutdown, run_wire_server,
+    run_wire_server_with_shutdown,
+};
 
 /// Run the 4-way Multi-Protocol FaizDB server (MongoDB Wire + PostgreSQL Wire + gRPC + HTTP/WS)
 pub async fn run_multi_protocol_server(
@@ -58,12 +61,22 @@ pub async fn run_multi_protocol_server(
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
 
+    // Create unified shutdown broadcast channel across all 4 entry gateways
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+
+    // Spawn centralized OS signal handler (CTRL+C / SIGTERM)
+    let sig_shutdown_tx = shutdown_tx.clone();
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        let _ = sig_shutdown_tx.send(());
+    });
+
     let http_router = create_router(state.clone());
     let http_addr_str = http_addr.to_string();
     let tls_config_opt = get_server_tls_config().await;
 
-    // 1. Run HTTP & WebSocket API with graceful shutdown on CTRL+C / SIGTERM
-    // Determine TLS mode before binding to prevent EADDRINUSE port collision
+    // 1. Run HTTP & WebSocket API with graceful shutdown
+    let mut rx_http = shutdown_tx.subscribe();
     let http_handle = if let Some(tls_config) = tls_config_opt {
         let socket_addr: std::net::SocketAddr = http_addr_str.parse().map_err(|e| {
             std::io::Error::new(
@@ -74,7 +87,7 @@ pub async fn run_multi_protocol_server(
         let handle = axum_server::Handle::new();
         let shutdown_handle = handle.clone();
         tokio::spawn(async move {
-            shutdown_signal().await;
+            let _ = rx_http.recv().await;
             shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
         });
         tracing::info!("🔒 FaizDB REST/HTTP & WebSocket Change Streams running with TLS on https://{http_addr_str}");
@@ -95,7 +108,9 @@ pub async fn run_multi_protocol_server(
         let service = http_router.into_make_service_with_connect_info::<std::net::SocketAddr>();
         tokio::spawn(async move {
             axum::serve(http_listener, service)
-                .with_graceful_shutdown(shutdown_signal())
+                .with_graceful_shutdown(async move {
+                    let _ = rx_http.recv().await;
+                })
                 .await
                 .unwrap_or_else(|e| tracing::error!("HTTP/WS server error: {e}"));
         })
@@ -104,10 +119,21 @@ pub async fn run_multi_protocol_server(
     let wire_addr_str = wire_addr.to_string();
     let db_for_mongo = db.clone();
     let user_store_for_mongo = user_store.clone();
+    let mut rx_mongo = shutdown_tx.subscribe();
 
-    // 2. Spawn MongoDB Wire Protocol server (Port 27017)
+    // 2. Spawn MongoDB Wire Protocol server (Port 27017) with graceful drain
     let mongo_handle = tokio::spawn(async move {
-        if let Err(e) = run_wire_server(&wire_addr_str, db_for_mongo, user_store_for_mongo).await {
+        let shutdown_fut = async move {
+            let _ = rx_mongo.recv().await;
+        };
+        if let Err(e) = run_wire_server_with_shutdown(
+            &wire_addr_str,
+            db_for_mongo,
+            user_store_for_mongo,
+            shutdown_fut,
+        )
+        .await
+        {
             tracing::error!("MongoDB Wire server error: {e}");
         }
     });
@@ -115,10 +141,21 @@ pub async fn run_multi_protocol_server(
     let pg_addr_str = pg_addr.to_string();
     let db_for_pg = db.clone();
     let user_store_for_pg = user_store.clone();
+    let mut rx_pg = shutdown_tx.subscribe();
 
-    // 3. Spawn PostgreSQL Wire Protocol server (Port 5432)
+    // 3. Spawn PostgreSQL Wire Protocol server (Port 5432) with graceful drain
     let pg_handle = tokio::spawn(async move {
-        if let Err(e) = run_postgres_server(&pg_addr_str, db_for_pg, user_store_for_pg).await {
+        let shutdown_fut = async move {
+            let _ = rx_pg.recv().await;
+        };
+        if let Err(e) = run_postgres_server_with_shutdown(
+            &pg_addr_str,
+            db_for_pg,
+            user_store_for_pg,
+            shutdown_fut,
+        )
+        .await
+        {
             tracing::error!("PostgreSQL Wire server error: {e}");
         }
     });
@@ -127,14 +164,19 @@ pub async fn run_multi_protocol_server(
     let db_for_grpc = db.clone();
     let auth_for_grpc = state.auth.clone();
     let user_store_for_grpc = user_store.clone();
+    let mut rx_grpc = shutdown_tx.subscribe();
 
-    // 4. Spawn gRPC / Protocol Buffers server (Port 50051)
+    // 4. Spawn gRPC / Protocol Buffers server (Port 50051) with graceful drain
     let grpc_handle = tokio::spawn(async move {
-        if let Err(e) = run_grpc_server(
+        let shutdown_fut = async move {
+            let _ = rx_grpc.recv().await;
+        };
+        if let Err(e) = run_grpc_server_with_shutdown(
             &grpc_addr_str,
             db_for_grpc,
             auth_for_grpc,
             user_store_for_grpc,
+            shutdown_fut,
         )
         .await
         {
@@ -217,7 +259,36 @@ pub async fn run_multi_protocol_server(
         });
     }
 
+    // 7. Background Idle Transaction Reaper: automatically purge expired uncommitted transactions
+    let db_for_txn_reaper = db.clone();
+    let txn_timeout_secs: u64 = std::env::var("FAIZDB_TXN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60);
+    let mut rx_reaper = shutdown_tx.subscribe();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(15));
+        loop {
+            tokio::select! {
+                _ = rx_reaper.recv() => break,
+                _ = interval.tick() => {
+                    let reaped = db_for_txn_reaper.reap_expired_transactions(tokio::time::Duration::from_secs(txn_timeout_secs));
+                    if reaped > 0 {
+                        tracing::info!("[Txn Reaper] Reaped {reaped} expired idle transaction(s)");
+                    }
+                }
+            }
+        }
+    });
+
     let _ = tokio::try_join!(mongo_handle, pg_handle, grpc_handle, http_handle)?;
+
+    tracing::info!("💾 Finalizing and flushing storage engine data to disk on shutdown...");
+    if let Err(e) = db.flush() {
+        tracing::warn!("Warning during final storage flush: {e}");
+    }
+    tracing::info!("✅ FaizDB multi-protocol server shutdown complete.");
+
     Ok(())
 }
 

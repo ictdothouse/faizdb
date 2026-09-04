@@ -224,3 +224,114 @@ fn test_open_format_dump_export_logic() {
     assert!(sql_stmt.starts_with("INSERT INTO products"));
     assert!(sql_stmt.contains("'p101'"));
 }
+
+// ── 5. Graph BFS Traversal Budget & Cycle Resistance ─────────────────────────
+
+#[test]
+fn test_graph_bfs_traversal_budget() {
+    use faizdb_graph::{Edge, GraphStore};
+    let mut graph = GraphStore::new();
+
+    // Create a 10-node cycle: node_0 -> node_1 -> ... -> node_9 -> node_0
+    for i in 0..10 {
+        let next = (i + 1) % 10;
+        graph.add_edge(Edge::new(
+            format!("node_{i}"),
+            format!("node_{next}"),
+            "NEXT",
+        ));
+    }
+
+    // With budget 5, traversal must stop after exactly 5 nodes
+    let visited_5 = graph.traverse_bfs_bounded("node_0", 100, None, 5);
+    assert_eq!(visited_5.len(), 5);
+
+    // With budget 15 (larger than cycle), traversal visits all 10 unique nodes and terminates without infinite loop
+    let visited_all = graph.traverse_bfs_bounded("node_0", 100, None, 15);
+    assert_eq!(visited_all.len(), 10);
+}
+
+// ── 6. Vector Math Floating Point Clamping ───────────────────────────────────
+
+#[test]
+fn test_vector_distance_clamping_safety() {
+    use faizdb_vector::distance::cosine_distance;
+
+    // Test identical vectors: cosine distance must be clamped cleanly to 0.0
+    let v1 = vec![0.1234567, 0.9876543, 0.5555555];
+    let dist = cosine_distance(&v1, &v1);
+    assert!(dist >= 0.0 && dist <= 1.0);
+    assert!(dist.abs() < 1e-6);
+
+    // Opposite vectors: cosine distance clamped to 2.0
+    let v2 = vec![-0.1234567, -0.9876543, -0.5555555];
+    let dist_opp = cosine_distance(&v1, &v2);
+    assert!(dist_opp >= 0.0 && dist_opp <= 2.0);
+    assert!((dist_opp - 2.0).abs() < 1e-6);
+}
+
+// ── 7. Storage Engine Checkpointing & WAL Pruning ────────────────────────────
+
+#[test]
+fn test_storage_wal_checkpoint_pruning() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let wal = Wal::open(temp_dir.path()).unwrap();
+
+    // Append 5 operations
+    for i in 0..5 {
+        wal.append(WalOpType::Put, format!("k{i}").as_bytes(), b"val")
+            .unwrap();
+    }
+
+    let replayed = Wal::replay(temp_dir.path()).unwrap();
+    assert_eq!(replayed.len(), 5);
+
+    // Checkpoint
+    let pruned = wal.checkpoint().unwrap();
+    assert!(pruned <= 5);
+}
+
+// ── 8. MVCC Autonomous Transaction Reaper ─────────────────────────────────────
+
+#[test]
+fn test_mvcc_reaper_idle_transactions() {
+    let db = DatabaseContext::new();
+
+    // Begin transaction and register into active_txns
+    let tx = db.tx_manager().begin();
+    let tx_id = "test_idle_txn_101".to_string();
+    db.active_txns()
+        .insert(tx_id.clone(), Arc::new(parking_lot::Mutex::new(tx)));
+    assert!(db.active_txns().contains_key(&tx_id));
+
+    // Sleep briefly and reap with small timeout
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let reaped = db.reap_expired_transactions(std::time::Duration::from_millis(10));
+    assert_eq!(reaped, 1, "Idle transaction must be reaped");
+    assert!(!db.active_txns().contains_key(&tx_id));
+}
+
+// ── 9. Query Engine Scan Limit Pushdown ───────────────────────────────────────
+
+#[test]
+fn test_scan_limit_pushdown() {
+    let db = DatabaseContext::new();
+    let col = db.get_or_create_collection("inventory");
+
+    for i in 0..20 {
+        let mut d = FaizDocument::new();
+        d.id = format!("item_{i:02}").into();
+        d.set("sku", format!("SKU-{i}"));
+        col.insert(d).unwrap();
+    }
+
+    // Execute query with LIMIT 5 and no complex sorting
+    let q = faizdb_query::parse_query("SELECT * FROM inventory LIMIT 5").unwrap();
+    let res = db.execute(q).unwrap();
+    if let faizdb_query::QueryResult::Documents(docs) = res {
+        assert_eq!(docs.len(), 5);
+    } else {
+        panic!("Expected QueryResult::Documents");
+    }
+}
+

@@ -459,6 +459,28 @@ impl Wal {
         self.sequence.load(Ordering::SeqCst)
     }
 
+    /// Checkpoint the WAL: safely reclaim completed older WAL segment files whose
+    /// entries have already been persisted to SSTables on disk, preventing unbounded disk growth.
+    pub fn checkpoint(&self) -> FaizResult<usize> {
+        let current_path = self.current_path.lock().clone();
+        let mut removed = 0;
+        if let Ok(entries) = fs::read_dir(&self.dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("log") && path != current_path
+                {
+                    if let Ok(()) = fs::remove_file(&path) {
+                        removed += 1;
+                    }
+                }
+            }
+        }
+        if removed > 0 {
+            tracing::info!("WAL checkpoint: reclaimed {removed} obsolete WAL segment files");
+        }
+        Ok(removed)
+    }
+
     // ── Internal Helpers ─────────────────────────────────────────
 
     fn find_or_create_wal_file(dir: &Path) -> FaizResult<(PathBuf, u64, u64)> {

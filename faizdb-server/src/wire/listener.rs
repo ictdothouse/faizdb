@@ -14,12 +14,16 @@ use super::op_msg::OpMsg;
 use super::op_query::{OpQuery, OpReply};
 use faizdb_query::DatabaseContext;
 
-/// Run the MongoDB Wire Protocol server on the given address (e.g. "0.0.0.0:27017")
-pub async fn run_wire_server(
+/// Run the MongoDB Wire Protocol server with optional graceful shutdown future
+pub async fn run_wire_server_with_shutdown<F>(
     addr: &str,
     db: Arc<DatabaseContext>,
     user_store: Arc<faizdb_security::UserStore>,
-) -> Result<(), Box<dyn std::error::Error>> {
+    shutdown: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let listener = TcpListener::bind(addr).await?;
     info!("🍃 MongoDB Wire Protocol Server running on mongodb://{addr}");
 
@@ -28,34 +32,53 @@ pub async fn run_wire_server(
         .and_then(|s| s.parse().ok())
         .unwrap_or(10_000);
     let semaphore = Arc::new(tokio::sync::Semaphore::new(max_conns));
+    tokio::pin!(shutdown);
 
     loop {
-        match listener.accept().await {
-            Ok((socket, peer_addr)) => {
-                let permit = match semaphore.clone().try_acquire_owned() {
-                    Ok(p) => p,
-                    Err(_) => {
-                        warn!("Rejecting MongoDB connection from {peer_addr}: max connections ({max_conns}) reached");
-                        continue;
-                    }
-                };
-                let db_clone = db.clone();
-                let user_store_clone = user_store.clone();
-                tokio::spawn(async move {
-                    let _permit = permit;
-                    if let Err(e) =
-                        handle_connection(socket, db_clone, user_store_clone, peer_addr.to_string())
-                            .await
-                    {
-                        error!("Connection error from {peer_addr}: {e}");
-                    }
-                });
+        tokio::select! {
+            _ = &mut shutdown => {
+                info!("🍃 MongoDB Wire Protocol Server received shutdown signal — draining listener...");
+                break;
             }
-            Err(e) => {
-                error!("Failed to accept wire connection: {e}");
+            accept_res = listener.accept() => {
+                match accept_res {
+                    Ok((socket, peer_addr)) => {
+                        let permit = match semaphore.clone().try_acquire_owned() {
+                            Ok(p) => p,
+                            Err(_) => {
+                                warn!("Rejecting MongoDB connection from {peer_addr}: max connections ({max_conns}) reached");
+                                continue;
+                            }
+                        };
+                        let db_clone = db.clone();
+                        let user_store_clone = user_store.clone();
+                        tokio::spawn(async move {
+                            let _permit = permit;
+                            if let Err(e) =
+                                handle_connection(socket, db_clone, user_store_clone, peer_addr.to_string())
+                                    .await
+                            {
+                                error!("Connection error from {peer_addr}: {e}");
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to accept wire connection: {e}");
+                    }
+                }
             }
         }
     }
+    Ok(())
+}
+
+/// Run the MongoDB Wire Protocol server on the given address (e.g. "0.0.0.0:27017")
+pub async fn run_wire_server(
+    addr: &str,
+    db: Arc<DatabaseContext>,
+    user_store: Arc<faizdb_security::UserStore>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_wire_server_with_shutdown(addr, db, user_store, std::future::pending()).await
 }
 
 async fn handle_connection(

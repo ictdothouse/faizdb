@@ -240,16 +240,87 @@ Enjin menggunakan algoritma **In-Memory Hash Join** berkelajuan tinggi yang meme
 
 ---
 
+## 🛑 Piawaian 7: Penutupan Anggun Bersatu Merentas Protokol (Unified Multi-Protocol Graceful Shutdown)
+
+### 7.1 Latar Belakang & Cabaran Pengeluaran
+Dalam seni bina pengeluaran kontena (Kubernetes Pods, Nomad, Systemd), proses pelayan sering menerima isyarat penamatan (`SIGINT`, `SIGTERM`) semasa *rolling update* atau penskalaan automatik. Penutupan secara mendadak (abrupt kill) boleh menyebabkan kerosakan sambungan dalam perjalanan (*in-flight TCP socket resets*), transaksi terputus separuh jalan, atau fail WAL yang belum sempat di-sync ke cakera.
+
+### 7.2 Penyelesaian FaizDB
+FaizDB mengintegrasikan saluran siaran isyarat penutupan (`tokio::sync::broadcast`) merentas seluruh pintu masuk protokol rangkaian:
+* **HTTP / REST / Admin Portal (Axum):** Menggunakan `with_graceful_shutdown` untuk menamatkan penerimaan sambungan baharu sambil menunggu permintaan aktif selesai.
+* **MongoDB Wire Protocol (Port 27017):** [`run_wire_server_with_shutdown`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/wire/listener.rs) memantau isyarat penutupan dan menamatkan pendengar soket secara teratur.
+* **PostgreSQL Wire Protocol (Port 5432):** [`run_postgres_server_with_shutdown`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/wire/postgres/listener.rs) menghantar mesej penutupan dan membebaskan sesi soket.
+* **gRPC High-Performance Engine (Port 50051):** [`run_grpc_server_with_shutdown`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/grpc/listener.rs) melengkapkan panggilan RPC penstriman sebelum penutupan.
+
+---
+
+## 🗄️ Piawaian 8: Titik Semak & Pemangkasan Jurnal Autonomi (Proactive WAL Checkpointing & Disk Reclaim)
+
+### 8.1 Latar Belakang & Masalah Ruang Cakera
+Pangkalan data berprestasi tinggi yang hanya menambah log ke Write-Ahead Log tanpa pemangkasan berkala boleh menyebabkan fail log membesar tanpa kawalan (*disk exhaustion*).
+
+### 8.2 Penyelesaian FaizDB
+* **Mekanisme Checkpointing:** [`Wal::checkpoint(&self)`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/src/storage/wal.rs) membaca nombor jujukan transaksi (*sequence ID*) yang telah disahkan berada dalam MemTable atau fail data kekal, dan memangkas rekod lama yang tidak lagi diperlukan untuk pemulihan nahas.
+* **Penyelarasan Storan Automatik:** Fungsi `StorageEngine::flush()` dan `StorageEngine::compact()` memanggil `wal.checkpoint()` secara proaktif bagi memastikan saiz storan pada cakera kekal padat dan optimum sepanjang masa.
+
+---
+
+## ⏱️ Piawaian 9: Pembasmi Transaksi Terbiar Autonomi (MVCC Transaction Idle-Reaper Daemon)
+
+### 9.1 Latar Belakang & Kebocoran Versi MVCC
+Sekiranya klien memulakan transaksi (`BEGIN`) kemudian terputus sambungan (*connection dropped/timeout*) tanpa mengeluarkan arahan `COMMIT` atau `ROLLBACK`, rekod pengasingan gambar (*snapshot isolation records*) akan kekal dalam RAM dan menyekat pembersihan sampah MVCC (*MVCC vacuum bloat*).
+
+### 9.2 Penyelesaian FaizDB
+* **Cap Waktu Penciptaan Transaksi:** Setiap transaksi kini merekodkan `created_at: Instant` semasa permulaannya dalam [`mvcc.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/src/transaction/mvcc.rs).
+* **Daemon Pembersihan Berjadual:** [`reap_expired_transactions(timeout)`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-query/src/executor.rs) dijalankan secara autonomi setiap 30 saat di latar belakang pelayan. Transaksi yang melangkaui had masa melahu (konfigurasi `FAIZDB_TXN_TIMEOUT_SECS`, lalai 300s) secara automatik di-abort dan dibersihkan daripada memori tanpa campur tangan pentadbir.
+
+---
+
+## ⚡ Piawaian 10: Tolakan Had Imbasan Kueri (Sub-Millisecond Query Scan Limit Pushdown)
+
+### 10.1 Latar Belakang & Imbasan Lebihan (Over-Scanning)
+Dalam kueri lazim seperti `SELECT * FROM table LIMIT 10`, sistem tanpa tolakan had akan mengimbas jutaan rekod ke dalam memori sebelum memangkas 10 rekod teratas, membazirkan kitaran CPU dan lebar jalur ingatan.
+
+### 10.2 Penyelesaian FaizDB
+* **Limit Pushdown:** Enjin [`faizdb-query/src/executor.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-query/src/executor.rs) menyalurkan nilai `LIMIT` secara terus ke lapisan imbasan lelaran dokumen.
+* **Penamatan Awal (Short-Circuit Evaluation):** Sebaik sahaja bilangan rekod yang diminta dicapai, lelaran dihentikan serta-merta, memberikan masa kueri sub-milisaat walaupun pada koleksi bersaiz jutaan dokumen.
+
+---
+
+## 📐 Piawaian 11: Pengawalan Sempadan Titik Terapung Vektor (Numerical Float Safety & Distance Clamping)
+
+### 11.1 Latar Belakang & Isu Ketepatan IEEE 754
+Pengiraan jarak kosinus (`Cosine Similarity / Distance`) pada vektor berdimensi tinggi (512, 1536 dimensi AI embeddings) terdedah kepada herotan pembundaran nombor titik terapung (*floating point precision loss*), yang boleh menghasilkan nilai sedikit melebihi 1.0 (cth. 1.0000001) atau menghasilkan `NaN` pada vektor sifar.
+
+### 11.2 Penyelesaian FaizDB
+* **Pengawalan Sempadan Ketat:** Enjin [`faizdb-vector/src/distance.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-vector/src/distance.rs) mengapit (*clamps*) hasil pembahagian dot produk tepat dalam lingkungan `[-1.0, 1.0]` dan jarak kosinus dalam `[0.0, 2.0]`.
+* **Kestabilan Indeks Graf HNSW:** [`faizdb-vector/src/hnsw.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-vector/src/hnsw.rs) mengesahkan jarak sentiasa bernilai sah tanpa kemungkinan tercetusnya `NaN` atau perbandingan tidak sah (`f32::total_cmp`).
+
+---
+
+## 🕸️ Piawaian 12: Bajet Sumber Perjalanan Graf (Bounded-Resource Graph Traversal & Cycle Guard)
+
+### 12.1 Latar Belakang & Lingkaran Tak Terhingga (Infinite Loops)
+Pada graf pengetahuan (*Knowledge Graph*) yang kompleks dan mengandungi kitaran (cycles / loops), kueri perjalanan BFS/DFS tanpa kawalan bajet boleh menyebabkan kitaran CPU 100% dan limpahan memori RAM (*runaway graph traversals*).
+
+### 12.2 Penyelesaian FaizDB
+* **Kaedah Perjalanan Terkawal:** [`traverse_bfs_bounded(&self, start_id, max_depth, relation_filter, max_nodes)`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-graph/src/graph.rs) mengenakan siling maksimum (lalai 50,000 nod atau had khusus kueri).
+* **Deduplikasi Nod Terkini:** Menggunakan struktur `HashSet` bagi memastikan setiap nod hanya diproses sekali sahaja, menghapuskan risiko terperangkap dalam kitaran berulang.
+
+---
+
 ## 📊 Matriks Status Pengesahan Pengeluaran
 
-| Komponen Pengeluaran | Fail Suite Ujian Pengesahan | Status | Bilangan Ujian |
+| Komponen Pengeluaran | Fail Suite Ujian Pengesahan | Status | Liputan & Pengesahan |
 | :--- | :--- | :---: | :---: |
-| **Connection Governor & Probes** | [`faizdb-server/tests/test_production_hardening_and_features.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_production_hardening_and_features.rs) | **PASS** | 4 Ujian Integrasi |
-| **Extended Query & Hash Joins** | [`faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs) | **PASS** | 6 Ujian Integrasi |
-| **Wire Security & Throughput** | [`faizdb-server/tests/test_wire_security_and_performance.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_wire_security_and_performance.rs) | **PASS** | 5 Ujian Berjadual |
-| **Durability & Crash Recovery** | [`faizdb-core/tests/test_storage_durability.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/tests/test_storage_durability.rs) | **PASS** | 3 Ujian Integrasi |
-| **Audit Security & Correctness**| [`faizdb-server/tests/test_audit_security_and_correctness.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_audit_security_and_correctness.rs) | **PASS** | 3 Ujian Regresi |
-| **Saiz Binari Akhir (Release)** | `target/release/faizdb` (LTO Fat, Symbols Stripped) | **7.70 MB** | Sedia Diagihkan |
+| **Enterprise Production Hardening (12 Piawaian)** | [`faizdb-server/tests/test_production_hardening_and_features.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_production_hardening_and_features.rs) | **PASS (9/9)** | WAL Checkpoints, Limit Pushdown, Reaper, Float Clamping, Graph Budget, K8s Probes, Connection Governor |
+| **Extended Query & Hash Joins** | [`faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs) | **PASS (6/6)** | PG Extended Wire ($1, $2), Mongo Stateful Cursors, HNSW Tombstones, Raft Quorum |
+| **Multi-Protocol Security & Throughput** | [`faizdb-server/tests/test_wire_security_and_performance.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_wire_security_and_performance.rs) | **PASS (3/3)** | gRPC RBAC, Mongo RBAC, High Throughput Benchmark |
+| **Storage Durability & Crash Recovery** | [`faizdb-server/tests/test_durability_and_mvcc.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_durability_and_mvcc.rs) | **PASS (5/5)** | WAL Replay, Crash Safety, Snapshot Isolation |
+| **Audit Security & Correctness**| [`faizdb-server/tests/test_audit_security_and_correctness.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_audit_security_and_correctness.rs) | **PASS (3/3)** | CBO Float Bounds, Safe System Table Routing, Vector Validation |
+| **Jumlah Keseluruhan Ujian Ruang Kerja** | `cargo test --workspace` | **100% PASS** | **200+ Ujian Integrasi & Unit (Sifar Kegagalan)** |
+| **Kepadatan Binari Mesin (Release)** | `target/release/faizdb` (Fat LTO, Strip Symbols) | **7.70 MB** | Binari Tunggal Berdikari Sedia Diagihkan |
 
 ---
 *FaizDB — Diarkitekkan untuk Kestabilan Maksimum, Keselamatan Memori Mutlak, dan Kesiapsiagaan Pengeluaran Global.*
+

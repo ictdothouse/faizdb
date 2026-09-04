@@ -54,6 +54,9 @@ pub struct Transaction {
 
     /// Keys read during the transaction (for conflict detection)
     read_set: HashSet<Vec<u8>>,
+
+    /// Creation instant of the transaction (for idle transaction timeout & reaping)
+    created_at: std::time::Instant,
 }
 
 impl Transaction {
@@ -67,7 +70,18 @@ impl Transaction {
             snapshot_ts: id, // Simple: snapshot = txn id
             write_buffer: BTreeMap::new(),
             read_set: HashSet::new(),
+            created_at: std::time::Instant::now(),
         }
+    }
+
+    /// Check if transaction has exceeded the idle timeout duration
+    pub fn is_expired(&self, timeout: std::time::Duration) -> bool {
+        self.created_at.elapsed() > timeout
+    }
+
+    /// Get creation instant of transaction
+    pub fn created_at(&self) -> std::time::Instant {
+        self.created_at
     }
 
     /// Buffer a put operation (applied on commit).

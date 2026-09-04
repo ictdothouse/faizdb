@@ -9,13 +9,17 @@ use super::proto::FaizDbServiceServer;
 use super::service::FaizDbGrpcService;
 use faizdb_query::DatabaseContext;
 
-/// Run the FaizDB gRPC / Protocol Buffers Server on the given address (e.g. "0.0.0.0:50051")
-pub async fn run_grpc_server(
+/// Run the FaizDB gRPC / Protocol Buffers Server with optional graceful shutdown future
+pub async fn run_grpc_server_with_shutdown<F>(
     addr: &str,
     db: Arc<DatabaseContext>,
     auth: Arc<faizdb_security::auth::AuthManager>,
     user_store: Arc<faizdb_security::UserStore>,
-) -> Result<(), Box<dyn std::error::Error>> {
+    shutdown: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let socket_addr: SocketAddr = addr.parse()?;
     info!("⚡ gRPC / Protocol Buffers Server running on grpc://{addr}");
 
@@ -24,8 +28,18 @@ pub async fn run_grpc_server(
 
     Server::builder()
         .add_service(server)
-        .serve(socket_addr)
+        .serve_with_shutdown(socket_addr, shutdown)
         .await?;
 
     Ok(())
+}
+
+/// Run the FaizDB gRPC / Protocol Buffers Server on the given address (e.g. "0.0.0.0:50051")
+pub async fn run_grpc_server(
+    addr: &str,
+    db: Arc<DatabaseContext>,
+    auth: Arc<faizdb_security::auth::AuthManager>,
+    user_store: Arc<faizdb_security::UserStore>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_grpc_server_with_shutdown(addr, db, auth, user_store, std::future::pending()).await
 }

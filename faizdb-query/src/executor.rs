@@ -339,6 +339,40 @@ impl DatabaseContext {
         &self.active_txns
     }
 
+    /// Reap abandoned/idle transactions exceeding the timeout limit.
+    /// Returns the number of expired transactions safely aborted and removed.
+    pub fn reap_expired_transactions(&self, timeout: std::time::Duration) -> usize {
+        let mut expired = Vec::new();
+        for entry in self.active_txns.iter() {
+            let txn = entry.value().lock();
+            if txn.is_expired(timeout) {
+                expired.push(entry.key().clone());
+            }
+        }
+        let count = expired.len();
+        for id in expired {
+            if let Some((_, m)) = self.active_txns.remove(&id) {
+                let mut txn = m.lock();
+                let _ = self.tx_manager.abort(&mut txn);
+                tracing::warn!(
+                    "Reaped expired idle transaction '{id}' after timeout of {}s",
+                    timeout.as_secs()
+                );
+            }
+        }
+        count
+    }
+
+    /// Explicitly flush in-memory data (MemTable) and fsync WAL to disk for clean shutdown.
+    pub fn flush(&self) -> Result<(), String> {
+        if let Some(storage) = &self.storage {
+            storage
+                .close()
+                .map_err(|e| format!("Failed to flush storage: {e}"))?;
+        }
+        Ok(())
+    }
+
     /// Access vector indexes
     pub fn vector_indexes(
         &self,
@@ -530,7 +564,24 @@ impl DatabaseContext {
                     None // Adaptive fallback to sequential scan
                 };
 
-                let docs_to_scan = candidate_docs.unwrap_or_else(|| col.find_all(None));
+                let docs_to_scan = candidate_docs.unwrap_or_else(|| {
+                    // Limit pushdown: If there are no filters, no sorts, no joins, and no vector/graph clauses,
+                    // avoid allocating the full collection into memory by scanning only the required limit + skip items.
+                    if filter.is_none()
+                        && sort_by.is_none()
+                        && joins.is_empty()
+                        && vector_search.is_none()
+                        && traverse.is_none()
+                    {
+                        if let Some(l) = limit {
+                            col.find_all(Some(skip.unwrap_or(0).saturating_add(l)))
+                        } else {
+                            col.find_all(None)
+                        }
+                    } else {
+                        col.find_all(None)
+                    }
+                });
 
                 let mut filtered: Vec<Document> = docs_to_scan
                     .into_iter()

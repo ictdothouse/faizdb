@@ -564,7 +564,7 @@ impl HnswIndex {
                 let id = self.nodes[c.idx].id.clone();
                 let distance = c.distance;
                 let similarity = match self.config.metric {
-                    DistanceMetric::Cosine => (1.0 - distance).max(0.0),
+                    DistanceMetric::Cosine => (1.0 - distance).clamp(0.0, 1.0),
                     _ => 1.0 / (1.0 + distance),
                 };
                 VectorSearchResult {

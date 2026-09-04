@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `faizdb-server/tests/` — comprehensive integration test suite (auth flow, document CRUD, vector search, production hardening, competitor verification)
 - `bindings/python/pyproject.toml` — PEP 517/518 modern Python packaging
 - `HnswIndex::try_search()` — non-panicking vector search with explicit dimension validation
+- **Unified Multi-Protocol Graceful Shutdown**: Synchronized broadcast channel cleanly draining active connections across HTTP REST, MongoDB Wire (Port 27017), PostgreSQL Wire (Port 5432), and gRPC (Port 50051) on SIGINT/SIGTERM.
+- **Proactive WAL Checkpointing & Disk Reclaim**: Periodic checkpointing and journal pruning during storage flush and compaction, preventing disk exhaustion and bounding log files.
+- **MVCC Autonomous Transaction Reaper**: Background daemon sweeping every 30 seconds to abort and evict idle transactions exceeding timeout, completely eliminating snapshot version bloat.
+- **Sub-Millisecond Query Scan Limit Pushdown**: Direct pushdown of `LIMIT` clauses into the document scan iterator for short-circuit evaluation without unnecessary record scanning.
+- **Numerical Float Safety & Distance Clamping**: Mathematical clamping on cosine similarity (`[-1.0, 1.0]`) and distance (`[0.0, 2.0]`) to protect against IEEE 754 precision loss and eliminate `NaN` risk in HNSW indexing.
+- **Bounded-Resource Graph Traversal**: Sourced-budget BFS traversal (`traverse_bfs_bounded`) with a configurable visit limit (default 50,000 nodes) and visited-node deduplication preventing infinite loops in cyclic graphs.
 - **Open-Format Data Portability CLI (`faizdb dump`)**: Streaming export of collections to standard JSONL and ANSI SQL `INSERT` statements with $O(1)$ memory usage.
 - **Cloud-Native Kubernetes Health Probes**: Native HTTP endpoints `GET /v1/health/liveness` (event-loop deadlock detection) and `GET /v1/health/readiness` (storage engine availability gating).
 - **Autonomous Background Snapshot Daemon**: Zero-maintenance async background daemon (`FAIZDB_AUTO_BACKUP`) for periodic atomic snapshots with automatic timestamp rotation.

@@ -84,7 +84,10 @@
 | **Consensus & Global Mesh** | Complex ConfigDB + Mongos | Citus (Third-party) | Redis Cluster | **Embedded Raft with Persistent Replicated Log (CRC32) + Active-Active Multi-Region CRDTs** |
 | **Disaster Recovery (PITR)** | `mongodump` | `pg_dump` / WAL-G | RDB / AOF | **LSN-Bounded Snapshots with Point-In-Time Recovery WAL Replay & AES-256-GCM** |
 | **Overload Protection (Gov)** | `maxIncomingConnections` only | `max_connections` (heavy thread fork) | `maxclients` | **Built-in Async Governor (`tokio::Semaphore`) + RFC 53300 fatal error rejection** |
-| **WAL Group Commit** | WiredTiger commit batch | `commit_delay` / `commit_siblings` | Append-only file buffer | **Atomic Vectorized Group Commit: 100k+ durable writes/sec with amortized `fsync`** |
+| **WAL Group Commit & Checkpoint** | WiredTiger commit batch | `commit_delay` / `commit_siblings` | Append-only file buffer | **Vectorized Batch Commit (100k+ writes/s) + Proactive Checkpoint Journal Pruning** |
+| **Zero-Downtime Graceful Shutdown** | Partial SIGINT drain | SIGINT drain | Non-graceful client drops | **Unified Broadcast Channel draining HTTP, MongoDB, Postgres & gRPC connections** |
+| **MVCC Autonomous Reaper** | WiredTiger sweep | Vacuum daemon (locks tables) | Single-threaded GC | **Zero-Bloat Background Reaper (30s interval) aborting orphaned transactions** |
+| **Scan Limit Pushdown** | Scan then limit | Scan then limit | SCAN COUNT | **Sub-millisecond short-circuit scan pushdown directly in document iterators** |
 | **Kubernetes Health Probes** | Requires K8s Operator / Agent | Requires sidecar / `pg_isready` | Requires Redis Sentinel / sidecar | **Built-in Cloud-Native HTTP Probes: `/v1/health/liveness` & `/readiness` (0 sidecars)** |
 | **Autonomous Snapshots** | Paid Atlas Cloud / OpsManager | Requires `pgBackRest` / cron daemon | Built-in `save` daemon | **Built-in Async Snapshot Daemon (`FAIZDB_AUTO_BACKUP`) with auto timestamp rotation** |
 | **Open Data Portability** | `mongodump` (BSON lock-in) | `pg_dump` (Postgres dialect only) | RDB dump (Key-Value only) | **Universal Anti-Lock-in: Streaming `faizdb dump` to standard JSONL & ANSI SQL** |
@@ -99,13 +102,13 @@ FaizDB is engineered not only for laboratory speed, but for **uncompromising ope
 
 <div align="center">
 
-| 🛡️ Overload Protection | ⚡ WAL Group Commit | ☸️ Cloud-Native K8s | ⏰ Auto-Snapshot Daemon | 📦 Anti-Lock-in Export |
-|:---:|:---:|:---:|:---:|:---:|
-| **Tokio Semaphore Governor**<br/>RFC 53300 `FATAL` error rejection protects against connection spikes and OOM crashes. | **Single-Buffer Batch I/O**<br/>Amortized `fsync` enables 100k+ durable writes/sec without SSD NVMe thrashing. | **Native Health Probes**<br/>`/v1/health/liveness` & `/readiness` built directly into binary without sidecars. | **Autonomous Background Loop**<br/>Zero-cron background daemon takes periodic snapshots automatically. | **Streaming CLI Dump**<br/>`faizdb dump` exports entire collections to standard JSONL & ANSI SQL. |
+| 🛡️ Overload Protection | ⚡ WAL Group & Checkpoint | 🛑 Graceful Shutdown | ⏱️ MVCC Auto-Reaper | ⚡ Sub-ms Limit Pushdown | ☸️ Cloud-Native K8s |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Tokio Semaphore Governor**<br/>RFC 53300 `FATAL` error rejection protects against connection spikes. | **Proactive Disk Reclaim**<br/>Single-buffer batch I/O + automatic WAL pruning on compaction prevents disk bloat. | **Unified Multi-Protocol**<br/>Simultaneously drains HTTP, Mongo, Postgres & gRPC streams on SIGINT/SIGTERM. | **Autonomous Daemon**<br/>Background sweep aborts idle/orphaned transactions, eliminating MVCC bloat. | **Short-Circuit Iterator**<br/>Paginates millions of records in microseconds without over-scanning. | **Native Health Probes**<br/>`/v1/health/liveness` & `/readiness` built directly into binary with 0 sidecars. |
 
 </div>
 
-> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md).
+> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**docs/faizdb-audit-report-v7.md**](docs/faizdb-audit-report-v7.md).
 
 ---
 

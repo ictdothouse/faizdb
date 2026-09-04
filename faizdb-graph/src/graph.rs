@@ -232,7 +232,10 @@ impl GraphStore {
         res
     }
 
-    /// Traverse graph with Breadth-First Search (BFS) up to max_depth
+    /// Maximum default nodes visited during GraphRAG BFS traversal to prevent runaway memory expansion
+    pub const DEFAULT_MAX_TRAVERSE_NODES: usize = 50_000;
+
+    /// Traverse graph with Breadth-First Search (BFS) up to max_depth with safety node budget
     /// Ideal for GraphRAG context gathering.
     pub fn traverse_bfs(
         &self,
@@ -240,11 +243,27 @@ impl GraphStore {
         max_depth: usize,
         relation_filter: Option<&str>,
     ) -> Vec<PathStep> {
+        self.traverse_bfs_bounded(
+            start_id,
+            max_depth,
+            relation_filter,
+            Self::DEFAULT_MAX_TRAVERSE_NODES,
+        )
+    }
+
+    /// Traverse graph with Breadth-First Search (BFS) up to max_depth and custom max_nodes budget
+    pub fn traverse_bfs_bounded(
+        &self,
+        start_id: &str,
+        max_depth: usize,
+        relation_filter: Option<&str>,
+        max_nodes: usize,
+    ) -> Vec<PathStep> {
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
         let mut results = Vec::new();
 
-        if !self.vertices.contains_key(start_id) {
+        if !self.vertices.contains_key(start_id) || max_nodes == 0 {
             return results;
         }
 
@@ -257,6 +276,13 @@ impl GraphStore {
                 relation: rel,
                 depth,
             });
+
+            if results.len() >= max_nodes {
+                tracing::warn!(
+                    "Graph BFS traversal reached maximum node budget limit ({max_nodes})"
+                );
+                break;
+            }
 
             if depth < max_depth {
                 if let Some(edges) = self.outgoing.get(&curr_id) {

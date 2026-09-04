@@ -25,12 +25,16 @@ const PG_SSL_REQUEST_CODE: i32 = 80877103;
 /// PostgreSQL Protocol v3.0 code (196608 in decimal / 0x00030000)
 const PG_PROTOCOL_V3: i32 = 196608;
 
-/// Run the PostgreSQL Wire Protocol server on the given address (e.g. "0.0.0.0:5432")
-pub async fn run_postgres_server(
+/// Run the PostgreSQL Wire Protocol server with optional graceful shutdown future
+pub async fn run_postgres_server_with_shutdown<F>(
     addr: &str,
     db: Arc<DatabaseContext>,
     user_store: Arc<UserStore>,
-) -> Result<(), Box<dyn std::error::Error>> {
+    shutdown: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let listener = TcpListener::bind(addr).await?;
     info!("🐘 PostgreSQL Wire Protocol Server running on postgresql://{addr}");
 
@@ -39,45 +43,64 @@ pub async fn run_postgres_server(
         .and_then(|s| s.parse().ok())
         .unwrap_or(10_000);
     let semaphore = Arc::new(tokio::sync::Semaphore::new(max_conns));
+    tokio::pin!(shutdown);
 
     loop {
-        match listener.accept().await {
-            Ok((socket, peer_addr)) => {
-                let permit = match semaphore.clone().try_acquire_owned() {
-                    Ok(p) => p,
-                    Err(_) => {
-                        warn!("Rejecting Postgres connection from {peer_addr}: max connections ({max_conns}) reached");
-                        tokio::spawn(async move {
-                            let mut s = socket;
-                            let err =
-                                encode_error_response("FATAL", "53300", "too many clients already");
-                            let _ = s.write_all(&err).await;
-                            let _ = s.flush().await;
-                        });
-                        continue;
-                    }
-                };
-                let db_clone = db.clone();
-                let store_clone = user_store.clone();
-                tokio::spawn(async move {
-                    let _permit = permit;
-                    if let Err(e) = handle_postgres_connection(
-                        socket,
-                        db_clone,
-                        store_clone,
-                        peer_addr.to_string(),
-                    )
-                    .await
-                    {
-                        warn!("Postgres connection closed for {peer_addr}: {e}");
-                    }
-                });
+        tokio::select! {
+            _ = &mut shutdown => {
+                info!("🐘 PostgreSQL Wire Protocol Server received shutdown signal — draining listener...");
+                break;
             }
-            Err(e) => {
-                error!("Failed to accept Postgres connection: {e}");
+            accept_res = listener.accept() => {
+                match accept_res {
+                    Ok((socket, peer_addr)) => {
+                        let permit = match semaphore.clone().try_acquire_owned() {
+                            Ok(p) => p,
+                            Err(_) => {
+                                warn!("Rejecting Postgres connection from {peer_addr}: max connections ({max_conns}) reached");
+                                tokio::spawn(async move {
+                                    let mut s = socket;
+                                    let err =
+                                        encode_error_response("FATAL", "53300", "too many clients already");
+                                    let _ = s.write_all(&err).await;
+                                    let _ = s.flush().await;
+                                });
+                                continue;
+                            }
+                        };
+                        let db_clone = db.clone();
+                        let store_clone = user_store.clone();
+                        tokio::spawn(async move {
+                            let _permit = permit;
+                            if let Err(e) = handle_postgres_connection(
+                                socket,
+                                db_clone,
+                                store_clone,
+                                peer_addr.to_string(),
+                            )
+                            .await
+                            {
+                                warn!("Postgres connection closed for {peer_addr}: {e}");
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to accept Postgres connection: {e}");
+                    }
+                }
             }
         }
     }
+    Ok(())
+}
+
+/// Run the PostgreSQL Wire Protocol server on the given address (e.g. "0.0.0.0:5432")
+pub async fn run_postgres_server(
+    addr: &str,
+    db: Arc<DatabaseContext>,
+    user_store: Arc<UserStore>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_postgres_server_with_shutdown(addr, db, user_store, std::future::pending()).await
 }
 
 async fn handle_postgres_connection(

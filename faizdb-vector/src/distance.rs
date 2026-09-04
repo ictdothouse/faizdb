@@ -112,7 +112,7 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
         return 1.0;
     }
 
-    let similarity = dot / denominator;
+    let similarity = (dot / denominator).clamp(-1.0, 1.0);
     (1.0 - similarity).clamp(0.0, 2.0)
 }
 
