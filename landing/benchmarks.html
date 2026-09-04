@@ -266,7 +266,14 @@
           </tr>
         </tbody>
       </table>
+
+      <div style="margin-top: 18px; padding: 14px 18px; background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; font-size: 13px; line-height: 1.6;">
+        <strong>🔬 Scientific Workload Methodology &amp; I/O Scope:</strong><br/>
+        • <strong>Hot In-Memory Working Sets (&lt; 1 ms):</strong> Sub-millisecond figures reflect warm/hot working sets residing in memory (MemTable SkipList, resident HNSW layers, and ARC block cache) evaluated via Criterion and loopback TCP streams.<br/>
+        • <strong>Cold Storage NVMe Physics:</strong> For cold datasets exceeding physical RAM, random read latency is governed by physical NVMe/SSD hardware bounds (10–50 µs per page fetch), with read amplification minimized via Bloom filters and two-level block indexing.
+      </div>
     </div>
+
 
     <div class="content-card">
       <h2 class="type-subhead">Run Automated Independent Verification</h2>

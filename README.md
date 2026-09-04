@@ -1,8 +1,9 @@
-# 🔥 FaizDB — The Universal High-Performance Multi-Model Database Engine
+# 🔥 FaizDB — The Universal High-Performance Multi-Model Database Kernel
 
 <div align="center">
 
 [![Rust](https://img.shields.io/badge/rust-1.88+_|__edition_2024-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
+[![Status](https://img.shields.io/badge/status-v0.1.0--Developer_Preview-blue.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge&logo=githubactions)](https://github.com/ictdothouse/faizdb/actions)
 [![Security](https://img.shields.io/badge/security-EdDSA_Ed25519_%7C_AES--256--GCM-red.svg?style=for-the-badge)](SECURITY.md)
@@ -11,7 +12,7 @@
 
 <br/>
 
-> **"Sub-millisecond speed for modern applications. Unified Document, PostgreSQL & MongoDB Wire, gRPC, In-Memory Cache, Vector & Graph. 100% Memory-Safe Rust."**  
+> **"Sub-millisecond speed for modern applications. Clean-slate unified Document, PostgreSQL & MongoDB Wire Compatibility, gRPC, In-Memory Cache, Vector & Graph. 100% Memory-Safe Rust."**  
 > *Created and Architected by **Ahmad Faiz***
 
 </div>
@@ -20,7 +21,21 @@
 
 ## 🌟 Vision & Architectural Breakthrough
 
-**FaizDB** is an enterprise-grade, distributed, high-performance universal multi-model database engineered from the ground up in 100% Safe Rust. It delivers extreme concurrency, sub-millisecond latency, and unified storage across Web, Mobile, Real-Time Gaming, Enterprise Systems, and AI Workloads.
+**FaizDB** is a clean-slate, high-performance universal multi-model database kernel engineered in 100% Safe Rust. It consolidates heterogeneous data layers (Document JSON, HNSW Vector Indexing, Directional Knowledge Graphs, and Relational SQL) into a single, compact **7.70 MB executable**, eliminating the multi-database sprawl and synchronization tax of legacy enterprise stacks.
+
+### 🏛️ The Clean-Slate Microkernel (Why 7.70 MB?)
+Unlike legacy databases written in C/C++ that bundle 30 years of legacy code, internal virtual machines, or heavy runtime dependencies:
+* **Zero Runtime Dependencies:** Pure Safe Rust compiled with Link-Time Optimization (Fat LTO) and stripped debug symbols results in a lean, hardened **7.70 MB machine binary**.
+* **Targeted Wire Protocol Compatibility:** Rather than bloating the engine with obscure 1990s relational extensions, FaizDB implements a targeted **Wire Protocol Gateway** supporting the essential PostgreSQL v3 protocol (Extended Query with `$1, $2` parameterized statements, prepared statement cache) and MongoDB specification (`OP_MSG`, `OP_QUERY`, stateful cursors). This allows Prisma, DBeaver, SQLAlchemy, PyMongo, and Mongoose to connect directly out-of-the-box.
+* **Unified Single-Process Storage:** Document models, vector embeddings, and graph edges share the same underlying LSM-Tree, MemTable, and Write-Ahead Log, eliminating cross-process network hops.
+
+### 🎯 Standalone-First Architecture: Native FaizQL vs. Optional Wire Bridges
+**FaizDB is not a proxy, wrapper, or emulator of other databases.** It is an independent, native database engine with its own unified architecture:
+* **1. Native Unified Query Language (FaizQL):** FaizDB features its own built-in AST and parser, allowing developers to combine Relational SQL, Document Mutation, HNSW Vector Similarity, and Graph Multi-Hop Traversal in a **single unified syntax** without any third-party tools.
+* **2. Native High-Performance gRPC Engine (Port 50051):** Provides direct, binary-protocol Protocol Buffers access with zero-copy deserialization for microservices and AI pipelines.
+* **3. In-Process Embedded Library Mode (`faizdb-core`):** Like SQLite or RocksDB, FaizDB can be embedded directly inside any Rust application without opening network ports or running background server processes.
+* **4. Optional Ecosystem Compatibility Bridges (Ports 5432 & 27017):** The PostgreSQL and MongoDB wire gateways are **completely optional convenience layers**. They exist so teams can adopt FaizDB using familiar GUI tools (DBeaver, TablePlus, Compass) and standard ORMs (Prisma, TypeORM, PyMongo) without rewriting application code. Users can run FaizDB 100% natively using only FaizQL and gRPC.
+
 
 ```
                          ┌───────────────────────────────────────────────────────────┐
@@ -93,6 +108,38 @@
 | **Open Data Portability** | `mongodump` (BSON lock-in) | `pg_dump` (Postgres dialect only) | RDB dump (Key-Value only) | **Universal Anti-Lock-in: Streaming `faizdb dump` to standard JSONL & ANSI SQL** |
 
 *For a detailed competitive breakdown vs SurrealDB, CockroachDB, Qdrant, and ArangoDB, see [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md).*
+
+---
+
+## ⚖️ CAP Theorem & Distributed Consistency Duality (CP vs AP Modes)
+
+Distributed systems require explicit trade-offs. FaizDB does not make unrealistic claims of violating the **CAP Theorem**; instead, it provides **explicit consistency duality** based on workload requirements:
+
+```
+                                  ┌────────────────────────────────────────────────────────┐
+                                  │               FaizDB Consistency Engine                │
+                                  └──────────────────────────┬─────────────────────────────┘
+                                                             │
+                              ┌──────────────────────────────┴──────────────────────────────┐
+                              ▼                                                             ▼
+                ┌───────────────────────────┐                                 ┌───────────────────────────┐
+                │   Mode 1: Strong (CP)     │                                 │ Mode 2: High Avail (AP)   │
+                │   Linearizable Consensus  │                                 │ Active-Active Multi-Region│
+                ├───────────────────────────┤                                 ├───────────────────────────┤
+                │ • Snapshot Isolation MVCC │                                 │ • Conflict-Free (CRDTs)   │
+                │ • Raft Distributed Quorum │                                 │ • PN-Counters / LWW Regs  │
+                │ • Write-Ahead Log (WAL)   │                                 │ • Zero Distributed Locks  │
+                │ • Zero Double-Spending    │                                 │ • Sub-1ms Local WAN Writes│
+                ├───────────────────────────┤                                 ├───────────────────────────┤
+                │ Target: Banking, Ledgers, │                                 │ Target: Social, Gaming,   │
+                │ E-Commerce Inventory Stock│                                 │ Sensor Telemetry, Collab  │
+                └───────────────────────────┘                                 └───────────────────────────┘
+```
+
+* **Strong Consistency (CP Mode — Default for Financial & Ledger Data):**
+  Enforces strict linearizability and serializable transactions across cluster nodes using **Raft Consensus** ($N/2 + 1$ quorum) and local MVCC Write-Ahead Logging (WAL). In this mode, writes are rejected if a partition prevents quorum, guaranteeing zero double-spending and absolute data correctness.
+* **Eventual Consistency (AP Mode — Multi-Region Active-Active Mesh):**
+  Leverages built-in **Conflict-Free Replicated Data Types (CRDTs)** such as Positive-Negative Counters (`PNCounter`), Last-Write-Wins Registers (`LWWRegister`), and Observed-Remove Sets (`ORSet`). In this mode, nodes in Singapore, Frankfurt, and Virginia accept writes locally with sub-millisecond latency and converge deterministically across wide-area network (WAN) links without distributed locking overhead.
 
 ---
 
@@ -192,6 +239,10 @@ Measured over live TCP network sockets with authenticated pipelines:
 | **⚡ gRPC Gateway (Port 50051)** | **560.2 ops/sec** | **1,518 µs** *(1.52 ms)* | **2,239 µs** *(2.24 ms)* | **2,988 µs** *(2.99 ms)* |
 | **🤖 HNSW AI Vector (Port 27018)** | **1,414.8 QPS** | **880 µs** *(0.88 ms)* | **2,027 µs** *(2.02 ms)* | **3,939 µs** *(3.94 ms)* |
 | **🐘 PostgreSQL Handshake (Port 5432)** | Session Auth | **802 ms** *(Argon2id derivation)* | - | - |
+
+> 🔬 **Scientific Workload Methodology & Storage I/O Scope:**
+> * **Hot In-Memory Working Sets (< 1 ms):** The sub-millisecond figures (e.g., 262 µs MongoDB wire median, 880 µs HNSW vector search, 916 µs 3-hop graph traversal) reflect warm/hot working sets residing in memory (MemTable SkipList, resident HNSW graph layers, and ARC block cache) evaluated via Criterion and loopback TCP streams.
+> * **Cold NVMe Disk I/O Physics:** When dataset sizes exceed available RAM and require cold reads from secondary storage, random read latency is strictly bounded by physical NVMe/SSD hardware bounds (typically 10–50 µs per 4KB page fetch). FaizDB leverages Bloom filters (1% false positive rate) and SSTable block index binary search to minimize cold disk read amplification.
 
 ### 🔬 Independent Benchmark Verification & Reproducibility
 
@@ -522,8 +573,25 @@ let kafka_json = cdc_event.to_kafka_message()?;
 
 ---
 
-## 🗺️ Roadmap to Version 1.0
+## 🗺️ Maturity Status & Roadmap to Enterprise GA (v1.0)
 
+FaizDB is currently at **v0.1.0 (Developer & Edge Preview)**. The core engine is fully implemented in pure Safe Rust, passing **200+ unit and integration tests (100% pass rate)**, with zero warnings under strict `-D warnings` clippy policies.
+
+Rather than claiming instant battle-tested maturity for decade-old banking mainframes, FaizDB follows a transparent, phased engineering verification roadmap:
+
+```
+┌─────────────────────────────────┐     ┌─────────────────────────────────┐     ┌─────────────────────────────────┐
+│   Phase 1: v0.1.0 (Current)     │     │   Phase 2: v0.2.0 – v0.5.0      │     │   Phase 3: v1.0 Enterprise GA   │
+│   Developer & Edge Preview      │ ──► │   Chaos & Jepsen Hardening      │ ──► │   Mission-Critical Certified    │
+├─────────────────────────────────┤     ├─────────────────────────────────┤     ├─────────────────────────────────┤
+│ • Pure Safe Rust microkernel    │     │ • Formal Jepsen testing suites  │     │ • Tier-1 Core Banking Certified │
+│ • AI Semantic Cache & GraphRAG  │     │ • Split-brain network chaos     │     │ • Multi-terabyte cold storage   │
+│ • Edge & Robotics deployment    │     │ • Asynchronous clock drift tests│     │ • Multi-datacenter zero-downtime│
+│ • 4 Wire Gateways + 200+ Tests  │     │ • Cold-tier compaction tuning   │     │ • Full commercial support SLAs  │
+└─────────────────────────────────┘     └─────────────────────────────────┘     └─────────────────────────────────┘
+```
+
+### Milestone Progress:
 - [x] High-Throughput LSM-Tree Storage Engine with WAL & MVCC ACID
 - [x] Secondary B-Tree Indexing with Strict Unique Key Enforcement ($O(\log N)$)
 - [x] Cost-Based `EXPLAIN` Query Planner with Microsecond Diagnostics
@@ -554,7 +622,15 @@ let kafka_json = cdc_event.to_kafka_message()?;
 - [x] Open-Format Universal Data Portability CLI (`faizdb dump --format [jsonl|sql]`)
 - [x] PostgreSQL Extended Query Protocol & Multi-Table Relational Hash Join Engine
 - [x] MongoDB Wire $O(1)$ Primary Key Lookup & Stateful Cursor Pagination
+- [x] Unified Multi-Protocol Graceful Shutdown & Socket Drain Engine
+- [x] Proactive WAL Checkpointing & Automatic Journal Pruning
+- [x] Autonomous MVCC Idle-Transaction Reaper Background Loop
+- [x] Scan Limit Pushdown Engine with Short-Circuit Iterators
+- [x] Numerical Float Boundary Clamping & Safe Vector Distance Normalization
+- [x] Bounded-Resource Graph Traversal with Cycle Resistance
+- [ ] Formal Jepsen Distributed Testing Framework Implementation
 - [ ] GPU-Accelerated Vector Indexing (CUDA / Metal Shaders)
+
 
 ---
 

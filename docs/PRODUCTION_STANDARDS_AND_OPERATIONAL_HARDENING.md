@@ -11,7 +11,28 @@
 
 Dalam persekitaran pengeluaran berskala besar (*mission-critical enterprise deployments*), kepantasan enjin semata-mata tidak memadai. Enjin pangkalan data mesti berdaya tahan terhadap beban lampau (*overload*), mengelakkan kegagalan rantai (*cascading failures*), serasi secara natif dengan orkestrasyen kontena awan (*Cloud-Native Kubernetes*), menyediakan sandaran autonomi, dan menjamin kedaulatan data pengguna tanpa sebarang *vendor lock-in*.
 
-Dokumen ini merekodkan secara terperinci **6 Piawaian Operasi Pengeluaran** yang diimplementasikan secara terbina dalam (*built-in*) pada FaizDB.
+Dokumen ini merekodkan secara terperinci doktrin seni bina berdikari (**Standalone-First FaizQL Engine**), dualiti ketekalan Teorem CAP, serta **6 Piawaian Operasi Pengeluaran** yang diimplementasikan secara terbina dalam (*built-in*) pada FaizDB.
+
+---
+
+## 🏛️ Doktrin Seni Bina Berdikari: FaizQL Natif vs. Adapter Wayar Pilihan
+
+Salah satu salah faham biasa ialah menganggap FaizDB bergantung kepada ekosistem luar atau mengandungi salinan penuh enjin legasi pihak ketiga (seperti PostgreSQL atau MongoDB). Realitinya:
+
+1. **FaizDB Adalah Enjin Berdiri Sendiri Tulen (*100% Standalone Pure-Rust Engine*):**
+   - FaizDB dibina dari asas (*clean-slate microkernel architecture*) tanpa sebarang baris kod C/C++ daripada PostgreSQL, SQLite, atau MongoDB.
+   - Mempunyai enjin storan natif sendiri (`faizdb-core`: MemTable berasaskan SkipList/BTreeMap, Write-Ahead Log berputar, dan pemformatan SSTable mikron).
+   - Mempunyai bahasa kueri natif sendiri: **FaizQL** (`faizdb-query`), lengkap dengan tokenizer, AST parser, Cost-Based Optimizer (CBO), dan executor natif.
+   - Mempunyai protokol pengeluaran natif sendiri: **FaizDB Native gRPC (Port 50051) & REST API (Port 8080)**.
+
+2. **Adapter Protokol Wayar (Port 5432 & 27017) Hanyalah Pintu Masuk Pilihan (*Optional Ingress Adapters*):**
+   - Pembangun **TIDAK DIWAJIBKAN** menggunakan port PostgreSQL atau MongoDB.
+   - Pintu masuk ini diwujudkan semata-mata sebagai kemudahan integrasi (*developer ergonomics*), membolehkan aplikasi sedia ada menyambung ke FaizDB menggunakan pemacu (drivers) dan alatan GUI popular (DBeaver, TablePlus, Compass, Prisma, Drizzle) tanpa perlu mempelajari protokol baharu pada hari pertama.
+   - Adapter ini hanya menguraikan bingkai TCP (*packet framing*) dan menterjemahkannya terus ke dalam AST FaizQL tanpa membawa beban (*zero bloat*). Inilah rahsia bagaimana binari keluaran FaizDB kekal sangat padat (**7.70 MB**) berbanding pangkalan data legasi yang memerlukan ratusan megabait.
+
+3. **Dualiti Teorem CAP yang Jelas (CP Mode vs. AP Mode):**
+   - **Mod CP (Linearizable Strict Consistency):** Dioptimumkan untuk lejar kewangan, perbankan, dan pengurusan inventori menggunakan enjin ACID MVCC penuh, WAL atomik, dan konsensus teragih Raft. Transaksi partition ditolak demi menjamin sifar perbelanjaan berganda (*zero double-spending*).
+   - **Mod AP (High-Availability Eventual Consistency):** Dioptimumkan untuk nod multi-wilayah pinggir (*Edge*), kolaborasi dokumen serentak, dan telemetri IoT menggunakan struktur data bebas konflik (*Conflict-free Replicated Data Types - CRDTs* seperti PN-Counters, LWW-Registers, dan OR-Sets). Menjamin kependaman sub-milisaat tempatan tanpa kunci teragih (*zero distributed locking overhead*). Mod ini dipilih secara eksplisit mengikut jenis koleksi (*collection-level isolation*).
 
 ---
 

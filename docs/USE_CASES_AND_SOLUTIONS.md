@@ -2,6 +2,8 @@
 
 This document details **20 real-world production use cases** where **FaizDB** replaces multi-database sprawl, eliminates distributed sync taxes, and delivers superior throughput, sub-millisecond latencies, and mathematical durability across modern technology stacks.
 
+> 💡 **Standalone-First Architecture Note:** FaizDB is an independent, autonomous database kernel with its own native query language (**FaizQL**), native high-performance gRPC engine (port 50051), and embedded in-process library mode (`faizdb-core`). The PostgreSQL wire (port 5432) and MongoDB wire (port 27017) protocols are **completely optional ingress bridges** provided for ecosystem convenience (allowing tools like DBeaver, Prisma, TablePlus, and PyMongo to connect without code changes). FaizDB does not require or emulate external databases to operate; it runs 100% standalone.
+
 ---
 
 ## 📑 Table of Contents (The 20 Enterprise Solutions)
