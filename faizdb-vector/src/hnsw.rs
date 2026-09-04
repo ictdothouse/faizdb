@@ -420,6 +420,23 @@ impl HnswIndex {
         sorted
     }
 
+    /// Search K nearest neighbors with non-panicking dimension validation
+    pub fn try_search(&self, query: &[f32], top_k: usize) -> Result<Vec<VectorSearchResult>, String> {
+        if self.nodes.is_empty() || top_k == 0 {
+            return Ok(Vec::new());
+        }
+
+        if query.len() != self.config.dimensions {
+            return Err(format!(
+                "Query vector dimension mismatch: expected {}, got {}",
+                self.config.dimensions,
+                query.len()
+            ));
+        }
+
+        Ok(self.search(query, top_k))
+    }
+
     /// Search K nearest neighbors for a query vector
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<VectorSearchResult> {
         if self.nodes.is_empty() || top_k == 0 {

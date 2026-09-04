@@ -261,9 +261,7 @@ fn parse_sort_expr(val: &JsonValue) -> Result<Vec<(String, i8)>, String> {
     let mut sorts = Vec::new();
     for (k, v) in obj {
         let dir = match v {
-            JsonValue::Number(n) => {
-                if n.as_i64().unwrap_or(1) < 0 { -1 } else { 1 }
-            }
+            JsonValue::Number(n) if n.as_i64().unwrap_or(1) < 0 => -1,
             _ => 1,
         };
         sorts.push((k.clone(), dir));

@@ -156,7 +156,7 @@ impl TieredStorageManager {
             "Cold storage directory is not configured".to_string()
         })?;
 
-        let file_name = path.file_name().ok_or_else(|| "Invalid SSTable path")?;
+        let file_name = path.file_name().ok_or("Invalid SSTable path")?;
         let cold_path = cold_dir.join(file_name);
 
         // Move or copy file if source exists

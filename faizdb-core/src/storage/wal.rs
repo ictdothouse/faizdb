@@ -272,6 +272,7 @@ impl Wal {
             let new_file = OpenOptions::new()
                 .create(true)
                 .write(true)
+                .truncate(true)
                 .open(&new_path)
                 .map_err(|e| FaizError::io(&new_path, e))?;
 
@@ -441,14 +442,9 @@ impl Wal {
         }
 
         let mut offset = 8u64;
-        loop {
-            match WalRecord::from_reader(&mut reader, offset) {
-                Ok(record) => {
-                    offset += record.disk_size() as u64;
-                    records.push(record);
-                }
-                Err(_) => break,
-            }
+        while let Ok(record) = WalRecord::from_reader(&mut reader, offset) {
+            offset += record.disk_size() as u64;
+            records.push(record);
         }
 
         Ok(records)

@@ -136,7 +136,7 @@ async fn handle_postgres_connection(
                 let mut p_len_buf = [0u8; 4];
                 stream.read_exact(&mut p_len_buf).await?;
                 let p_len = i32::from_be_bytes(p_len_buf);
-                if p_len < 4 || p_len > 4096 {
+                if !(4..=4096).contains(&p_len) {
                     return Err("Invalid password message length".into());
                 }
 
@@ -201,13 +201,18 @@ async fn handle_postgres_connection(
         }
 
         let msg_len = i32::from_be_bytes(len_buf);
-        let body_len = (msg_len - 4).max(0) as usize;
+        if !(4..=16_777_216).contains(&msg_len) {
+            warn!("Rejected invalid or oversized Postgres message length {msg_len} from {client_addr}");
+            let err = encode_error_response("FATAL", "54000", "Message length exceeds maximum allowed limit (16MB)");
+            let _ = stream.write_all(&err).await;
+            let _ = stream.flush().await;
+            break;
+        }
+        let body_len = (msg_len - 4) as usize;
 
         let mut body = vec![0u8; body_len];
-        if body_len > 0 {
-            if stream.read_exact(&mut body).await.is_err() {
-                break;
-            }
+        if body_len > 0 && stream.read_exact(&mut body).await.is_err() {
+            break;
         }
 
         match msg_type {

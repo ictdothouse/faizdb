@@ -142,7 +142,7 @@ impl GraphStore {
         if dir == Direction::Outgoing || dir == Direction::Both {
             if let Some(list) = self.outgoing.get(vertex_id) {
                 for e in list {
-                    if relation.map_or(true, |r| e.relation == r) {
+                    if relation.is_none_or(|r| e.relation == r) {
                         res.push(e);
                     }
                 }
@@ -152,7 +152,7 @@ impl GraphStore {
         if dir == Direction::Incoming || dir == Direction::Both {
             if let Some(list) = self.incoming.get(vertex_id) {
                 for e in list {
-                    if relation.map_or(true, |r| e.relation == r) {
+                    if relation.is_none_or(|r| e.relation == r) {
                         res.push(e);
                     }
                 }
@@ -191,10 +191,10 @@ impl GraphStore {
             if depth < max_depth {
                 if let Some(edges) = self.outgoing.get(&curr_id) {
                     for edge in edges {
-                        if relation_filter.map_or(true, |r| edge.relation == r) {
-                            if visited.insert(edge.to.clone()) {
-                                queue.push_back((edge.to.clone(), Some(edge.relation.clone()), depth + 1));
-                            }
+                        if relation_filter.is_none_or(|r| edge.relation == r)
+                            && visited.insert(edge.to.clone())
+                        {
+                            queue.push_back((edge.to.clone(), Some(edge.relation.clone()), depth + 1));
                         }
                     }
                 }

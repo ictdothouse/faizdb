@@ -489,7 +489,7 @@ impl DatabaseContext {
 
                 let mut filtered: Vec<Document> = docs_to_scan
                     .into_iter()
-                    .filter(|doc| filter.as_ref().map_or(true, |f| f.matches(doc)))
+                    .filter(|doc| filter.as_ref().is_none_or(|f| f.matches(doc)))
                     .collect();
 
                 // Graph traversal filtering if specified
@@ -521,6 +521,13 @@ impl DatabaseContext {
 
                     if let Some(idx_lock) = resolved_idx_opt {
                         let idx = idx_lock.read();
+                        if v_clause.vector.len() != idx.config.dimensions {
+                            return Err(format!(
+                                "Query vector dimension mismatch: expected {}, got {}",
+                                idx.config.dimensions,
+                                v_clause.vector.len()
+                            ));
+                        }
                         let candidate_k = if filter.is_some() || traverse.is_some() {
                             std::cmp::max(v_clause.top_k * 10, 100).min(idx.len().max(v_clause.top_k))
                         } else {

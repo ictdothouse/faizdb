@@ -11,10 +11,11 @@
 use serde::{Deserialize, Serialize};
 
 /// Distance metric used for vector similarity comparison.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum DistanceMetric {
     /// Cosine distance: 1.0 - (A · B) / (||A|| * ||B||)
     /// Range: [0.0, 2.0], where 0.0 means identical angle.
+    #[default]
     Cosine,
     /// Euclidean (L2) distance: sqrt(sum((A_i - B_i)^2))
     /// Range: [0.0, +inf], where 0.0 means identical.
@@ -24,12 +25,6 @@ pub enum DistanceMetric {
     DotProduct,
     /// Manhattan (L1) distance: sum(|A_i - B_i|)
     Manhattan,
-}
-
-impl Default for DistanceMetric {
-    fn default() -> Self {
-        DistanceMetric::Cosine
-    }
 }
 
 impl DistanceMetric {

@@ -192,7 +192,7 @@ impl Collection {
         CollectionStats {
             document_count: count,
             total_size: total,
-            avg_document_size: if count > 0 { total / count } else { 0 },
+            avg_document_size: total.checked_div(count).unwrap_or(0),
             index_count: self.indexes.read().len(),
         }
     }
@@ -471,7 +471,7 @@ impl Collection {
             idx_entry.value().remove(&doc);
         }
         self.update_indexes_delete(&doc);
-        self.text_index.remove_document(&id);
+        self.text_index.remove_document(id);
 
         // If storage engine is connected, persist tombstone through WAL and MemTable
         if let Some(storage) = &self.storage {
@@ -713,7 +713,7 @@ impl std::fmt::Debug for Collection {
 /// Extract all searchable string tokens from a document
 fn extract_doc_text(doc: &Document) -> String {
     let mut parts = Vec::new();
-    for (_k, v) in &doc.fields {
+    for v in doc.fields.values() {
         match v {
             Value::String(s) => parts.push(s.as_str()),
             Value::Array(arr) => {

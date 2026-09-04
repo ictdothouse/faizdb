@@ -58,6 +58,10 @@ async fn handle_connection(
         }
 
         let header = MsgHeader::decode(&header_buf)?;
+        if header.message_length < HEADER_LEN as i32 || header.message_length > 48 * 1024 * 1024 {
+            tracing::warn!("Rejected invalid or oversized MongoDB message length {} from {client_addr}", header.message_length);
+            break;
+        }
         let body_len = (header.message_length as usize).saturating_sub(HEADER_LEN);
 
         let mut full_msg = Vec::with_capacity(header.message_length as usize);

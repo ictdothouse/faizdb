@@ -191,7 +191,7 @@ pub struct BinaryQuantizer;
 impl BinaryQuantizer {
     /// Quantize float vector into binary representation
     pub fn quantize(vector: &[f32]) -> BinaryQuantizedVector {
-        let num_words = (vector.len() + 63) / 64;
+        let num_words = vector.len().div_ceil(64);
         let mut bits = vec![0u64; num_words];
 
         for (i, &val) in vector.iter().enumerate() {

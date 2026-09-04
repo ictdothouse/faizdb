@@ -116,7 +116,7 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                         }
                     }
                 }
-                let f = if v.as_object().map_or(false, |m| m.is_empty()) {
+                let f = if v.as_object().is_some_and(|m| m.is_empty()) {
                     None
                 } else {
                     Some(parse_json_filter(&v.to_string())?)
@@ -164,8 +164,8 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                 return Err("update requires filter and update documents".to_string());
             }
 
-            let filter = if let Some(f_val) = items.get(0) {
-                if f_val.as_object().map_or(false, |m| m.is_empty()) {
+            let filter = if let Some(f_val) = items.first() {
+                if f_val.as_object().is_some_and(|m| m.is_empty()) {
                     FilterExpr::AlwaysTrue
                 } else {
                     parse_json_filter(&f_val.to_string())?

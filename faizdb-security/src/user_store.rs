@@ -182,7 +182,7 @@ mod tests {
         assert!(store.delete_user("admin").is_err());
 
         // Can delete normal user
-        assert_eq!(store.delete_user("analyst").unwrap(), true);
+        assert!(store.delete_user("analyst").unwrap());
         assert_eq!(store.authenticate("analyst", "new_secret_456"), None);
     }
 }

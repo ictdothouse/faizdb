@@ -219,8 +219,8 @@ impl TableStatistics {
             let null_count = field_nulls.get(&field).copied().unwrap_or(0);
 
             let numeric_vals = field_values.remove(&field).unwrap_or_default();
-            let min_numeric = numeric_vals.iter().cloned().min_by(|a, b| a.partial_cmp(b).unwrap());
-            let max_numeric = numeric_vals.iter().cloned().max_by(|a, b| a.partial_cmp(b).unwrap());
+            let min_numeric = numeric_vals.iter().cloned().min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let max_numeric = numeric_vals.iter().cloned().max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let histogram = if !numeric_vals.is_empty() {
                 ColumnHistogram::build_equi_width(numeric_vals, 10)

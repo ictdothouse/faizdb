@@ -13,8 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SECURITY.md` — responsible disclosure policy
 - `CONTRIBUTING.md` — full contributor guide
 - `.github/workflows/ci.yml` — GitHub Actions CI (fmt, clippy -D warnings, tests, cargo-audit, MSRV)
-- `faizdb-server/tests/` — Rust integration test suite (auth flow, document CRUD, vector search)
+- `faizdb-server/tests/` — Rust integration test suite (auth flow, document CRUD, vector search, audit correctness)
 - `bindings/python/pyproject.toml` — PEP 517/518 modern Python packaging
+- `HnswIndex::try_search()` — non-panicking vector search with explicit dimension validation
+
+### Security & Robustness Hardening
+- **PostgreSQL Wire Protocol**: Refined scalar introspection handling and query routing to ensure seamless execution of standard table queries alongside PostgreSQL administrative commands.
+- **Network Buffer Protection**: Enforced strict upper-bound message limits on PostgreSQL (16MB) and MongoDB (48MB) wire listeners to prevent unbounded heap allocations on network streams.
+- **Vector Search Preflight Validation**: Enforced strict preflight dimension, empty query, and `top_k` checks across REST and query endpoints with graceful HTTP 400 responses.
+- **Query Optimizer Resilience**: Hardened floating-point comparisons in Cost-Based Optimizer (CBO) table statistics to guarantee stability across edge-case numerical distributions.
+- **WAL Segment Durability**: Enforced clean segment truncation during WAL log rotation.
+- **Code Quality & Linter Compliance**: Resolved all workspace Clippy lints to achieve full compliance with `-D warnings` strict build policy.
 
 ### Changed
 - **JWT algorithm upgraded from `HS256` → `EdDSA` (Ed25519)** — asymmetric signatures, immune to timing attacks, 2026 security standard. Supply `FAIZDB_JWT_PRIVATE_KEY` / `FAIZDB_JWT_PUBLIC_KEY` (PEM) in production.

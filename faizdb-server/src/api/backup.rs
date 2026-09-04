@@ -120,7 +120,7 @@ pub async fn backup_restore(
                     let path = entry.path();
                     if path.extension().and_then(|s| s.to_str()) == Some("json") {
                         let name = path.to_string_lossy().to_string();
-                        if latest.as_ref().map_or(true, |l| name > l.1) {
+                        if latest.as_ref().is_none_or(|l| name > l.1) {
                             latest = Some((path, name));
                         }
                     }

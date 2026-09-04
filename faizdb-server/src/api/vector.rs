@@ -198,7 +198,32 @@ pub async fn search_vector(
     };
 
     let top_k = payload.top_k.unwrap_or(10);
+    if top_k == 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err("top_k must be greater than 0")),
+        );
+    }
+
+    if payload.query.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err("Query vector cannot be empty")),
+        );
+    }
+
     let index = index_lock.read();
+    if payload.query.len() != index.config.dimensions {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::err(format!(
+                "Query vector dimension mismatch: expected {}, got {}",
+                index.config.dimensions,
+                payload.query.len()
+            ))),
+        );
+    }
+
     let results = index.search(&payload.query, top_k);
 
     let mapped: Vec<VectorSearchResultItem> = results

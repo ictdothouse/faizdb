@@ -37,6 +37,7 @@ impl FaizDbGrpcService {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn authenticate_request<T>(&self, req: &Request<T>) -> Result<(String, faizdb_security::Role), Status> {
         let no_auth = std::env::var("FAIZDB_NO_AUTH")
             .map(|v| v == "1" || v == "true")

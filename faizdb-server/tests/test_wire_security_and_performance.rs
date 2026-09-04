@@ -97,7 +97,7 @@ async fn test_intensive_mongodb_wire_security_and_rbac() {
         let mut stream = TcpStream::connect(addr).await.unwrap();
         let is_master_resp = send_op_msg(&mut stream, doc! { "isMaster": 1 }).await;
         assert_eq!(is_master_resp.get_f64("ok").unwrap(), 1.0);
-        assert_eq!(is_master_resp.get_bool("ismaster").unwrap(), true);
+        assert!(is_master_resp.get_bool("ismaster").unwrap());
         println!("  ✅ [SEC-M1] Discovery isMaster succeeded without auth (advertised saslSupportedMechs)");
 
         let ping_resp = send_op_msg(&mut stream, doc! { "ping": 1 }).await;
@@ -197,7 +197,7 @@ async fn test_intensive_mongodb_wire_security_and_rbac() {
         }).await;
 
         assert_eq!(sasl_resp.get_f64("ok").unwrap(), 1.0);
-        assert_eq!(sasl_resp.get_bool("done").unwrap(), true);
+        assert!(sasl_resp.get_bool("done").unwrap());
         println!("  🔐 [SEC-M10] SASL PLAIN authentication succeeded (conversationId=1, done=true)");
 
         // Subsequent query succeeds

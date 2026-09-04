@@ -72,34 +72,46 @@ pub fn handle_postgres_query(
 
     // 5. Handle PostgreSQL Introspection & System Information Queries
     if upper.starts_with("SELECT") {
-        // SELECT version()
-        if upper.contains("VERSION()") {
-            return single_value_result(
-                "version",
-                "PostgreSQL 16.0 (FaizDB Universal Safe-Rust Engine v0.1.0)",
-                *in_transaction,
-            );
-        }
+        let has_from = upper.contains(" FROM ");
 
-        // SELECT current_schema(), current_database(), current_user
-        if upper.contains("CURRENT_SCHEMA()") || upper.contains("CURRENT_SCHEMA") {
-            return single_value_result("current_schema", "public", *in_transaction);
-        }
-        if upper.contains("CURRENT_DATABASE()") || upper.contains("CURRENT_DATABASE") {
-            return single_value_result("current_database", "faizdb", *in_transaction);
-        }
-        if upper.contains("CURRENT_USER") || upper.contains("USER") {
-            return single_value_result("current_user", "postgres", *in_transaction);
-        }
+        if !has_from {
+            // SELECT version()
+            if upper.contains("VERSION()") {
+                return single_value_result(
+                    "version",
+                    "PostgreSQL 16.0 (FaizDB Universal Safe-Rust Engine v0.1.0)",
+                    *in_transaction,
+                );
+            }
 
-        // SELECT 1 or SELECT 1 AS one
-        if upper == "SELECT 1" || upper.starts_with("SELECT 1 AS") || upper.starts_with("SELECT 1 ") {
-            let col_name = if upper.contains(" AS ") {
-                trimmed.split_whitespace().last().unwrap_or("?column?")
-            } else {
-                "?column?"
-            };
-            return single_value_result(col_name, "1", *in_transaction);
+            // SELECT current_schema(), current_database(), current_user
+            if upper.contains("CURRENT_SCHEMA") {
+                return single_value_result("current_schema", "public", *in_transaction);
+            }
+            if upper.contains("CURRENT_DATABASE") {
+                return single_value_result("current_database", "faizdb", *in_transaction);
+            }
+            if upper == "SELECT CURRENT_USER"
+                || upper == "SELECT CURRENT_USER()"
+                || upper == "SELECT USER"
+                || upper == "SELECT USER()"
+                || upper.starts_with("SELECT CURRENT_USER AS")
+                || upper.starts_with("SELECT USER AS")
+                || upper.starts_with("SELECT USER()")
+                || upper.starts_with("SELECT CURRENT_USER()")
+            {
+                return single_value_result("current_user", "postgres", *in_transaction);
+            }
+
+            // SELECT 1 or SELECT 1 AS one
+            if upper == "SELECT 1" || upper.starts_with("SELECT 1 AS") || upper.starts_with("SELECT 1 ") {
+                let col_name = if upper.contains(" AS ") {
+                    trimmed.split_whitespace().last().unwrap_or("?column?")
+                } else {
+                    "?column?"
+                };
+                return single_value_result(col_name, "1", *in_transaction);
+            }
         }
 
         // Introspection: Table listing from information_schema or pg_catalog
