@@ -4,14 +4,14 @@
 //! executes them against `faizdb-query` and `faizdb-core`,
 //! and generates the appropriate binary response packets.
 
-use std::sync::Arc;
 use faizdb_core::document::model::Value;
 use faizdb_query::{parse_query, DatabaseContext, QueryResult};
+use std::sync::Arc;
 
 use super::codec::{
-    encode_command_complete, encode_data_row, encode_empty_query_response,
-    encode_error_response, encode_ready_for_query, encode_row_description,
-    PgField, PG_TYPE_BOOL, PG_TYPE_FLOAT8, PG_TYPE_INT8, PG_TYPE_JSONB, PG_TYPE_TEXT,
+    encode_command_complete, encode_data_row, encode_empty_query_response, encode_error_response,
+    encode_ready_for_query, encode_row_description, PgField, PG_TYPE_BOOL, PG_TYPE_FLOAT8,
+    PG_TYPE_INT8, PG_TYPE_JSONB, PG_TYPE_TEXT,
 };
 
 /// Handles a raw SQL string received via PostgreSQL protocol 'Q' message.
@@ -24,7 +24,11 @@ pub fn handle_postgres_query(
     let trimmed = query_str.trim().trim_end_matches(';').trim();
     if trimmed.is_empty() {
         let mut out = encode_empty_query_response();
-        out.extend_from_slice(&encode_ready_for_query(if *in_transaction { b'T' } else { b'I' }));
+        out.extend_from_slice(&encode_ready_for_query(if *in_transaction {
+            b'T'
+        } else {
+            b'I'
+        }));
         return out;
     }
 
@@ -33,14 +37,22 @@ pub fn handle_postgres_query(
     // 1. Handle SET statements (e.g. SET client_encoding = 'UTF8', SET extra_float_digits = 3, SET NAMES 'utf8')
     if upper.starts_with("SET ") || upper == "SET" {
         let mut out = encode_command_complete("SET");
-        out.extend_from_slice(&encode_ready_for_query(if *in_transaction { b'T' } else { b'I' }));
+        out.extend_from_slice(&encode_ready_for_query(if *in_transaction {
+            b'T'
+        } else {
+            b'I'
+        }));
         return out;
     }
 
     // 2. Handle RESET / DISCARD statements
     if upper.starts_with("RESET ") || upper.starts_with("DISCARD ") {
         let mut out = encode_command_complete("RESET");
-        out.extend_from_slice(&encode_ready_for_query(if *in_transaction { b'T' } else { b'I' }));
+        out.extend_from_slice(&encode_ready_for_query(if *in_transaction {
+            b'T'
+        } else {
+            b'I'
+        }));
         return out;
     }
 
@@ -104,7 +116,10 @@ pub fn handle_postgres_query(
             }
 
             // SELECT 1 or SELECT 1 AS one
-            if upper == "SELECT 1" || upper.starts_with("SELECT 1 AS") || upper.starts_with("SELECT 1 ") {
+            if upper == "SELECT 1"
+                || upper.starts_with("SELECT 1 AS")
+                || upper.starts_with("SELECT 1 ")
+            {
                 let col_name = if upper.contains(" AS ") {
                     trimmed.split_whitespace().last().unwrap_or("?column?")
                 } else {
@@ -130,13 +145,22 @@ pub fn handle_postgres_query(
             Ok(result) => format_query_result(result, *in_transaction),
             Err(exec_err) => {
                 let mut out = encode_error_response("ERROR", "XX000", &exec_err);
-                out.extend_from_slice(&encode_ready_for_query(if *in_transaction { b'T' } else { b'I' }));
+                out.extend_from_slice(&encode_ready_for_query(if *in_transaction {
+                    b'T'
+                } else {
+                    b'I'
+                }));
                 out
             }
         },
         Err(parse_err) => {
-            let mut out = encode_error_response("ERROR", "42601", &format!("SQL syntax error: {parse_err}"));
-            out.extend_from_slice(&encode_ready_for_query(if *in_transaction { b'T' } else { b'I' }));
+            let mut out =
+                encode_error_response("ERROR", "42601", &format!("SQL syntax error: {parse_err}"));
+            out.extend_from_slice(&encode_ready_for_query(if *in_transaction {
+                b'T'
+            } else {
+                b'I'
+            }));
             out
         }
     }
@@ -272,7 +296,9 @@ fn format_query_result(result: QueryResult, in_txn: bool) -> Vec<u8> {
                                 Some(Value::DateTime(dt)) => Some(dt.to_rfc3339()),
                                 Some(Value::Uuid(u)) => Some(u.to_string()),
                                 Some(Value::Vector(v)) => Some(format!("{v:?}")),
-                                Some(Value::Binary(b)) => Some(format!("<binary {} bytes>", b.len())),
+                                Some(Value::Binary(b)) => {
+                                    Some(format!("<binary {} bytes>", b.len()))
+                                }
                             }
                         };
                         row_vals.push(val_str);
@@ -313,7 +339,11 @@ fn format_query_result(result: QueryResult, in_txn: bool) -> Vec<u8> {
             let lines = vec![
                 format!("Plan: {}", plan.plan_type),
                 format!("Collection: {}", plan.collection),
-                format!("Index Used: {}", plan.index_used.unwrap_or_else(|| "None (Full Scan)".to_string())),
+                format!(
+                    "Index Used: {}",
+                    plan.index_used
+                        .unwrap_or_else(|| "None (Full Scan)".to_string())
+                ),
                 format!("Documents Examined: {}", plan.documents_examined),
                 format!("Documents Returned: {}", plan.documents_returned),
                 format!("Execution Time: {} µs", plan.execution_time_us),
@@ -329,5 +359,18 @@ fn format_query_result(result: QueryResult, in_txn: bool) -> Vec<u8> {
     }
 
     out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Executes a query for PostgreSQL Extended Query Protocol ('E' message) without trailing ReadyForQuery ('Z')
+pub fn handle_postgres_execute_query(
+    db: &Arc<DatabaseContext>,
+    query_str: &str,
+    in_transaction: &mut bool,
+) -> Vec<u8> {
+    let mut out = handle_postgres_query(db, query_str, in_transaction);
+    if out.len() >= 6 && out[out.len() - 6] == b'Z' {
+        out.truncate(out.len() - 6);
+    }
     out
 }

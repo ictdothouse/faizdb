@@ -64,22 +64,40 @@ pub async fn trace_middleware(
     let uri = req.uri().clone();
 
     // Track active connections
-    state.metrics.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    state
+        .metrics
+        .active_connections
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     let mut res = next.run(req).await;
 
-    state.metrics.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    state
+        .metrics
+        .active_connections
+        .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     let elapsed = start.elapsed();
     state.metrics.record_query_latency(elapsed);
 
     if method == Method::GET {
-        state.metrics.queries_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        state
+            .metrics
+            .queries_total
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     } else if method == Method::POST {
-        state.metrics.inserts_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        state
+            .metrics
+            .inserts_total
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     } else if method == Method::DELETE {
-        state.metrics.deletes_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        state
+            .metrics
+            .deletes_total
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     } else if method == Method::PUT || method == Method::PATCH {
-        state.metrics.updates_total.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        state
+            .metrics
+            .updates_total
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     // Set correlation headers on response
@@ -130,14 +148,26 @@ pub async fn cors_middleware(req: Request<Body>, next: Next) -> Response {
     let headers = response.headers_mut();
     if allowed_origins.contains(&"*") || allowed_origins.contains(&origin.as_str()) {
         if origin.is_empty() {
-            headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+            headers.insert(
+                header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                HeaderValue::from_static("*"),
+            );
         } else if let Ok(val) = HeaderValue::from_str(&origin) {
             headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, val);
         }
     }
-    headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS, PATCH"));
-    headers.insert(header::ACCESS_CONTROL_ALLOW_HEADERS, HeaderValue::from_static("Authorization, Content-Type, Accept"));
-    headers.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("86400"));
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS, PATCH"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Authorization, Content-Type, Accept"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_MAX_AGE,
+        HeaderValue::from_static("86400"),
+    );
     response
 }
 
@@ -151,15 +181,24 @@ pub async fn client_auth_middleware(
     let raw_token = extract_bearer_token(&req).or_else(|| extract_query_token(&req));
     let token = match raw_token {
         Some(t) => t,
-        None => { warn!("[Auth] Missing token — 401"); return Err(StatusCode::UNAUTHORIZED); }
+        None => {
+            warn!("[Auth] Missing token — 401");
+            return Err(StatusCode::UNAUTHORIZED);
+        }
     };
     match state.auth.verify_token(&token) {
         Ok(claims) => {
-            req.extensions_mut().insert(AuthenticatedUser { username: claims.sub.clone(), role: claims.role });
+            req.extensions_mut().insert(AuthenticatedUser {
+                username: claims.sub.clone(),
+                role: claims.role,
+            });
             info!("[Auth] Authenticated: {} ({:?})", claims.sub, claims.role);
             Ok(next.run(req).await)
         }
-        Err(e) => { warn!("[Auth] JWT validation failed: {}", e); Err(StatusCode::UNAUTHORIZED) }
+        Err(e) => {
+            warn!("[Auth] JWT validation failed: {}", e);
+            Err(StatusCode::UNAUTHORIZED)
+        }
     }
 }
 
@@ -168,7 +207,10 @@ pub async fn rbac_write_middleware(req: Request<Body>, next: Next) -> Result<Res
         match user.role {
             Role::Admin | Role::ReadWrite => return Ok(next.run(req).await),
             Role::ReadOnly => {
-                warn!("[RBAC] ReadOnly user '{}' attempted write — 403", user.username);
+                warn!(
+                    "[RBAC] ReadOnly user '{}' attempted write — 403",
+                    user.username
+                );
                 return Err(StatusCode::FORBIDDEN);
             }
         }
@@ -178,18 +220,28 @@ pub async fn rbac_write_middleware(req: Request<Body>, next: Next) -> Result<Res
 
 pub async fn rbac_admin_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     if let Some(user) = req.extensions().get::<AuthenticatedUser>() {
-        if user.role == Role::Admin { return Ok(next.run(req).await); }
-        warn!("[RBAC] Non-admin '{}' attempted admin op — 403", user.username);
+        if user.role == Role::Admin {
+            return Ok(next.run(req).await);
+        }
+        warn!(
+            "[RBAC] Non-admin '{}' attempted admin op — 403",
+            user.username
+        );
         return Err(StatusCode::FORBIDDEN);
     }
     Err(StatusCode::UNAUTHORIZED)
 }
 
-pub async fn cluster_auth_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
-    let expected = std::env::var("FAIZDB_CLUSTER_TOKEN").unwrap_or_else(|_| "faizdb-cluster-secret".to_string());
+pub async fn cluster_auth_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let expected = std::env::var("FAIZDB_CLUSTER_TOKEN")
+        .unwrap_or_else(|_| "faizdb-cluster-secret".to_string());
     if let Some(auth_value) = req.headers().get(header::AUTHORIZATION) {
         if let Ok(auth_str) = auth_value.to_str() {
-            if auth_str.starts_with("Bearer ") && auth_str.trim_start_matches("Bearer ") == expected {
+            if auth_str.starts_with("Bearer ") && auth_str.trim_start_matches("Bearer ") == expected
+            {
                 return Ok(next.run(req).await);
             }
         }
@@ -198,8 +250,10 @@ pub async fn cluster_auth_middleware(req: Request<Body>, next: Next) -> Result<R
 }
 
 pub fn extract_bearer_token(req: &Request<Body>) -> Option<String> {
-    req.headers().get(header::AUTHORIZATION)?
-        .to_str().ok()?
+    req.headers()
+        .get(header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
         .strip_prefix("Bearer ")
         .map(|t| t.trim().to_string())
 }
@@ -217,17 +271,32 @@ pub fn extract_query_token(req: &Request<Body>) -> Option<String> {
 // ── RATE LIMITER & BLOCKLIST ────────────────────────────────────────────────
 
 static BLOCKLIST: std::sync::OnceLock<DashMap<String, u32>> = std::sync::OnceLock::new();
-static RATE_LIMITER: std::sync::OnceLock<DashMap<String, (u64, Instant)>> = std::sync::OnceLock::new();
+static RATE_LIMITER: std::sync::OnceLock<DashMap<String, (u64, Instant)>> =
+    std::sync::OnceLock::new();
 
-pub fn get_blocklist() -> &'static DashMap<String, u32> { BLOCKLIST.get_or_init(DashMap::new) }
-pub fn get_rate_limiter() -> &'static DashMap<String, (u64, Instant)> { RATE_LIMITER.get_or_init(DashMap::new) }
+pub fn get_blocklist() -> &'static DashMap<String, u32> {
+    BLOCKLIST.get_or_init(DashMap::new)
+}
+pub fn get_rate_limiter() -> &'static DashMap<String, (u64, Instant)> {
+    RATE_LIMITER.get_or_init(DashMap::new)
+}
 
 fn is_internal_ip(ip: &str) -> bool {
-    if ip == "unknown" { return false; }
-    if ip.starts_with("127.") || ip == "::1" { return true; }
-    if ip.starts_with("10.") || ip.starts_with("192.168.") || ip.starts_with("100.64.") { return true; }
+    if ip == "unknown" {
+        return false;
+    }
+    if ip.starts_with("127.") || ip == "::1" {
+        return true;
+    }
+    if ip.starts_with("10.") || ip.starts_with("192.168.") || ip.starts_with("100.64.") {
+        return true;
+    }
     if let Some(second_octet) = ip.strip_prefix("172.").and_then(|s| s.split('.').next()) {
-        if let Ok(n) = second_octet.parse::<u8>() { if (16..=31).contains(&n) { return true; } }
+        if let Ok(n) = second_octet.parse::<u8>() {
+            if (16..=31).contains(&n) {
+                return true;
+            }
+        }
     }
     false
 }
@@ -235,16 +304,22 @@ fn is_internal_ip(ip: &str) -> bool {
 pub async fn rate_limit_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
     let mut ip = "unknown".to_string();
     if let Some(forwarded) = req.headers().get("x-forwarded-for") {
-        if let Ok(s) = forwarded.to_str() { ip = s.split(',').next().unwrap_or("unknown").trim().to_string(); }
+        if let Ok(s) = forwarded.to_str() {
+            ip = s.split(',').next().unwrap_or("unknown").trim().to_string();
+        }
     }
     if ip == "unknown" {
-        if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
+        if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>()
+        {
             ip = addr.ip().to_string();
         }
     }
-    if is_internal_ip(&ip) { return Ok(next.run(req).await); }
+    if is_internal_ip(&ip) {
+        return Ok(next.run(req).await);
+    }
 
-    let expected_token = std::env::var("FAIZDB_API_KEY").unwrap_or_else(|_| "faizdb-secret-key".to_string());
+    let expected_token =
+        std::env::var("FAIZDB_API_KEY").unwrap_or_else(|_| "faizdb-secret-key".to_string());
     if let Some(auth_val) = req.headers().get(header::AUTHORIZATION) {
         if let Ok(auth_str) = auth_val.to_str() {
             if auth_str.trim_start_matches("Bearer ").trim() == expected_token {
@@ -263,11 +338,18 @@ pub async fn rate_limit_middleware(req: Request<Body>, next: Next) -> Result<Res
         let mut entry = limiter.entry(ip.clone()).or_insert((0, Instant::now()));
         let now = Instant::now();
         let window = Duration::from_secs(10);
-        let limit: u64 = std::env::var("FAIZDB_RATE_LIMIT").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
-        let strike_threshold: u32 = std::env::var("FAIZDB_BAN_STRIKES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+        let limit: u64 = std::env::var("FAIZDB_RATE_LIMIT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(100);
+        let strike_threshold: u32 = std::env::var("FAIZDB_BAN_STRIKES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(3);
 
         if now.duration_since(entry.1) > window {
-            entry.0 = 1; entry.1 = now;
+            entry.0 = 1;
+            entry.1 = now;
         } else {
             entry.0 += 1;
             if entry.0 > limit {
@@ -276,10 +358,16 @@ pub async fn rate_limit_middleware(req: Request<Body>, next: Next) -> Result<Res
                 let current_strikes = *strikes;
                 drop(strikes);
                 if current_strikes >= strike_threshold {
-                    warn!("[Blocklist] IP {} permanently banned after {} strikes", ip, current_strikes);
+                    warn!(
+                        "[Blocklist] IP {} permanently banned after {} strikes",
+                        ip, current_strikes
+                    );
                     return Err(StatusCode::FORBIDDEN);
                 }
-                warn!("[RateLimit] IP {} strike {}/{} (429)", ip, current_strikes, strike_threshold);
+                warn!(
+                    "[RateLimit] IP {} strike {}/{} (429)",
+                    ip, current_strikes, strike_threshold
+                );
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
         }
@@ -289,14 +377,23 @@ pub async fn rate_limit_middleware(req: Request<Body>, next: Next) -> Result<Res
 
 // ── PAYLOAD SIZE ────────────────────────────────────────────────────────────
 
-pub async fn payload_size_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
-    let max_mb: u64 = std::env::var("FAIZDB_MAX_PAYLOAD_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
+pub async fn payload_size_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let max_mb: u64 = std::env::var("FAIZDB_MAX_PAYLOAD_MB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
     let max_bytes = max_mb * 1024 * 1024;
     if let Some(content_length) = req.headers().get(header::CONTENT_LENGTH) {
         if let Ok(length_str) = content_length.to_str() {
             if let Ok(length) = length_str.parse::<u64>() {
                 if length > max_bytes {
-                    warn!("[PayloadLimit] Request {} bytes exceeds {}MB", length, max_mb);
+                    warn!(
+                        "[PayloadLimit] Request {} bytes exceeds {}MB",
+                        length, max_mb
+                    );
                     return Err(StatusCode::PAYLOAD_TOO_LARGE);
                 }
             }
@@ -329,35 +426,66 @@ pub fn audit_log(event: &str, ip: &str, path: &str, status: u16, request_id: Opt
     });
     let line = format!("{}\n", log_entry);
     tokio::spawn(async move {
-        let log_path = std::env::var("FAIZDB_AUDIT_LOG").unwrap_or_else(|_| "./logs/audit.jsonl".to_string());
-        let log_dir = std::path::Path::new(&log_path).parent().unwrap_or(std::path::Path::new("."));
+        let log_path =
+            std::env::var("FAIZDB_AUDIT_LOG").unwrap_or_else(|_| "./logs/audit.jsonl".to_string());
+        let log_dir = std::path::Path::new(&log_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
         let _ = tokio::fs::create_dir_all(log_dir).await;
         use tokio::io::AsyncWriteExt;
-        if let Ok(mut file) = tokio::fs::OpenOptions::new().create(true).append(true).open(&log_path).await {
+        if let Ok(mut file) = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .await
+        {
             let _ = file.write_all(line.as_bytes()).await;
         }
     });
 }
 
 pub async fn audit_middleware(req: Request<Body>, next: Next) -> Response {
-    let ip = req.headers().get("x-forwarded-for")
+    let ip = req
+        .headers()
+        .get("x-forwarded-for")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or("-").trim().to_string())
-        .or_else(|| req.extensions().get::<ConnectInfo<std::net::SocketAddr>>().map(|ci| ci.0.ip().to_string()))
+        .or_else(|| {
+            req.extensions()
+                .get::<ConnectInfo<std::net::SocketAddr>>()
+                .map(|ci| ci.0.ip().to_string())
+        })
         .unwrap_or_else(|| "-".to_string());
 
     let path = req.uri().path().to_string();
-    let request_id = req.extensions().get::<String>().cloned().unwrap_or_else(|| "-".to_string());
+    let request_id = req
+        .extensions()
+        .get::<String>()
+        .cloned()
+        .unwrap_or_else(|| "-".to_string());
     let method = req.method().clone();
     let response = next.run(req).await;
     let status = response.status().as_u16();
 
-    let is_write = matches!(method, Method::POST | Method::DELETE | Method::PUT | Method::PATCH);
+    let is_write = matches!(
+        method,
+        Method::POST | Method::DELETE | Method::PUT | Method::PATCH
+    );
     let is_error = status >= 400;
     if is_write || is_error {
-        let event = if status == 401 { "auth_failure" } else if status == 403 { "access_denied" }
-            else if status == 429 { "rate_limited" } else if status == 413 { "payload_too_large" }
-            else if is_write { "write_operation" } else { "error" };
+        let event = if status == 401 {
+            "auth_failure"
+        } else if status == 403 {
+            "access_denied"
+        } else if status == 429 {
+            "rate_limited"
+        } else if status == 413 {
+            "payload_too_large"
+        } else if is_write {
+            "write_operation"
+        } else {
+            "error"
+        };
         audit_log(event, &ip, &path, status, Some(&request_id));
     }
     response

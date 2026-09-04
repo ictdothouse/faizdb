@@ -1,11 +1,11 @@
 //! Time-To-Live (TTL) & High-Speed Cache Expiration Manager.
 
-use std::collections::{BTreeMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Current timestamp in epoch milliseconds
 pub fn current_time_ms() -> u64 {
@@ -62,7 +62,9 @@ impl TtlManager {
 
         self.doc_to_expiry.insert(doc_id.to_string(), expire_at_ms);
         let mut exp = self.expirations.write();
-        exp.entry(expire_at_ms).or_default().insert(doc_id.to_string());
+        exp.entry(expire_at_ms)
+            .or_default()
+            .insert(doc_id.to_string());
     }
 
     /// Remove a document from TTL tracking (e.g. upon manual deletion)
@@ -110,7 +112,8 @@ impl TtlManager {
         }
 
         if !expired_ids.is_empty() {
-            self.total_purged.fetch_add(expired_ids.len() as u64, Ordering::Relaxed);
+            self.total_purged
+                .fetch_add(expired_ids.len() as u64, Ordering::Relaxed);
         }
 
         expired_ids

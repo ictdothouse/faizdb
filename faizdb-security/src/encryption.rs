@@ -1,6 +1,8 @@
 //! Zero-Trust Encryption Engine (AES-256-GCM) for data-at-rest and field-level security.
 
-use ring::aead::{Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, AES_256_GCM, NONCE_LEN};
+use ring::aead::{
+    Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, AES_256_GCM, NONCE_LEN,
+};
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 
@@ -48,14 +50,17 @@ impl Cipher {
     pub fn generate_key() -> Result<[u8; 32], String> {
         let rng = SystemRandom::new();
         let mut key = [0u8; 32];
-        rng.fill(&mut key).map_err(|_| "Failed to generate random key".to_string())?;
+        rng.fill(&mut key)
+            .map_err(|_| "Failed to generate random key".to_string())?;
         Ok(key)
     }
 
     /// Encrypt plaintext bytes using AES-256-GCM with a fresh unique nonce
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<EncryptedData, String> {
         let mut nonce_bytes = [0u8; NONCE_LEN];
-        self.rng.fill(&mut nonce_bytes).map_err(|_| "Failed to generate nonce")?;
+        self.rng
+            .fill(&mut nonce_bytes)
+            .map_err(|_| "Failed to generate nonce")?;
 
         let unbound_key = UnboundKey::new(&AES_256_GCM, &self.key_bytes)
             .map_err(|_| "Failed to create AEAD key")?;

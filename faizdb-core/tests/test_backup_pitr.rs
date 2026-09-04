@@ -1,13 +1,13 @@
 //! Incremental Backup, Point-In-Time Recovery (PITR) & AES-256-GCM Integration Tests.
 
-use std::collections::HashMap;
 use chrono::Utc;
+use std::collections::HashMap;
 use tempfile::tempdir;
 
 use faizdb_core::backup::{
-    apply_incremental_snapshot, build_incremental_snapshot, build_snapshot, build_snapshot_with_lsn,
-    decrypt_snapshot, encrypt_snapshot, load_and_verify_snapshot, save_snapshot_file,
-    BackupType, PitrEngine, WalReplayRecord,
+    apply_incremental_snapshot, build_incremental_snapshot, build_snapshot,
+    build_snapshot_with_lsn, decrypt_snapshot, encrypt_snapshot, load_and_verify_snapshot,
+    save_snapshot_file, BackupType, PitrEngine, WalReplayRecord,
 };
 use faizdb_core::document::model::Document;
 
@@ -107,7 +107,10 @@ fn test_pitr_disaster_recovery_replay() {
     let recovered = PitrEngine::replay_to_timestamp(&base, &wal, t2).unwrap();
     assert_eq!(recovered.manifest.total_documents, 1);
     let accounts = recovered.collections_data.get("accounts").unwrap();
-    let recovered_acc = accounts.iter().find(|d| d.get("_id").unwrap() == &doc_id).unwrap();
+    let recovered_acc = accounts
+        .iter()
+        .find(|d| d.get("_id").unwrap() == &doc_id)
+        .unwrap();
     assert_eq!(recovered_acc.get("balance").unwrap(), 2000);
 }
 
@@ -129,5 +132,8 @@ fn test_aes_gcm_passphrase_derivation_security() {
     if let Some(byte) = tampered.ciphertext.get_mut(10) {
         *byte ^= 0xFF; // Flip bits
     }
-    assert!(decrypt_snapshot(&tampered, key).is_err(), "Tampered ciphertext must fail AEAD decryption");
+    assert!(
+        decrypt_snapshot(&tampered, key).is_err(),
+        "Tampered ciphertext must fail AEAD decryption"
+    );
 }

@@ -86,7 +86,9 @@ impl<T: Clone + PartialEq> LwwRegister<T> {
 
     /// Update value if new timestamp is higher or region_id is lexicographically greater
     pub fn set(&mut self, value: T, timestamp: u64, region_id: &str) -> bool {
-        if timestamp > self.timestamp || (timestamp == self.timestamp && region_id > self.region_id.as_str()) {
+        if timestamp > self.timestamp
+            || (timestamp == self.timestamp && region_id > self.region_id.as_str())
+        {
             self.value = value;
             self.timestamp = timestamp;
             self.region_id = region_id.to_string();
@@ -118,7 +120,7 @@ impl<T: Clone + PartialEq> LwwRegister<T> {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct OrSet<T: Ord + Clone> {
     pub adds: BTreeMap<T, BTreeSet<(u64, String)>>, // item -> set of (timestamp, tag)
-    pub removes: BTreeMap<T, u64>,                   // item -> highest remove timestamp
+    pub removes: BTreeMap<T, u64>,                  // item -> highest remove timestamp
 }
 
 impl<T: Ord + Clone> OrSet<T> {
@@ -266,7 +268,13 @@ impl CrdtDocument {
         Self::default()
     }
 
-    pub fn set_field(&mut self, field: &str, value: serde_json::Value, timestamp: u64, region: &str) {
+    pub fn set_field(
+        &mut self,
+        field: &str,
+        value: serde_json::Value,
+        timestamp: u64,
+        region: &str,
+    ) {
         if let Some(reg) = self.fields.get_mut(field) {
             reg.set(value, timestamp, region);
         } else {
@@ -351,10 +359,20 @@ mod tests {
     fn test_crdt_document_field_level_merge() {
         let mut doc_sg = CrdtDocument::new();
         doc_sg.set_field("name", serde_json::json!("Faiz SG"), 100, "ap-southeast-1");
-        doc_sg.set_field("city", serde_json::json!("Kuala Lumpur"), 100, "ap-southeast-1");
+        doc_sg.set_field(
+            "city",
+            serde_json::json!("Kuala Lumpur"),
+            100,
+            "ap-southeast-1",
+        );
 
         let mut doc_us = CrdtDocument::new();
-        doc_us.set_field("title", serde_json::json!("Chief Architect"), 110, "us-east-1");
+        doc_us.set_field(
+            "title",
+            serde_json::json!("Chief Architect"),
+            110,
+            "us-east-1",
+        );
         doc_us.set_field("name", serde_json::json!("Ahmad Faiz"), 120, "us-east-1");
 
         doc_sg.merge(&doc_us);
@@ -362,6 +380,9 @@ mod tests {
 
         assert_eq!(map.get("name").unwrap(), &serde_json::json!("Ahmad Faiz"));
         assert_eq!(map.get("city").unwrap(), &serde_json::json!("Kuala Lumpur"));
-        assert_eq!(map.get("title").unwrap(), &serde_json::json!("Chief Architect"));
+        assert_eq!(
+            map.get("title").unwrap(),
+            &serde_json::json!("Chief Architect")
+        );
     }
 }

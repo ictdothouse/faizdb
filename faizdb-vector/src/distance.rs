@@ -53,27 +53,45 @@ impl DistanceMetric {
 /// Calculate cosine distance: 1.0 - cosine_similarity (SIMD 8-wide unrolled)
 #[inline]
 pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut dot0 = 0.0f32; let mut dot1 = 0.0f32;
-    let mut dot2 = 0.0f32; let mut dot3 = 0.0f32;
-    let mut norm_a0 = 0.0f32; let mut norm_a1 = 0.0f32;
-    let mut norm_a2 = 0.0f32; let mut norm_a3 = 0.0f32;
-    let mut norm_b0 = 0.0f32; let mut norm_b1 = 0.0f32;
-    let mut norm_b2 = 0.0f32; let mut norm_b3 = 0.0f32;
+    let mut dot0 = 0.0f32;
+    let mut dot1 = 0.0f32;
+    let mut dot2 = 0.0f32;
+    let mut dot3 = 0.0f32;
+    let mut norm_a0 = 0.0f32;
+    let mut norm_a1 = 0.0f32;
+    let mut norm_a2 = 0.0f32;
+    let mut norm_a3 = 0.0f32;
+    let mut norm_b0 = 0.0f32;
+    let mut norm_b1 = 0.0f32;
+    let mut norm_b2 = 0.0f32;
+    let mut norm_b3 = 0.0f32;
 
     let len = a.len();
     let chunks = len / 4;
 
     for i in 0..chunks {
         let idx = i * 4;
-        let x0 = a[idx]; let y0 = b[idx];
-        let x1 = a[idx + 1]; let y1 = b[idx + 1];
-        let x2 = a[idx + 2]; let y2 = b[idx + 2];
-        let x3 = a[idx + 3]; let y3 = b[idx + 3];
+        let x0 = a[idx];
+        let y0 = b[idx];
+        let x1 = a[idx + 1];
+        let y1 = b[idx + 1];
+        let x2 = a[idx + 2];
+        let y2 = b[idx + 2];
+        let x3 = a[idx + 3];
+        let y3 = b[idx + 3];
 
-        dot0 += x0 * y0; norm_a0 += x0 * x0; norm_b0 += y0 * y0;
-        dot1 += x1 * y1; norm_a1 += x1 * x1; norm_b1 += y1 * y1;
-        dot2 += x2 * y2; norm_a2 += x2 * x2; norm_b2 += y2 * y2;
-        dot3 += x3 * y3; norm_a3 += x3 * x3; norm_b3 += y3 * y3;
+        dot0 += x0 * y0;
+        norm_a0 += x0 * x0;
+        norm_b0 += y0 * y0;
+        dot1 += x1 * y1;
+        norm_a1 += x1 * x1;
+        norm_b1 += y1 * y1;
+        dot2 += x2 * y2;
+        norm_a2 += x2 * x2;
+        norm_b2 += y2 * y2;
+        dot3 += x3 * y3;
+        norm_a3 += x3 * x3;
+        norm_b3 += y3 * y3;
     }
 
     let mut dot = (dot0 + dot1) + (dot2 + dot3);
@@ -107,8 +125,10 @@ pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
 /// Calculate Squared Euclidean distance (SIMD 8-wide unrolled)
 #[inline]
 pub fn squared_euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut s0 = 0.0f32; let mut s1 = 0.0f32;
-    let mut s2 = 0.0f32; let mut s3 = 0.0f32;
+    let mut s0 = 0.0f32;
+    let mut s1 = 0.0f32;
+    let mut s2 = 0.0f32;
+    let mut s3 = 0.0f32;
 
     let len = a.len();
     let chunks = len / 4;
@@ -137,8 +157,10 @@ pub fn squared_euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
 /// Calculate Dot Product Distance: -(A · B) (SIMD 8-wide unrolled)
 #[inline]
 pub fn dot_product_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut d0 = 0.0f32; let mut d1 = 0.0f32;
-    let mut d2 = 0.0f32; let mut d3 = 0.0f32;
+    let mut d0 = 0.0f32;
+    let mut d1 = 0.0f32;
+    let mut d2 = 0.0f32;
+    let mut d3 = 0.0f32;
 
     let len = a.len();
     let chunks = len / 4;
@@ -161,7 +183,8 @@ pub fn dot_product_distance(a: &[f32], b: &[f32]) -> f32 {
 /// Calculate Manhattan (L1) distance
 #[inline]
 pub fn manhattan_distance(a: &[f32], b: &[f32]) -> f32 {
-    let mut s0 = 0.0f32; let mut s1 = 0.0f32;
+    let mut s0 = 0.0f32;
+    let mut s1 = 0.0f32;
     let len = a.len();
     let chunks = len / 2;
 
@@ -208,7 +231,10 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![1.0, 2.0, 3.0];
         let dist = cosine_distance(&a, &b);
-        assert!(dist < 1e-6, "Expected ~0.0 distance for identical vectors, got {dist}");
+        assert!(
+            dist < 1e-6,
+            "Expected ~0.0 distance for identical vectors, got {dist}"
+        );
     }
 
     #[test]
@@ -216,7 +242,10 @@ mod tests {
         let a = vec![1.0, 0.0];
         let b = vec![0.0, 1.0];
         let dist = cosine_distance(&a, &b);
-        assert!((dist - 1.0).abs() < 1e-6, "Expected 1.0 distance for orthogonal vectors");
+        assert!(
+            (dist - 1.0).abs() < 1e-6,
+            "Expected 1.0 distance for orthogonal vectors"
+        );
     }
 
     #[test]
@@ -224,7 +253,10 @@ mod tests {
         let a = vec![1.0, 0.0];
         let b = vec![-1.0, 0.0];
         let dist = cosine_distance(&a, &b);
-        assert!((dist - 2.0).abs() < 1e-6, "Expected 2.0 distance for opposite vectors");
+        assert!(
+            (dist - 2.0).abs() < 1e-6,
+            "Expected 2.0 distance for opposite vectors"
+        );
     }
 
     #[test]

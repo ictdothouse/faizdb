@@ -12,9 +12,9 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use faizdb_core::document::model::{Document, Value};
+use faizdb_graph::{Edge, GraphStore, Vertex};
 use faizdb_query::{parse_query, DatabaseContext, QueryResult};
 use faizdb_vector::{DistanceMetric, HnswConfig, HnswIndex};
-use faizdb_graph::{Edge, GraphStore, Vertex};
 
 /// FaizDB — The AI-Native NoSQL Database Engine
 #[derive(Parser)]
@@ -89,6 +89,22 @@ enum Commands {
         #[arg(short, long, default_value = "./backups/faizdb_snapshot.json")]
         input: PathBuf,
     },
+
+    /// Export database collections to open formats (JSONL or SQL)
+    Dump {
+        /// Target collection name (if omitted, dumps all collections)
+        #[arg(short, long)]
+        collection: Option<String>,
+        /// Export format: jsonl or sql
+        #[arg(short, long, default_value = "jsonl")]
+        format: String,
+        /// Destination output file path (if omitted, prints to stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Path to database directory
+        #[arg(short, long, default_value = "./faizdb_data")]
+        data_dir: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -105,26 +121,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Some(Commands::Shell { data_dir }) => run_shell(&data_dir),
-        Some(Commands::Serve { wire_port, pg_port, grpc_port, http_port, host }) => {
+        Some(Commands::Serve {
+            wire_port,
+            pg_port,
+            grpc_port,
+            http_port,
+            host,
+        }) => {
             let wire_addr = format!("{host}:{wire_port}");
             let pg_addr = format!("{host}:{pg_port}");
             let grpc_addr = format!("{host}:{grpc_port}");
             let http_addr = format!("{host}:{http_port}");
             println!("╔══════════════════════════════════════════════════════════════════╗");
-            println!("║  🔥 FaizDB Server v{} Running 4-Way Multi-Protocol Gateway ║", faizdb_core::VERSION);
+            println!(
+                "║  🔥 FaizDB Server v{} Running 4-Way Multi-Protocol Gateway ║",
+                faizdb_core::VERSION
+            );
             println!("╠══════════════════════════════════════════════════════════════════╣");
-            println!("║  🍃 MongoDB Wire Protocol : mongodb://{:<26} ║", wire_addr);
-            println!("║  🐘 PostgreSQL Wire Proto : postgresql://{:<23} ║", pg_addr);
+            println!(
+                "║  🍃 MongoDB Wire Protocol : mongodb://{:<26} ║",
+                wire_addr
+            );
+            println!(
+                "║  🐘 PostgreSQL Wire Proto : postgresql://{:<23} ║",
+                pg_addr
+            );
             println!("║  ⚡ gRPC / Protobuf       : grpc://{:<29} ║", grpc_addr);
             println!("║  🌐 HTTP / REST API       : http://{:<29} ║", http_addr);
             println!("║                                                                  ║");
             println!("║  👉 Connection Strings:                                          ║");
-            println!("║     Mongo : mongodb://127.0.0.1:{}                          ║", wire_port);
-            println!("║     PSQL  : psql -h 127.0.0.1 -p {} -U postgres -d faizdb    ║", pg_port);
-            println!("║     gRPC  : localhost:{}                                     ║", grpc_port);
-            println!("║     REST  : http://127.0.0.1:{}                              ║", http_port);
+            println!(
+                "║     Mongo : mongodb://127.0.0.1:{}                          ║",
+                wire_port
+            );
+            println!(
+                "║     PSQL  : psql -h 127.0.0.1 -p {} -U postgres -d faizdb    ║",
+                pg_port
+            );
+            println!(
+                "║     gRPC  : localhost:{}                                     ║",
+                grpc_port
+            );
+            println!(
+                "║     REST  : http://127.0.0.1:{}                              ║",
+                http_port
+            );
             println!("╚══════════════════════════════════════════════════════════════════╝");
-            faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &grpc_addr, &http_addr).await?;
+            faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &grpc_addr, &http_addr)
+                .await?;
         }
         Some(Commands::Info) => print_info(),
         Some(Commands::Benchmark { count, durable }) => run_benchmark(count, durable),
@@ -132,6 +176,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::GraphDemo) => run_graph_demo(),
         Some(Commands::Backup { output }) => run_backup_cli(&output),
         Some(Commands::Restore { input }) => run_restore_cli(&input),
+        Some(Commands::Dump {
+            collection,
+            format,
+            output,
+            data_dir,
+        }) => {
+            run_dump_cli(collection, &format, output, &data_dir);
+        }
         None => {
             print_info();
             println!();
@@ -143,7 +195,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn print_info() {
-    println!(r#"
+    println!(
+        r#"
 ╔══════════════════════════════════════════════════════════════════╗
 ║                                                                  ║
 ║   🔥 FaizDB v{}                                            ║
@@ -162,7 +215,9 @@ fn print_info() {
 ║   • Embedded (Single Binary) & Server Modes                      ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
-"#, faizdb_core::VERSION);
+"#,
+        faizdb_core::VERSION
+    );
 }
 
 fn run_shell(_data_dir: &PathBuf) {
@@ -179,14 +234,14 @@ fn run_shell(_data_dir: &PathBuf) {
             .field("name", "Ahmad Faiz")
             .field("role", "DB Architect")
             .field("age", 30)
-            .field("city", "Kuala Lumpur")
+            .field("city", "Kuala Lumpur"),
     );
     let _ = users.insert(
         Document::new()
             .field("name", "Linus Torvalds")
             .field("role", "Linux Creator")
             .field("age", 55)
-            .field("city", "Portland")
+            .field("city", "Portland"),
     );
 
     let stdin = io::stdin();
@@ -240,7 +295,11 @@ fn run_shell(_data_dir: &PathBuf) {
                             println!("📊 Query Execution Plan:");
                             println!("   Plan Type         : {}", plan.plan_type);
                             println!("   Collection        : {}", plan.collection);
-                            println!("   Index Used        : {}", plan.index_used.unwrap_or_else(|| "None (Sequential Scan)".into()));
+                            println!(
+                                "   Index Used        : {}",
+                                plan.index_used
+                                    .unwrap_or_else(|| "None (Sequential Scan)".into())
+                            );
                             println!("   Execution Latency : {} µs", plan.execution_time_us);
                             println!("   Documents Examined: {}", plan.documents_examined);
                             println!("   Documents Returned: {}", plan.documents_returned);
@@ -257,7 +316,8 @@ fn run_shell(_data_dir: &PathBuf) {
 }
 
 fn print_help() {
-    println!(r#"
+    println!(
+        r#"
 FaizDB Multi-Dialect Query Examples:
 
 1. SQL Dialect:
@@ -279,7 +339,8 @@ FaizDB Multi-Dialect Query Examples:
    demo graph     Run GraphRAG Traversal Demo
    info           Show FaizDB Architecture Info
    exit           Quit Shell
-"#);
+"#
+    );
 }
 
 fn run_benchmark(count: usize, durable_path: Option<String>) {
@@ -297,10 +358,19 @@ fn run_benchmark(count: usize, durable_path: Option<String>) {
     };
 
     if is_durable {
-        println!("🏎️ FaizDB High-Throughput Benchmark — {} documents [Durable Disk + WAL]\n", count);
-        println!("📂 Storage Directory: {}\n", durable_dir.as_deref().unwrap_or(""));
+        println!(
+            "🏎️ FaizDB High-Throughput Benchmark — {} documents [Durable Disk + WAL]\n",
+            count
+        );
+        println!(
+            "📂 Storage Directory: {}\n",
+            durable_dir.as_deref().unwrap_or("")
+        );
     } else {
-        println!("🏎️ FaizDB High-Throughput Benchmark — {} documents [In-Memory MemTable]\n", count);
+        println!(
+            "🏎️ FaizDB High-Throughput Benchmark — {} documents [In-Memory MemTable]\n",
+            count
+        );
         println!("ℹ️  Running in-memory MemTable benchmark. Use --durable <path> or set FAIZDB_DATA_DIR to benchmark durable disk + WAL writes.\n");
     }
 
@@ -329,9 +399,15 @@ fn run_benchmark(count: usize, durable_path: Option<String>) {
     let insert_ops = count as f64 / insert_dur.as_secs_f64();
 
     if is_durable {
-        println!("⚡ INSERT (Durable Disk + WAL): {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)", count, insert_dur, insert_ops);
+        println!(
+            "⚡ INSERT (Durable Disk + WAL): {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)",
+            count, insert_dur, insert_ops
+        );
     } else {
-        println!("⚡ INSERT (In-Memory MemTable): {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)", count, insert_dur, insert_ops);
+        println!(
+            "⚡ INSERT (In-Memory MemTable): {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)",
+            count, insert_dur, insert_ops
+        );
     }
 
     // 2. Full Scan Benchmark
@@ -340,7 +416,12 @@ fn run_benchmark(count: usize, durable_path: Option<String>) {
     let scan_dur = start.elapsed();
     let scan_ops = all.len() as f64 / scan_dur.as_secs_f64();
 
-    println!("⚡ SCAN   : {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)", all.len(), scan_dur, scan_ops);
+    println!(
+        "⚡ SCAN   : {:>8} docs in {:>8.2?} ({:>10.0} ops/sec)",
+        all.len(),
+        scan_dur,
+        scan_ops
+    );
 
     // 3. Filtered Query Benchmark
     let start = std::time::Instant::now();
@@ -348,12 +429,19 @@ fn run_benchmark(count: usize, durable_path: Option<String>) {
     let filtered = col.find(&filter, None, None).unwrap();
     let filter_dur = start.elapsed();
 
-    println!("⚡ FILTER : {:>8} docs in {:>8.2?}", filtered.len(), filter_dur);
+    println!(
+        "⚡ FILTER : {:>8} docs in {:>8.2?}",
+        filtered.len(),
+        filter_dur
+    );
 
     let stats = col.stats();
     println!("\n📊 Summary:");
     println!("  Documents in memory: {}", stats.document_count);
-    println!("  Total data size:     {:.2} MB", stats.total_size as f64 / 1_048_576.0);
+    println!(
+        "  Total data size:     {:.2} MB",
+        stats.total_size as f64 / 1_048_576.0
+    );
     println!("  Avg doc size:        {} bytes", stats.avg_document_size);
 }
 
@@ -365,10 +453,18 @@ fn run_vector_demo() {
     let mut index = HnswIndex::new(config);
 
     // Embeddings of conceptual documents
-    index.insert("doc_database_ai", vec![0.95, 0.90, 0.10, 0.05]).unwrap();
-    index.insert("doc_rust_engine", vec![0.90, 0.85, 0.05, 0.10]).unwrap();
-    index.insert("doc_cooking_recipe", vec![0.05, 0.10, 0.95, 0.90]).unwrap();
-    index.insert("doc_baking_bread", vec![0.10, 0.05, 0.90, 0.95]).unwrap();
+    index
+        .insert("doc_database_ai", vec![0.95, 0.90, 0.10, 0.05])
+        .unwrap();
+    index
+        .insert("doc_rust_engine", vec![0.90, 0.85, 0.05, 0.10])
+        .unwrap();
+    index
+        .insert("doc_cooking_recipe", vec![0.05, 0.10, 0.95, 0.90])
+        .unwrap();
+    index
+        .insert("doc_baking_bread", vec![0.10, 0.05, 0.90, 0.95])
+        .unwrap();
 
     println!("Indexed 4 concept vectors (4 dimensions)");
 
@@ -379,8 +475,12 @@ fn run_vector_demo() {
     let results = index.search(&query_embedding, 2);
     println!("\nTop 2 Semantic Matches:");
     for (rank, res) in results.iter().enumerate() {
-        println!("  #{}: ID='{}' | Similarity={:.4} | Distance={:.4}",
-            rank + 1, res.id, res.similarity, res.distance
+        println!(
+            "  #{}: ID='{}' | Similarity={:.4} | Distance={:.4}",
+            rank + 1,
+            res.id,
+            res.similarity,
+            res.distance
         );
     }
 }
@@ -402,13 +502,18 @@ fn run_graph_demo() {
     graph.add_edge(Edge::new("faizdb", "nosql", "BELONGS_TO"));
     graph.add_edge(Edge::new("faizdb", "ai_rag", "SUPPORTS"));
 
-    println!("Graph created: {} vertices, {} edges", graph.vertex_count(), graph.edge_count());
+    println!(
+        "Graph created: {} vertices, {} edges",
+        graph.vertex_count(),
+        graph.edge_count()
+    );
 
     // GraphRAG context traversal starting from "faiz"
     println!("\nGraphRAG Traversal (Depth 2 from 'faiz'):");
     let path = graph.traverse_bfs("faiz", 2, None);
     for step in path {
-        println!("  Depth {}: Node='{}' (via relation: {:?})",
+        println!(
+            "  Depth {}: Node='{}' (via relation: {:?})",
             step.depth, step.vertex_id, step.relation
         );
     }
@@ -417,7 +522,10 @@ fn run_graph_demo() {
 fn run_backup_cli(output_path: &std::path::Path) {
     println!("\n💾 FaizDB Consistent Snapshot Backup Engine");
     println!("-------------------------------------------");
-    println!("Initiating non-blocking online snapshot to: {}", output_path.display());
+    println!(
+        "Initiating non-blocking online snapshot to: {}",
+        output_path.display()
+    );
 
     let db = DatabaseContext::new();
     let collections = db.all_collections();
@@ -434,7 +542,10 @@ fn run_backup_cli(output_path: &std::path::Path) {
             println!("   • Collections  : {:?}", archive.manifest.collections);
             println!("   • Documents    : {}", archive.manifest.total_documents);
             println!("   • Checksum     : {}", archive.manifest.checksum);
-            println!("   • Archive Size : {} bytes", archive.manifest.file_size_bytes);
+            println!(
+                "   • Archive Size : {} bytes",
+                archive.manifest.file_size_bytes
+            );
         }
         Err(e) => {
             eprintln!("❌ Failed to create snapshot: {e}");
@@ -449,9 +560,14 @@ fn run_restore_cli(input_path: &std::path::Path) {
 
     match faizdb_core::backup::load_and_verify_snapshot(input_path) {
         Ok(archive) => {
-            println!("✅ Cryptographic Checksum verified: {}", archive.manifest.checksum);
-            println!("   Restoring {} documents across {} collections...",
-                archive.manifest.total_documents, archive.manifest.collections.len()
+            println!(
+                "✅ Cryptographic Checksum verified: {}",
+                archive.manifest.checksum
+            );
+            println!(
+                "   Restoring {} documents across {} collections...",
+                archive.manifest.total_documents,
+                archive.manifest.collections.len()
             );
 
             let db = DatabaseContext::new();
@@ -459,17 +575,104 @@ fn run_restore_cli(input_path: &std::path::Path) {
             for (col_name, doc_vals) in archive.collections_data {
                 let col = db.get_or_create_collection(&col_name);
                 for val in doc_vals {
-                    if let Some(doc) = faizdb_core::document::model::Document::from_json_value(val) {
+                    if let Some(doc) = faizdb_core::document::model::Document::from_json_value(val)
+                    {
                         if col.insert(doc).is_ok() {
                             restored += 1;
                         }
                     }
                 }
             }
-            println!("🎉 Disaster Recovery Complete: {restored} documents restored into live database!");
+            println!(
+                "🎉 Disaster Recovery Complete: {restored} documents restored into live database!"
+            );
         }
         Err(e) => {
             eprintln!("❌ Failed to restore snapshot: {e}");
         }
+    }
+}
+
+fn run_dump_cli(
+    collection: Option<String>,
+    format_str: &str,
+    output: Option<PathBuf>,
+    data_dir: &std::path::Path,
+) {
+    let db = faizdb_query::DatabaseContext::with_storage_dir(data_dir)
+        .unwrap_or_else(|_| faizdb_query::DatabaseContext::new());
+
+    let collections = if let Some(ref col_name) = collection {
+        let col = db.get_or_create_collection(col_name);
+        vec![(col_name.clone(), col)]
+    } else {
+        db.all_collections()
+    };
+
+    let mut out_content = String::new();
+    let is_sql = format_str.eq_ignore_ascii_case("sql");
+
+    for (col_name, col) in collections {
+        let docs = col.find_all(None);
+        if is_sql {
+            out_content.push_str(&format!("-- Table / Collection: {}\n", col_name));
+            for doc in docs {
+                let id_str = doc.id.as_str().replace('\'', "''");
+                let mut col_names = vec!["id".to_string()];
+                let mut col_vals = vec![format!("'{}'", id_str)];
+
+                for (k, v) in &doc.fields {
+                    col_names.push(k.clone());
+                    match v {
+                        Value::String(s) => col_vals.push(format!("'{}'", s.replace('\'', "''"))),
+                        Value::Integer(i) => col_vals.push(i.to_string()),
+                        Value::Float(f) => col_vals.push(f.to_string()),
+                        Value::Boolean(b) => col_vals.push(b.to_string()),
+                        Value::Null => col_vals.push("NULL".to_string()),
+                        _ => {
+                            let json_s = serde_json::to_string(v)
+                                .unwrap_or_default()
+                                .replace('\'', "''");
+                            col_vals.push(format!("'{}'", json_s));
+                        }
+                    }
+                }
+                out_content.push_str(&format!(
+                    "INSERT INTO {} ({}) VALUES ({});\n",
+                    col_name,
+                    col_names.join(", "),
+                    col_vals.join(", ")
+                ));
+            }
+        } else {
+            // JSONL format: {"_id": "...", ...}
+            for doc in docs {
+                let mut json_obj = serde_json::Map::new();
+                json_obj.insert(
+                    "_id".to_string(),
+                    serde_json::Value::String(doc.id.to_string()),
+                );
+                for (k, v) in &doc.fields {
+                    let json_val = serde_json::to_value(v).unwrap_or(serde_json::Value::Null);
+                    json_obj.insert(k.clone(), json_val);
+                }
+                if let Ok(line) = serde_json::to_string(&json_obj) {
+                    out_content.push_str(&line);
+                    out_content.push('\n');
+                }
+            }
+        }
+    }
+
+    if let Some(out_path) = output {
+        match std::fs::write(&out_path, &out_content) {
+            Ok(_) => println!(
+                "✅ Exported to open format successfully: {}",
+                out_path.display()
+            ),
+            Err(e) => eprintln!("❌ Failed to write export to '{}': {e}", out_path.display()),
+        }
+    } else {
+        print!("{out_content}");
     }
 }

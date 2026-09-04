@@ -5,9 +5,9 @@ use std::sync::Arc;
 use tonic::transport::Server;
 use tracing::info;
 
-use faizdb_query::DatabaseContext;
 use super::proto::FaizDbServiceServer;
 use super::service::FaizDbGrpcService;
+use faizdb_query::DatabaseContext;
 
 /// Run the FaizDB gRPC / Protocol Buffers Server on the given address (e.g. "0.0.0.0:50051")
 pub async fn run_grpc_server(

@@ -115,7 +115,9 @@ impl ColumnarBatch {
                         serde_json::Value::Number(_) => ColumnDataType::Float64,
                         serde_json::Value::String(_) => ColumnDataType::String,
                         serde_json::Value::Bool(_) => ColumnDataType::Boolean,
-                        serde_json::Value::Array(_) | serde_json::Value::Object(_) => ColumnDataType::String,
+                        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                            ColumnDataType::String
+                        }
                         _ => ColumnDataType::String,
                     });
                 }
@@ -143,9 +145,10 @@ impl ColumnarBatch {
         };
 
         for (field_name, dtype) in &self.schema.fields {
-            let col = self.columns.get_mut(field_name).ok_or_else(|| {
-                format!("Column '{field_name}' not found in columnar batch")
-            })?;
+            let col = self
+                .columns
+                .get_mut(field_name)
+                .ok_or_else(|| format!("Column '{field_name}' not found in columnar batch"))?;
 
             let json_val = map.get(field_name);
             match (col, dtype) {
@@ -188,12 +191,16 @@ impl ColumnarBatch {
                 projected_fields.push((col_name.to_string(), col_data.data_type()));
                 projected_cols.insert(col_name.to_string(), col_data.clone());
             } else {
-                return Err(format!("Projection column '{col_name}' does not exist in batch"));
+                return Err(format!(
+                    "Projection column '{col_name}' does not exist in batch"
+                ));
             }
         }
 
         Ok(Self {
-            schema: ColumnarSchema { fields: projected_fields },
+            schema: ColumnarSchema {
+                fields: projected_fields,
+            },
             columns: projected_cols,
             row_count: self.row_count,
         })
@@ -218,7 +225,13 @@ impl ColumnarBatch {
         let field_names: Vec<&String> = self.schema.fields.iter().map(|(name, _)| name).collect();
 
         // Header
-        csv.push_str(&field_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(","));
+        csv.push_str(
+            &field_names
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+        );
         csv.push('\n');
 
         // Rows
@@ -226,11 +239,31 @@ impl ColumnarBatch {
             let mut row_vals = Vec::new();
             for (name, _) in &self.schema.fields {
                 let cell_str = match self.columns.get(name) {
-                    Some(ColumnData::Int64(v)) => v.get(r).and_then(|x| *x).map(|i| i.to_string()).unwrap_or_default(),
-                    Some(ColumnData::Float64(v)) => v.get(r).and_then(|x| *x).map(|f| f.to_string()).unwrap_or_default(),
-                    Some(ColumnData::String(v)) => v.get(r).and_then(|x| x.as_deref()).map(|s| format!("\"{s}\"")).unwrap_or_default(),
-                    Some(ColumnData::Boolean(v)) => v.get(r).and_then(|x| *x).map(|b| b.to_string()).unwrap_or_default(),
-                    Some(ColumnData::Binary(v)) => v.get(r).and_then(|x| x.as_ref()).map(|_| "<binary>".to_string()).unwrap_or_default(),
+                    Some(ColumnData::Int64(v)) => v
+                        .get(r)
+                        .and_then(|x| *x)
+                        .map(|i| i.to_string())
+                        .unwrap_or_default(),
+                    Some(ColumnData::Float64(v)) => v
+                        .get(r)
+                        .and_then(|x| *x)
+                        .map(|f| f.to_string())
+                        .unwrap_or_default(),
+                    Some(ColumnData::String(v)) => v
+                        .get(r)
+                        .and_then(|x| x.as_deref())
+                        .map(|s| format!("\"{s}\""))
+                        .unwrap_or_default(),
+                    Some(ColumnData::Boolean(v)) => v
+                        .get(r)
+                        .and_then(|x| *x)
+                        .map(|b| b.to_string())
+                        .unwrap_or_default(),
+                    Some(ColumnData::Binary(v)) => v
+                        .get(r)
+                        .and_then(|x| x.as_ref())
+                        .map(|_| "<binary>".to_string())
+                        .unwrap_or_default(),
                     None => String::new(),
                 };
                 row_vals.push(cell_str);

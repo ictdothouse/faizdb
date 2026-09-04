@@ -74,7 +74,10 @@ impl GeoReplicationEngine {
 
     /// List all registered peer regions and their sync statuses
     pub fn list_peers(&self) -> Vec<RegionConfig> {
-        self.peers.iter().map(|entry| entry.value().clone()).collect()
+        self.peers
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     /// Record a local document mutation and queue a replication delta
@@ -89,10 +92,7 @@ impl GeoReplicationEngine {
         vv.increment(&self.local_region);
 
         let key = format!("{collection}:{document_id}");
-        let mut crdt_doc = self
-            .crdt_documents
-            .entry(key.clone())
-            .or_default();
+        let mut crdt_doc = self.crdt_documents.entry(key.clone()).or_default();
 
         let mut field_updates = BTreeMap::new();
         for (k, v) in fields {
@@ -115,10 +115,7 @@ impl GeoReplicationEngine {
     /// Apply an incoming replication delta from a remote region
     pub fn apply_remote_delta(&self, delta: ReplicationDelta) -> bool {
         let key = format!("{}:{}", delta.collection, delta.document_id);
-        let mut crdt_doc = self
-            .crdt_documents
-            .entry(key)
-            .or_default();
+        let mut crdt_doc = self.crdt_documents.entry(key).or_default();
 
         for (field, (val, ts, region)) in delta.field_updates {
             crdt_doc.set_field(&field, val, ts, &region);
@@ -192,9 +189,18 @@ mod tests {
         let us_final = us_engine.get_document_state("users", "usr_100").unwrap();
 
         assert_eq!(sg_final, us_final);
-        assert_eq!(sg_final.get("name").unwrap(), &serde_json::json!("Ahmad Faiz"));
-        assert_eq!(sg_final.get("city").unwrap(), &serde_json::json!("Kuala Lumpur"));
-        assert_eq!(sg_final.get("plan").unwrap(), &serde_json::json!("Enterprise"));
+        assert_eq!(
+            sg_final.get("name").unwrap(),
+            &serde_json::json!("Ahmad Faiz")
+        );
+        assert_eq!(
+            sg_final.get("city").unwrap(),
+            &serde_json::json!("Kuala Lumpur")
+        );
+        assert_eq!(
+            sg_final.get("plan").unwrap(),
+            &serde_json::json!("Enterprise")
+        );
         assert_eq!(sg_final.get("credits").unwrap(), &serde_json::json!(50000));
     }
 }

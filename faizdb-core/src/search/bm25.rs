@@ -1,9 +1,9 @@
 //! Inverted Index & Okapi BM25 Full-Text Search Engine.
 
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::tokenizer::{levenshtein_distance, tokenize};
 
@@ -156,14 +156,20 @@ impl InvertedIndex {
 
                     for (doc_id, meta) in postings_map.iter() {
                         let tf = meta.frequency as f64;
-                        let dl = self.doc_lengths.get(doc_id).map(|r| *r.value()).unwrap_or(1) as f64;
+                        let dl = self
+                            .doc_lengths
+                            .get(doc_id)
+                            .map(|r| *r.value())
+                            .unwrap_or(1) as f64;
 
                         // Okapi BM25 formula
                         let numerator = tf * (BM25_K1 + 1.0);
                         let denominator = tf + BM25_K1 * (1.0 - BM25_B + BM25_B * (dl / avg_dl));
                         let bm25_score = idf * (numerator / denominator) * term_weight;
 
-                        let entry = doc_scores.entry(doc_id.clone()).or_insert_with(|| (0.0, HashSet::new()));
+                        let entry = doc_scores
+                            .entry(doc_id.clone())
+                            .or_insert_with(|| (0.0, HashSet::new()));
                         entry.0 += bm25_score;
                         entry.1.insert(term.clone());
                     }
@@ -182,7 +188,11 @@ impl InvertedIndex {
             .collect();
 
         // Sort descending by relevance score
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(top_k);
 
         results
@@ -196,9 +206,15 @@ mod tests {
     #[test]
     fn test_bm25_ranking_and_fuzzy() {
         let index = InvertedIndex::new();
-        index.index_document("doc_1", "FaizDB is a blazing fast NoSQL database written in Rust");
+        index.index_document(
+            "doc_1",
+            "FaizDB is a blazing fast NoSQL database written in Rust",
+        );
         index.index_document("doc_2", "Rust is a modern systems programming language");
-        index.index_document("doc_3", "Database design principles and distributed Raft consensus");
+        index.index_document(
+            "doc_3",
+            "Database design principles and distributed Raft consensus",
+        );
 
         // Exact BM25 query
         let res = index.search("database rust", false, 5);

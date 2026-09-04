@@ -68,7 +68,10 @@ mod tests {
 
         let received = rx.recv().await.unwrap();
         assert_eq!(received.collection, "users");
-        assert_eq!(received.operation_type, super::super::event::OperationType::Insert);
+        assert_eq!(
+            received.operation_type,
+            super::super::event::OperationType::Insert
+        );
         assert!(received.full_document.is_some());
     }
 }

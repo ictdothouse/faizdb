@@ -182,9 +182,9 @@ pub fn encode_data_row(columns: &[Option<String>]) -> Vec<u8> {
 pub fn encode_error_response(severity: &str, code: &str, message: &str) -> Vec<u8> {
     let mut payload_len = 4;
     payload_len += 1 + severity.len() + 1; // 'S'
-    payload_len += 1 + code.len() + 1;     // 'C'
-    payload_len += 1 + message.len() + 1;  // 'M'
-    payload_len += 1;                      // Terminator '\0'
+    payload_len += 1 + code.len() + 1; // 'C'
+    payload_len += 1 + message.len() + 1; // 'M'
+    payload_len += 1; // Terminator '\0'
 
     let mut buf = BytesMut::with_capacity(1 + payload_len);
     buf.put_u8(b'E');
@@ -211,5 +211,50 @@ pub fn encode_empty_query_response() -> Vec<u8> {
     let mut buf = BytesMut::with_capacity(5);
     buf.put_u8(b'I');
     buf.put_i32(4);
+    buf.to_vec()
+}
+
+/// Encode `ParseComplete` message: '1' + len (4)
+pub fn encode_parse_complete() -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(5);
+    buf.put_u8(b'1');
+    buf.put_i32(4);
+    buf.to_vec()
+}
+
+/// Encode `BindComplete` message: '2' + len (4)
+pub fn encode_bind_complete() -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(5);
+    buf.put_u8(b'2');
+    buf.put_i32(4);
+    buf.to_vec()
+}
+
+/// Encode `CloseComplete` message: '3' + len (4)
+pub fn encode_close_complete() -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(5);
+    buf.put_u8(b'3');
+    buf.put_i32(4);
+    buf.to_vec()
+}
+
+/// Encode `NoData` message: 'n' + len (4)
+pub fn encode_no_data() -> Vec<u8> {
+    let mut buf = BytesMut::with_capacity(5);
+    buf.put_u8(b'n');
+    buf.put_i32(4);
+    buf.to_vec()
+}
+
+/// Encode `ParameterDescription` message: 't' + len + param_count (i16) + [param_oid (i32)]
+pub fn encode_parameter_description(param_oids: &[i32]) -> Vec<u8> {
+    let payload_len = 4 + 2 + (param_oids.len() * 4);
+    let mut buf = BytesMut::with_capacity(1 + payload_len);
+    buf.put_u8(b't');
+    buf.put_i32(payload_len as i32);
+    buf.put_i16(param_oids.len() as i16);
+    for &oid in param_oids {
+        buf.put_i32(oid);
+    }
     buf.to_vec()
 }

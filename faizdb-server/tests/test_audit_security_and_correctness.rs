@@ -8,24 +8,30 @@
 //! 3. Vector Search REST API enforces preflight dimension, empty query, and top_k checks (returns 400 without panic).
 //! 4. Query Cost-Based Optimizer (CBO) handles documents with NaN floats gracefully without panicking.
 
-use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tower::ServiceExt;
 
 use faizdb_core::document::model::{Document, Value as FaizValue};
-use faizdb_query::{DatabaseContext, optimizer::TableStatistics};
+use faizdb_query::{optimizer::TableStatistics, DatabaseContext};
 use faizdb_server::api::{create_router, AppState};
 use faizdb_server::wire::postgres::handler::handle_postgres_query;
 
 fn setup_test_app() -> (axum::Router, Arc<AppState>, String) {
     let db = Arc::new(DatabaseContext::new());
-    let auth = Arc::new(faizdb_security::auth::AuthManager::new(b"test-secret-key-1234567890123456"));
+    let auth = Arc::new(faizdb_security::auth::AuthManager::new(
+        b"test-secret-key-1234567890123456",
+    ));
     let user_store = Arc::new(faizdb_security::UserStore::new());
-    let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new("test-region".to_string()));
+    let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(
+        "test-region".to_string(),
+    ));
 
-    let token = auth.generate_token("admin", faizdb_security::auth::Role::Admin, 3600).unwrap();
+    let token = auth
+        .generate_token("admin", faizdb_security::auth::Role::Admin, 3600)
+        .unwrap();
 
     let state = Arc::new(AppState {
         db,
@@ -61,10 +67,22 @@ async fn test_postgres_wire_select_from_users_table_not_intercepted() {
     let resp_str = String::from_utf8_lossy(&resp_bytes);
 
     // The response must contain the actual table data, NOT "current_user" or "postgres" as the sole column
-    assert!(resp_str.contains("Siti Nurhaliza"), "Expected table query to return user Siti Nurhaliza");
-    assert!(resp_str.contains("Faiz Aziz"), "Expected table query to return user Faiz Aziz");
-    assert!(resp_str.contains("artist"), "Expected table query to return artist role");
-    assert!(!resp_str.contains("current_user\0"), "Table query must not be intercepted as current_user introspection!");
+    assert!(
+        resp_str.contains("Siti Nurhaliza"),
+        "Expected table query to return user Siti Nurhaliza"
+    );
+    assert!(
+        resp_str.contains("Faiz Aziz"),
+        "Expected table query to return user Faiz Aziz"
+    );
+    assert!(
+        resp_str.contains("artist"),
+        "Expected table query to return artist role"
+    );
+    assert!(
+        !resp_str.contains("current_user\0"),
+        "Table query must not be intercepted as current_user introspection!"
+    );
 
     // 3. True scalar introspections WITHOUT FROM must still succeed
     let cur_user_bytes = handle_postgres_query(&db, "SELECT CURRENT_USER", &mut in_txn);
@@ -96,11 +114,14 @@ async fn test_vector_search_rest_preflight_validation_and_no_panic() {
         .uri("/v1/vector/index")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "name": "audit_embeddings",
-            "dimensions": 4,
-            "metric": "cosine"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "name": "audit_embeddings",
+                "dimensions": 4,
+                "metric": "cosine"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let resp = app.clone().oneshot(create_req).await.unwrap();
@@ -112,11 +133,14 @@ async fn test_vector_search_rest_preflight_validation_and_no_panic() {
         .uri("/v1/vector/insert")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "index_name": "audit_embeddings",
-            "id": "vec_1",
-            "vector": [1.0, 0.0, 0.0, 0.0]
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "index_name": "audit_embeddings",
+                "id": "vec_1",
+                "vector": [1.0, 0.0, 0.0, 0.0]
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let resp = app.clone().oneshot(insert_req).await.unwrap();
@@ -129,19 +153,27 @@ async fn test_vector_search_rest_preflight_validation_and_no_panic() {
         .uri("/v1/vector/search")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "index_name": "audit_embeddings",
-            "query": [1.0, 0.0],
-            "top_k": 5
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "index_name": "audit_embeddings",
+                "query": [1.0, 0.0],
+                "top_k": 5
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let resp = app.clone().oneshot(search_mismatch).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(body_json["success"], false);
-    assert!(body_json["error"].as_str().unwrap().contains("dimension mismatch"));
+    assert!(body_json["error"]
+        .as_str()
+        .unwrap()
+        .contains("dimension mismatch"));
 
     // 4. Search with empty vector
     let search_empty = Request::builder()
@@ -149,11 +181,14 @@ async fn test_vector_search_rest_preflight_validation_and_no_panic() {
         .uri("/v1/vector/search")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "index_name": "audit_embeddings",
-            "query": [],
-            "top_k": 5
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "index_name": "audit_embeddings",
+                "query": [],
+                "top_k": 5
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let resp = app.clone().oneshot(search_empty).await.unwrap();
@@ -165,11 +200,14 @@ async fn test_vector_search_rest_preflight_validation_and_no_panic() {
         .uri("/v1/vector/search")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "index_name": "audit_embeddings",
-            "query": [1.0, 0.0, 0.0, 0.0],
-            "top_k": 0
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "index_name": "audit_embeddings",
+                "query": [1.0, 0.0, 0.0, 0.0],
+                "top_k": 0
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let resp = app.clone().oneshot(search_zero_k).await.unwrap();

@@ -1,11 +1,11 @@
 //! Aggregation Pipeline JSON and AST Parser.
 
-use std::collections::HashMap;
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 
-use faizdb_core::Value;
-use crate::ast::{FilterExpr, Operator};
 use super::pipeline::{Accumulator, PipelineStage};
+use crate::ast::{FilterExpr, Operator};
+use faizdb_core::Value;
 
 /// Parse a JSON array representing an aggregation pipeline
 pub fn parse_pipeline(json: &JsonValue) -> Result<Vec<PipelineStage>, String> {
@@ -27,10 +27,16 @@ pub fn parse_pipeline(json: &JsonValue) -> Result<Vec<PipelineStage>, String> {
             stages.push(PipelineStage::Match(filter));
         } else if let Some(group_val) = obj.get("$group") {
             let (id_expr, accumulators) = parse_group_expr(group_val)?;
-            stages.push(PipelineStage::Group { id_expr, accumulators });
+            stages.push(PipelineStage::Group {
+                id_expr,
+                accumulators,
+            });
         } else if let Some(project_val) = obj.get("$project") {
             let (inclusions, exclusions) = parse_project_expr(project_val)?;
-            stages.push(PipelineStage::Project { inclusions, exclusions });
+            stages.push(PipelineStage::Project {
+                inclusions,
+                exclusions,
+            });
         } else if let Some(sort_val) = obj.get("$sort") {
             let sorts = parse_sort_expr(sort_val)?;
             stages.push(PipelineStage::Sort(sorts));
@@ -47,33 +53,46 @@ pub fn parse_pipeline(json: &JsonValue) -> Result<Vec<PipelineStage>, String> {
             let (path, preserve_null_and_empty_arrays) = match unwind_val {
                 JsonValue::String(s) => (s.clone(), false),
                 JsonValue::Object(opts) => {
-                    let path = opts.get("path")
+                    let path = opts
+                        .get("path")
                         .and_then(|p| p.as_str())
                         .ok_or("$unwind object must contain 'path' string")?
                         .to_string();
-                    let preserve = opts.get("preserveNullAndEmptyArrays")
+                    let preserve = opts
+                        .get("preserveNullAndEmptyArrays")
                         .and_then(|b| b.as_bool())
                         .unwrap_or(false);
                     (path, preserve)
                 }
-                _ => return Err("Invalid $unwind expression: expected string or object".to_string()),
+                _ => {
+                    return Err("Invalid $unwind expression: expected string or object".to_string())
+                }
             };
-            stages.push(PipelineStage::Unwind { path, preserve_null_and_empty_arrays });
+            stages.push(PipelineStage::Unwind {
+                path,
+                preserve_null_and_empty_arrays,
+            });
         } else if let Some(lookup_val) = obj.get("$lookup") {
-            let lookup_obj = lookup_val.as_object().ok_or("$lookup stage must be a JSON object")?;
-            let from = lookup_obj.get("from")
+            let lookup_obj = lookup_val
+                .as_object()
+                .ok_or("$lookup stage must be a JSON object")?;
+            let from = lookup_obj
+                .get("from")
                 .and_then(|v| v.as_str())
                 .ok_or("$lookup requires 'from' string field")?
                 .to_string();
-            let local_field = lookup_obj.get("localField")
+            let local_field = lookup_obj
+                .get("localField")
                 .and_then(|v| v.as_str())
                 .ok_or("$lookup requires 'localField' string field")?
                 .to_string();
-            let foreign_field = lookup_obj.get("foreignField")
+            let foreign_field = lookup_obj
+                .get("foreignField")
                 .and_then(|v| v.as_str())
                 .ok_or("$lookup requires 'foreignField' string field")?
                 .to_string();
-            let as_field = lookup_obj.get("as")
+            let as_field = lookup_obj
+                .get("as")
                 .and_then(|v| v.as_str())
                 .ok_or("$lookup requires 'as' string field")?
                 .to_string();

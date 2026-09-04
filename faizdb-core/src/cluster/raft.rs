@@ -7,16 +7,16 @@
 //! - Dynamic cluster membership changes & majority quorum calculation
 //! - Complete state machine transitions: Follower -> Candidate -> Leader
 
-use std::collections::HashMap;
-use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use crc32fast::Hasher;
 use parking_lot::RwLock;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 pub type Term = u64;
@@ -242,7 +242,10 @@ impl RaftDiskStore {
             let actual_crc = hasher.finalize();
 
             if actual_crc != expected_crc {
-                warn!("Corrupted Raft log entry detected; stopping replay at index {}", entries.len());
+                warn!(
+                    "Corrupted Raft log entry detected; stopping replay at index {}",
+                    entries.len()
+                );
                 break;
             }
 
@@ -297,9 +300,10 @@ impl RaftNode {
         let node_id = node_id.into();
         let address = address.into();
 
-        let disk_store = config.data_dir.as_ref().and_then(|dir| {
-            RaftDiskStore::new(dir).ok().map(Arc::new)
-        });
+        let disk_store = config
+            .data_dir
+            .as_ref()
+            .and_then(|dir| RaftDiskStore::new(dir).ok().map(Arc::new));
 
         // Attempt recovery from disk if store exists
         let mut initial_term = 1;
@@ -372,7 +376,11 @@ impl RaftNode {
         let p_id = peer_id.into();
         let p_addr = peer_addr.into();
         state.peers.insert(p_id.clone(), p_addr);
-        info!("Added Raft cluster peer: '{}' (Cluster size: {})", p_id, state.peers.len() + 1);
+        info!(
+            "Added Raft cluster peer: '{}' (Cluster size: {})",
+            p_id,
+            state.peers.len() + 1
+        );
     }
 
     /// Remove a peer node from the cluster (dynamic membership)
@@ -380,9 +388,18 @@ impl RaftNode {
         let mut state = self.state.write();
         let removed = state.peers.remove(peer_id).is_some();
         if removed {
-            info!("Removed Raft cluster peer: '{}' (Cluster size: {})", peer_id, state.peers.len() + 1);
+            info!(
+                "Removed Raft cluster peer: '{}' (Cluster size: {})",
+                peer_id,
+                state.peers.len() + 1
+            );
         }
         removed
+    }
+
+    /// List all registered peers in the Raft cluster
+    pub fn list_peers(&self) -> HashMap<String, String> {
+        self.state.read().peers.clone()
     }
 
     /// Calculate required quorum size for consensus
@@ -544,7 +561,8 @@ impl RaftNode {
         }
 
         // 3. Check if vote can be granted
-        let can_vote = state.voted_for.is_none() || state.voted_for.as_deref() == Some(&args.candidate_id);
+        let can_vote =
+            state.voted_for.is_none() || state.voted_for.as_deref() == Some(&args.candidate_id);
         let last_log = state.log.last().unwrap();
         let log_is_up_to_date = args.last_log_term > last_log.term
             || (args.last_log_term == last_log.term && args.last_log_index >= last_log.index);
@@ -557,7 +575,10 @@ impl RaftNode {
                 let _ = store.save_meta(state.current_term, Some(&args.candidate_id));
             }
 
-            debug!("Node '{}' granted vote to candidate '{}' for term {}", self.node_id, args.candidate_id, args.term);
+            debug!(
+                "Node '{}' granted vote to candidate '{}' for term {}",
+                self.node_id, args.candidate_id, args.term
+            );
             RequestVoteReply {
                 term: state.current_term,
                 vote_granted: true,
@@ -598,7 +619,10 @@ impl RaftNode {
         }
 
         // 3. Check log continuity at prev_log_index
-        let has_prev_log = state.log.iter().any(|e| e.index == args.prev_log_index && e.term == args.prev_log_term);
+        let has_prev_log = state
+            .log
+            .iter()
+            .any(|e| e.index == args.prev_log_index && e.term == args.prev_log_term);
         if args.prev_log_index > 0 && !has_prev_log {
             return AppendEntriesReply {
                 term: state.current_term,
@@ -645,10 +669,17 @@ impl RaftNode {
     }
 
     /// Propose a new write log entry on the Leader and persist to disk
-    pub fn propose(&self, command: impl Into<String>, payload: Option<serde_json::Value>) -> Result<LogIndex, String> {
+    pub fn propose(
+        &self,
+        command: impl Into<String>,
+        payload: Option<serde_json::Value>,
+    ) -> Result<LogIndex, String> {
         let mut state = self.state.write();
         if state.role != NodeRole::Leader {
-            return Err(format!("Not leader. Current leader is {:?}", state.leader_id));
+            return Err(format!(
+                "Not leader. Current leader is {:?}",
+                state.leader_id
+            ));
         }
 
         let index = state.log.len() as u64;
@@ -680,7 +711,10 @@ impl RaftNode {
         if let Some(ref store) = self.disk_store {
             let _ = store.save_meta(state.current_term, Some(&self.node_id));
         }
-        info!("Node '{}' manually assumed LEADER role for term {}", self.node_id, state.current_term);
+        info!(
+            "Node '{}' manually assumed LEADER role for term {}",
+            self.node_id, state.current_term
+        );
     }
 }
 
@@ -698,7 +732,9 @@ pub trait RaftRpcTransport: Send + Sync {
         &self,
         peer_addr: &str,
         args: AppendEntriesArgs,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<AppendEntriesReply, String>> + Send>>;
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<AppendEntriesReply, String>> + Send>,
+    >;
 }
 
 /// In-memory loopback router for cluster simulation and integration testing
@@ -723,12 +759,15 @@ impl RaftRpcTransport for InMemoryRaftRouter {
         &self,
         peer_addr: &str,
         args: RequestVoteArgs,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RequestVoteReply, String>> + Send>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<RequestVoteReply, String>> + Send>>
+    {
         let nodes = self.nodes.clone();
         let addr = peer_addr.to_string();
         Box::pin(async move {
             let map = nodes.read();
-            let target_node = map.values().find(|n| n.address == addr || n.node_id == addr);
+            let target_node = map
+                .values()
+                .find(|n| n.address == addr || n.node_id == addr);
             match target_node {
                 Some(n) => Ok(n.handle_request_vote(args)),
                 None => Err(format!("Node not reachable at address '{addr}'")),
@@ -740,12 +779,16 @@ impl RaftRpcTransport for InMemoryRaftRouter {
         &self,
         peer_addr: &str,
         args: AppendEntriesArgs,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<AppendEntriesReply, String>> + Send>> {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<AppendEntriesReply, String>> + Send>,
+    > {
         let nodes = self.nodes.clone();
         let addr = peer_addr.to_string();
         Box::pin(async move {
             let map = nodes.read();
-            let target_node = map.values().find(|n| n.address == addr || n.node_id == addr);
+            let target_node = map
+                .values()
+                .find(|n| n.address == addr || n.node_id == addr);
             match target_node {
                 Some(n) => Ok(n.handle_append_entries(args)),
                 None => Err(format!("Node not reachable at address '{addr}'")),
@@ -765,7 +808,9 @@ mod tests {
         assert_eq!(info.node_id, "node_1");
         assert!(info.is_leader);
 
-        let idx = node.propose("INSERT_DOC", Some(serde_json::json!({ "name": "Faiz" }))).unwrap();
+        let idx = node
+            .propose("INSERT_DOC", Some(serde_json::json!({ "name": "Faiz" })))
+            .unwrap();
         assert_eq!(idx, 1);
     }
 
@@ -780,8 +825,12 @@ mod tests {
         // Node 1 writes entries
         {
             let node = RaftNode::with_config("node_persist", "127.0.0.1:27030", config.clone());
-            let _ = node.propose("WRITE_KEY_1", Some(serde_json::json!({ "v": 100 }))).unwrap();
-            let _ = node.propose("WRITE_KEY_2", Some(serde_json::json!({ "v": 200 }))).unwrap();
+            let _ = node
+                .propose("WRITE_KEY_1", Some(serde_json::json!({ "v": 100 })))
+                .unwrap();
+            let _ = node
+                .propose("WRITE_KEY_2", Some(serde_json::json!({ "v": 200 })))
+                .unwrap();
             assert_eq!(node.get_info().persistent_log_entries, 3); // genesis + 2
         }
 
@@ -813,7 +862,10 @@ mod tests {
         let reply2 = node2.handle_request_vote(vote_args.clone());
         assert!(reply2.vote_granted);
         let won = node1.record_vote("node_2", term, reply2.vote_granted);
-        assert!(won, "Node 1 should win election upon receiving 2nd vote (self + node_2)");
+        assert!(
+            won,
+            "Node 1 should win election upon receiving 2nd vote (self + node_2)"
+        );
         assert!(node1.get_info().is_leader);
 
         // Dynamic membership: remove peer
@@ -839,7 +891,10 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let reply = rt.block_on(async {
-            router.request_vote("127.0.0.1:28002", vote_args).await.unwrap()
+            router
+                .request_vote("127.0.0.1:28002", vote_args)
+                .await
+                .unwrap()
         });
 
         assert!(reply.vote_granted);

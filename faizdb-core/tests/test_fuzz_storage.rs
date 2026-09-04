@@ -25,7 +25,8 @@ fn test_fuzz_truncated_wal_recovery() {
         for i in 0..20 {
             let key = format!("k_{i}");
             let val = format!("v_{i}");
-            wal.append(WalOpType::Put, key.as_bytes(), val.as_bytes()).unwrap();
+            wal.append(WalOpType::Put, key.as_bytes(), val.as_bytes())
+                .unwrap();
         }
     }
 
@@ -46,7 +47,8 @@ fn test_fuzz_truncated_wal_recovery() {
         enable_wal: true,
         ..Default::default()
     };
-    let engine = StorageEngine::open(config).expect("StorageEngine must recover cleanly without panic");
+    let engine =
+        StorageEngine::open(config).expect("StorageEngine must recover cleanly without panic");
 
     // First 18 records should be safely recovered
     let mut recovered = 0;
@@ -56,7 +58,10 @@ fn test_fuzz_truncated_wal_recovery() {
             recovered += 1;
         }
     }
-    assert!(recovered >= 18, "Expected at least 18 complete records recovered, got {recovered}");
+    assert!(
+        recovered >= 18,
+        "Expected at least 18 complete records recovered, got {recovered}"
+    );
 }
 
 #[test]
@@ -78,7 +83,10 @@ fn test_fuzz_corrupted_magic_bytes() {
     };
     // Engine must handle corruption gracefully without crashing or panicking
     let engine_res = StorageEngine::open(config);
-    assert!(engine_res.is_ok(), "Engine must gracefully skip corrupted files and open without crashing");
+    assert!(
+        engine_res.is_ok(),
+        "Engine must gracefully skip corrupted files and open without crashing"
+    );
     let engine = engine_res.unwrap();
     assert_eq!(engine.get(b"unknown_key").unwrap(), None);
 }
@@ -94,7 +102,8 @@ fn test_fuzz_crc_checksum_mismatch() {
     {
         let wal = Wal::open(&wal_dir).unwrap();
         for i in 0..5 {
-            wal.append(WalOpType::Put, format!("k_{i}").as_bytes(), b"valid_data").unwrap();
+            wal.append(WalOpType::Put, format!("k_{i}").as_bytes(), b"valid_data")
+                .unwrap();
         }
     }
 
@@ -112,7 +121,8 @@ fn test_fuzz_crc_checksum_mismatch() {
         enable_wal: true,
         ..Default::default()
     };
-    let engine = StorageEngine::open(config).expect("Engine recovery must not panic on CRC mismatch");
+    let engine =
+        StorageEngine::open(config).expect("Engine recovery must not panic on CRC mismatch");
 
     // The first record before corruption must still be available
     assert_eq!(engine.get(b"k_0").unwrap(), Some(b"valid_data".to_vec()));

@@ -5,11 +5,11 @@
 //! 4. MongoDB Wire protocol: real drop, dynamic listCollections, query-filtered count, and sort.
 //! 5. Persistent StorageEngine SSTable compaction.
 
-use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use bson::{doc, Document as BsonDocument};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tower::ServiceExt;
@@ -26,11 +26,17 @@ use faizdb_server::wire::run_wire_server;
 async fn send_op_msg(stream: &mut TcpStream, body: BsonDocument) -> BsonDocument {
     let msg = OpMsg::response(100, 0, body);
     let bytes = msg.encode().expect("Failed to encode OP_MSG");
-    stream.write_all(&bytes).await.expect("Failed to write to stream");
+    stream
+        .write_all(&bytes)
+        .await
+        .expect("Failed to write to stream");
     stream.flush().await.expect("Failed to flush stream");
 
     let mut head_buf = [0u8; HEADER_LEN];
-    stream.read_exact(&mut head_buf).await.expect("Failed to read header");
+    stream
+        .read_exact(&mut head_buf)
+        .await
+        .expect("Failed to read header");
     let header = MsgHeader::decode(&head_buf).expect("Failed to decode header");
 
     let body_len = (header.message_length as usize).saturating_sub(HEADER_LEN);
@@ -38,7 +44,10 @@ async fn send_op_msg(stream: &mut TcpStream, body: BsonDocument) -> BsonDocument
     full.extend_from_slice(&head_buf);
     if body_len > 0 {
         let mut body_buf = vec![0u8; body_len];
-        stream.read_exact(&mut body_buf).await.expect("Failed to read body");
+        stream
+            .read_exact(&mut body_buf)
+            .await
+            .expect("Failed to read body");
         full.extend_from_slice(&body_buf);
     }
 
@@ -48,9 +57,13 @@ async fn send_op_msg(stream: &mut TcpStream, body: BsonDocument) -> BsonDocument
 
 fn setup_test_app() -> (axum::Router, Arc<AppState>, String) {
     let db = Arc::new(DatabaseContext::new());
-    let auth = Arc::new(faizdb_security::auth::AuthManager::new(b"test-secret-key-remediation-1234"));
+    let auth = Arc::new(faizdb_security::auth::AuthManager::new(
+        b"test-secret-key-remediation-1234",
+    ));
     let user_store = Arc::new(UserStore::new());
-    let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new("test-region".to_string()));
+    let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(
+        "test-region".to_string(),
+    ));
 
     let token = auth.generate_token("admin", Role::Admin, 3600).unwrap();
 
@@ -86,18 +99,38 @@ async fn test_sql_and_mongo_update() {
         _ => panic!("Expected QueryResult::Updated"),
     }
 
-    let updated = col.find_all(None).into_iter().find(|d| d.get("player_id") == Some(&faizdb_core::document::model::Value::String("player_cyber_99".to_string()))).unwrap();
+    let updated = col
+        .find_all(None)
+        .into_iter()
+        .find(|d| {
+            d.get("player_id")
+                == Some(&faizdb_core::document::model::Value::String(
+                    "player_cyber_99".to_string(),
+                ))
+        })
+        .unwrap();
 
-    assert_eq!(updated.get("score"), Some(&faizdb_core::document::model::Value::Integer(1500)));
-    assert_eq!(updated.get("kills"), Some(&faizdb_core::document::model::Value::Integer(12)));
+    assert_eq!(
+        updated.get("score"),
+        Some(&faizdb_core::document::model::Value::Integer(1500))
+    );
+    assert_eq!(
+        updated.get("kills"),
+        Some(&faizdb_core::document::model::Value::Integer(12))
+    );
 
     // 2. Verify MongoDB updateOne with $set
-    let mongo_q = r#"db.leaderboards.updateOne({"player_id": "player_cyber_99"}, {"$set": {"kills": 20}})"#;
+    let mongo_q =
+        r#"db.leaderboards.updateOne({"player_id": "player_cyber_99"}, {"$set": {"kills": 20}})"#;
     let mongo_stmt = parse_query(mongo_q).expect("Mongo updateOne should parse");
-    db.execute(mongo_stmt).expect("Mongo updateOne should execute");
+    db.execute(mongo_stmt)
+        .expect("Mongo updateOne should execute");
 
     let final_doc = col.find_all(None).into_iter().next().unwrap();
-    assert_eq!(final_doc.get("kills"), Some(&faizdb_core::document::model::Value::Integer(20)));
+    assert_eq!(
+        final_doc.get("kills"),
+        Some(&faizdb_core::document::model::Value::Integer(20))
+    );
 }
 
 #[tokio::test]
@@ -116,7 +149,10 @@ async fn test_sql_and_mongo_order_by() {
     let stmt_desc = parse_query("SELECT * FROM ranks ORDER BY rank DESC").unwrap();
     match db.execute(stmt_desc).unwrap() {
         QueryResult::Documents(docs) => {
-            let ranks: Vec<i64> = docs.iter().filter_map(|d| d.get("rank").and_then(|v| v.as_i64())).collect();
+            let ranks: Vec<i64> = docs
+                .iter()
+                .filter_map(|d| d.get("rank").and_then(|v| v.as_i64()))
+                .collect();
             assert_eq!(ranks, vec![50, 25, 10]);
         }
         _ => panic!("Expected Documents"),
@@ -126,7 +162,10 @@ async fn test_sql_and_mongo_order_by() {
     let stmt_asc = parse_query("SELECT * FROM ranks ORDER BY rank ASC").unwrap();
     match db.execute(stmt_asc).unwrap() {
         QueryResult::Documents(docs) => {
-            let ranks: Vec<i64> = docs.iter().filter_map(|d| d.get("rank").and_then(|v| v.as_i64())).collect();
+            let ranks: Vec<i64> = docs
+                .iter()
+                .filter_map(|d| d.get("rank").and_then(|v| v.as_i64()))
+                .collect();
             assert_eq!(ranks, vec![10, 25, 50]);
         }
         _ => panic!("Expected Documents"),
@@ -136,7 +175,10 @@ async fn test_sql_and_mongo_order_by() {
     let mongo_stmt = parse_query(r#"db.ranks.find().sort({"rank": 1})"#).unwrap();
     match db.execute(mongo_stmt).unwrap() {
         QueryResult::Documents(docs) => {
-            let ranks: Vec<i64> = docs.iter().filter_map(|d| d.get("rank").and_then(|v| v.as_i64())).collect();
+            let ranks: Vec<i64> = docs
+                .iter()
+                .filter_map(|d| d.get("rank").and_then(|v| v.as_i64()))
+                .collect();
             assert_eq!(ranks, vec![10, 25, 50]);
         }
         _ => panic!("Expected Documents"),
@@ -154,10 +196,13 @@ async fn test_rest_pagination() {
             .uri("/v1/collections/items/documents")
             .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
-            .body(Body::from(json!({
-                "seq": i,
-                "name": format!("Item {i}")
-            }).to_string()))
+            .body(Body::from(
+                json!({
+                    "seq": i,
+                    "name": format!("Item {i}")
+                })
+                .to_string(),
+            ))
             .unwrap();
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -174,7 +219,9 @@ async fn test_rest_pagination() {
     let resp = app.oneshot(paginated_req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body: Value = serde_json::from_slice(&body_bytes).unwrap();
     assert!(body["success"].as_bool().unwrap());
     let data = body["data"].as_array().unwrap();
@@ -185,7 +232,9 @@ async fn test_rest_pagination() {
 async fn test_mongo_wire_drop_list_collections_count_and_sort() {
     let db = Arc::new(DatabaseContext::new());
     let user_store = Arc::new(UserStore::new());
-    user_store.create_user("remediation_admin", "admin-pass-2026", Role::Admin).unwrap();
+    user_store
+        .create_user("remediation_admin", "admin-pass-2026", Role::Admin)
+        .unwrap();
 
     // Seed collections
     let col1 = db.get_or_create_collection("users");
@@ -215,52 +264,82 @@ async fn test_mongo_wire_drop_list_collections_count_and_sort() {
     let mut stream = TcpStream::connect(addr).await.unwrap();
 
     // Authenticate
-    let auth_res = send_op_msg(&mut stream, doc! {
-        "authenticate": 1,
-        "user": "remediation_admin",
-        "pwd": "admin-pass-2026"
-    }).await;
+    let auth_res = send_op_msg(
+        &mut stream,
+        doc! {
+            "authenticate": 1,
+            "user": "remediation_admin",
+            "pwd": "admin-pass-2026"
+        },
+    )
+    .await;
     assert_eq!(auth_res.get_f64("ok").unwrap(), 1.0);
 
     // 1. Test listCollections with integer 1 (standard Mongo driver)
-    let list_res = send_op_msg(&mut stream, doc! {
-        "listCollections": 1,
-        "$db": "faizdb"
-    }).await;
+    let list_res = send_op_msg(
+        &mut stream,
+        doc! {
+            "listCollections": 1,
+            "$db": "faizdb"
+        },
+    )
+    .await;
     assert_eq!(list_res.get_f64("ok").unwrap(), 1.0);
     let cursor = list_res.get_document("cursor").unwrap();
     let first_batch = cursor.get_array("firstBatch").unwrap();
-    let col_names: Vec<&str> = first_batch.iter().filter_map(|b| b.as_document().and_then(|d| d.get_str("name").ok())).collect();
+    let col_names: Vec<&str> = first_batch
+        .iter()
+        .filter_map(|b| b.as_document().and_then(|d| d.get_str("name").ok()))
+        .collect();
     assert!(col_names.contains(&"users"));
     assert!(col_names.contains(&"orders"));
 
     // 2. Test count with query filter
-    let count_res = send_op_msg(&mut stream, doc! {
-        "count": "users",
-        "query": doc! { "status": "active" },
-        "$db": "faizdb"
-    }).await;
+    let count_res = send_op_msg(
+        &mut stream,
+        doc! {
+            "count": "users",
+            "query": doc! { "status": "active" },
+            "$db": "faizdb"
+        },
+    )
+    .await;
     assert_eq!(count_res.get_f64("ok").unwrap(), 1.0);
-    assert_eq!(count_res.get_i64("n").unwrap(), 1, "Only 1 document has status=active");
+    assert_eq!(
+        count_res.get_i64("n").unwrap(),
+        1,
+        "Only 1 document has status=active"
+    );
 
     // 3. Test find with sort
-    let find_res = send_op_msg(&mut stream, doc! {
-        "find": "users",
-        "filter": doc! {},
-        "sort": doc! { "level": -1 },
-        "$db": "faizdb"
-    }).await;
+    let find_res = send_op_msg(
+        &mut stream,
+        doc! {
+            "find": "users",
+            "filter": doc! {},
+            "sort": doc! { "level": -1 },
+            "$db": "faizdb"
+        },
+    )
+    .await;
     assert_eq!(find_res.get_f64("ok").unwrap(), 1.0);
     let cursor = find_res.get_document("cursor").unwrap();
     let batch = cursor.get_array("firstBatch").unwrap();
-    let levels: Vec<i64> = batch.iter().filter_map(|b| b.as_document().and_then(|d| d.get_i64("level").ok())).collect();
+    let levels: Vec<i64> = batch
+        .iter()
+        .filter_map(|b| b.as_document().and_then(|d| d.get_i64("level").ok()))
+        .collect();
     assert_eq!(levels, vec![30, 20, 10]);
 
     // 4. Test drop collection
-    let drop_res = send_op_msg(&mut stream, doc! {
-        "drop": "orders",
-        "$db": "faizdb"
-    }).await;
+    let drop_res = send_op_msg(
+        &mut stream,
+        doc! {
+            "drop": "orders",
+            "$db": "faizdb"
+        },
+    )
+    .await;
     assert_eq!(drop_res.get_f64("ok").unwrap(), 1.0);
 
     // Verify orders collection is removed
@@ -292,7 +371,10 @@ async fn test_lsm_sstable_compaction() {
     }
 
     let stats_before = engine.stats();
-    assert!(stats_before.sstable_count >= 1, "Should have created SSTables");
+    assert!(
+        stats_before.sstable_count >= 1,
+        "Should have created SSTables"
+    );
 
     // Trigger compaction
     let compacted_count = engine.compact().unwrap();
@@ -300,14 +382,20 @@ async fn test_lsm_sstable_compaction() {
 
     let stats_after = engine.stats();
     // After compaction, SSTables should be merged into a single consolidated SSTable
-    assert_eq!(stats_after.sstable_count, 1, "All SSTables should merge into 1 compacted SSTable");
+    assert_eq!(
+        stats_after.sstable_count, 1,
+        "All SSTables should merge into 1 compacted SSTable"
+    );
 
     // Verify all keys remain readable with correct values
     for round in 1..=5 {
         for i in 1..=20 {
             let key = format!("k_{round}_{i}").into_bytes();
             let expected_val = format!("val_{round}_{i}").into_bytes();
-            let val = engine.get(&key).unwrap().expect("Key should exist after compaction");
+            let val = engine
+                .get(&key)
+                .unwrap()
+                .expect("Key should exist after compaction");
             assert_eq!(val, expected_val);
         }
     }

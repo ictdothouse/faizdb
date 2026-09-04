@@ -10,9 +10,9 @@ use faizdb_core::document::model::Document;
 use faizdb_query::{parse_query, DatabaseContext};
 
 use super::proto::{
-    ChangeEventMsg, FaizDbService, HealthRequest, HealthResponse, InsertRequest,
-    InsertResponse, QueryRequest, QueryResponse, StreamRequest, VectorHit,
-    VectorSearchRequest, VectorSearchResponse,
+    ChangeEventMsg, FaizDbService, HealthRequest, HealthResponse, InsertRequest, InsertResponse,
+    QueryRequest, QueryResponse, StreamRequest, VectorHit, VectorSearchRequest,
+    VectorSearchResponse,
 };
 
 /// Implementation of the FaizDb gRPC service
@@ -38,7 +38,10 @@ impl FaizDbGrpcService {
     }
 
     #[allow(clippy::result_large_err)]
-    fn authenticate_request<T>(&self, req: &Request<T>) -> Result<(String, faizdb_security::Role), Status> {
+    fn authenticate_request<T>(
+        &self,
+        req: &Request<T>,
+    ) -> Result<(String, faizdb_security::Role), Status> {
         let no_auth = std::env::var("FAIZDB_NO_AUTH")
             .map(|v| v == "1" || v == "true")
             .unwrap_or(false);
@@ -47,7 +50,9 @@ impl FaizDbGrpcService {
         }
 
         let auth_header = match req.metadata().get("authorization") {
-            Some(val) => val.to_str().map_err(|_| Status::unauthenticated("Invalid authorization header encoding"))?,
+            Some(val) => val
+                .to_str()
+                .map_err(|_| Status::unauthenticated("Invalid authorization header encoding"))?,
             None => return Err(Status::unauthenticated("Missing 'authorization' metadata")),
         };
 
@@ -68,10 +73,14 @@ impl FaizDbGrpcService {
             let pass = parts.next().unwrap_or("");
             match self.user_store.authenticate(user, pass) {
                 Some(role) => Ok((user.to_string(), role)),
-                None => Err(Status::unauthenticated(format!("Invalid username or password for user '{user}'"))),
+                None => Err(Status::unauthenticated(format!(
+                    "Invalid username or password for user '{user}'"
+                ))),
             }
         } else {
-            Err(Status::unauthenticated("Authorization must start with 'Bearer ' or 'Basic '"))
+            Err(Status::unauthenticated(
+                "Authorization must start with 'Bearer ' or 'Basic '",
+            ))
         }
     }
 }
@@ -100,7 +109,9 @@ impl FaizDbService for FaizDbGrpcService {
                         | faizdb_query::Statement::CreateCollection { .. }
                         | faizdb_query::Statement::DropCollection { .. }
                         | faizdb_query::Statement::CreateIndex { .. } => {
-                            return Err(Status::permission_denied("ReadOnly role is not authorized to execute modifying queries"));
+                            return Err(Status::permission_denied(
+                                "ReadOnly role is not authorized to execute modifying queries",
+                            ));
                         }
                         _ => {}
                     }
@@ -108,8 +119,8 @@ impl FaizDbService for FaizDbGrpcService {
                 match self.db.execute(stmt) {
                     Ok(res) => {
                         let elapsed = start.elapsed().as_micros() as u64;
-                        let result_json = serde_json::to_string(&res)
-                            .unwrap_or_else(|_| "{}".to_string());
+                        let result_json =
+                            serde_json::to_string(&res).unwrap_or_else(|_| "{}".to_string());
                         Ok(Response::new(QueryResponse {
                             success: true,
                             result_json,
@@ -155,7 +166,11 @@ impl FaizDbService for FaizDbGrpcService {
         let col = self.db.get_or_create_collection(&req.collection);
         let docs = col.find_all(None);
 
-        let top_k = if req.top_k == 0 { 10 } else { req.top_k as usize };
+        let top_k = if req.top_k == 0 {
+            10
+        } else {
+            req.top_k as usize
+        };
 
         // Perform vector similarity calculation (Cosine similarity)
         let mut scored_hits = Vec::new();
@@ -163,11 +178,14 @@ impl FaizDbService for FaizDbGrpcService {
             let vec_opt = match doc.get("vector") {
                 Some(faizdb_core::document::model::Value::Vector(v)) => Some(v.clone()),
                 Some(faizdb_core::document::model::Value::Array(arr)) => {
-                    let nums: Option<Vec<f32>> = arr.iter().map(|item| match item {
-                        faizdb_core::document::model::Value::Float(f) => Some(*f as f32),
-                        faizdb_core::document::model::Value::Integer(i) => Some(*i as f32),
-                        _ => None,
-                    }).collect();
+                    let nums: Option<Vec<f32>> = arr
+                        .iter()
+                        .map(|item| match item {
+                            faizdb_core::document::model::Value::Float(f) => Some(*f as f32),
+                            faizdb_core::document::model::Value::Integer(i) => Some(*i as f32),
+                            _ => None,
+                        })
+                        .collect();
                     nums
                 }
                 _ => None,
@@ -209,7 +227,9 @@ impl FaizDbService for FaizDbGrpcService {
     ) -> Result<Response<InsertResponse>, Status> {
         let (_user, role) = self.authenticate_request(&request)?;
         if role == faizdb_security::Role::ReadOnly {
-            return Err(Status::permission_denied("ReadOnly role is not authorized to insert documents"));
+            return Err(Status::permission_denied(
+                "ReadOnly role is not authorized to insert documents",
+            ));
         }
 
         let req = request.into_inner();
@@ -225,13 +245,18 @@ impl FaizDbService for FaizDbGrpcService {
                 .ok_or_else(|| Status::invalid_argument("Expected JSON Object"))?;
 
             let doc_clone = doc.clone();
-            let id = col.insert(doc).map_err(|e| Status::internal(e.to_string()))?;
+            let id = col
+                .insert(doc)
+                .map_err(|e| Status::internal(e.to_string()))?;
             let id_str = id.as_str().to_string();
 
             // Emit change event
-            self.db.change_stream_bus().publish(
-                faizdb_core::stream::ChangeEvent::insert(&req.collection, doc_clone),
-            );
+            self.db
+                .change_stream_bus()
+                .publish(faizdb_core::stream::ChangeEvent::insert(
+                    &req.collection,
+                    doc_clone,
+                ));
 
             inserted_ids.push(id_str);
         }

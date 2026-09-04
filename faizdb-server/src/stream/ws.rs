@@ -1,6 +1,5 @@
 //! WebSocket Real-Time Change Stream Handlers.
 
-use std::sync::Arc;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -10,6 +9,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, info};
 
 use faizdb_query::DatabaseContext;

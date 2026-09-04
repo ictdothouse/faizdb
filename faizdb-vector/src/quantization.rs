@@ -8,8 +8,8 @@
 //! - **Asymmetric Distance Computation (ADC):** Calculates distances directly between unquantized
 //!   query vectors (`&[f32]`) and quantized stored vectors (`&[u8]`) with zero allocation overhead.
 
-use serde::{Deserialize, Serialize};
 use crate::distance::DistanceMetric;
+use serde::{Deserialize, Serialize};
 
 /// Supported vector quantization types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -67,7 +67,6 @@ impl QuantizedVector {
     }
 }
 
-
 /// Scalar Quantizer for converting between `f32` and `u8`
 #[derive(Debug, Clone, Default)]
 pub struct ScalarQuantizer;
@@ -86,16 +85,16 @@ impl ScalarQuantizer {
         let mut min = vector[0];
         let mut max = vector[0];
         for &val in vector.iter() {
-            if val < min { min = val; }
-            if val > max { max = val; }
+            if val < min {
+                min = val;
+            }
+            if val > max {
+                max = val;
+            }
         }
 
         let diff = max - min;
-        let scale = if diff.abs() < 1e-7 {
-            0.0
-        } else {
-            255.0 / diff
-        };
+        let scale = if diff.abs() < 1e-7 { 0.0 } else { 255.0 / diff };
 
         let mut data = Vec::with_capacity(vector.len());
         for &val in vector.iter() {
@@ -220,7 +219,10 @@ impl BinaryQuantizer {
 
     /// Normalized Hamming distance in range [0.0, 1.0]
     #[inline]
-    pub fn normalized_hamming_distance(a: &BinaryQuantizedVector, b: &BinaryQuantizedVector) -> f32 {
+    pub fn normalized_hamming_distance(
+        a: &BinaryQuantizedVector,
+        b: &BinaryQuantizedVector,
+    ) -> f32 {
         if a.dim == 0 {
             return 0.0;
         }
@@ -271,9 +273,13 @@ mod tests {
         let target = vec![0.1, 0.2, 0.2]; // norm is sqrt(0.01 + 0.04 + 0.04) = 0.3
 
         let quantized = ScalarQuantizer::quantize(&target);
-        let dist = ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Euclidean);
+        let dist =
+            ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Euclidean);
 
-        assert!((dist - 0.3).abs() < 0.02, "Euclidean distance should be ~0.3, got: {dist}");
+        assert!(
+            (dist - 0.3).abs() < 0.02,
+            "Euclidean distance should be ~0.3, got: {dist}"
+        );
     }
 
     #[test]
@@ -290,6 +296,9 @@ mod tests {
         assert_eq!(bin_a.bits.len(), 1); // 1 u64 word (8 bytes) holds up to 64 dims!
         assert_eq!(BinaryQuantizer::hamming_distance(&bin_a, &bin_b), 0);
         assert_eq!(BinaryQuantizer::hamming_distance(&bin_a, &bin_c), 6);
-        assert_eq!(BinaryQuantizer::normalized_hamming_distance(&bin_a, &bin_c), 1.0);
+        assert_eq!(
+            BinaryQuantizer::normalized_hamming_distance(&bin_a, &bin_c),
+            1.0
+        );
     }
 }

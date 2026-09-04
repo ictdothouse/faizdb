@@ -1,0 +1,255 @@
+# 🛡️ FaizDB Enterprise Production Standards & Operational Hardening Reference
+
+> **Dokumen Spesifikasi Teknikal & Piawaian Operasi Pengeluaran (Mission-Critical Enterprise Standards)**  
+> **Status Pengesahan:** 100% Lulus Ujian Regresi, Sifar Amaran (Zero-Warnings), 100% Safe Rust  
+> **Versi:** v0.1.0-Enterprise (September 2026)  
+> **Arkitek Enjin:** Ahmad Faiz
+
+---
+
+## 🌟 Pengenalan & Matlamat Piawaian
+
+Dalam persekitaran pengeluaran berskala besar (*mission-critical enterprise deployments*), kepantasan enjin semata-mata tidak memadai. Enjin pangkalan data mesti berdaya tahan terhadap beban lampau (*overload*), mengelakkan kegagalan rantai (*cascading failures*), serasi secara natif dengan orkestrasyen kontena awan (*Cloud-Native Kubernetes*), menyediakan sandaran autonomi, dan menjamin kedaulatan data pengguna tanpa sebarang *vendor lock-in*.
+
+Dokumen ini merekodkan secara terperinci **6 Piawaian Operasi Pengeluaran** yang diimplementasikan secara terbina dalam (*built-in*) pada FaizDB.
+
+---
+
+## 📋 Senarai Piawaian Pengeluaran FaizDB
+
+```
+                                  ┌────────────────────────────────────────────────────────┐
+                                  │            FaizDB Production Hardening                 │
+                                  │            Mission-Critical Standards                  │
+                                  └──────────────────────────┬─────────────────────────────┘
+                                                             │
+        ┌──────────────────────────────┬─────────────────────┴──────────────┬──────────────────────────────┐
+        ▼                              ▼                                    ▼                              ▼
+┌──────────────────┐          ┌──────────────────┐                ┌──────────────────┐          ┌──────────────────┐
+│   Piawaian 1:    │          │   Piawaian 2:    │                │   Piawaian 3:    │          │   Piawaian 4:    │
+│ Connection Gov.  │          │ WAL Group Commit │                │ Kubernetes K8s   │          │ Auto-Snapshot    │
+│ Tokio Semaphore  │          │ Atomic Batch I/O │                │ Liveness/Ready   │          │ Background Daemon│
+│ RFC 53300 Fatal  │          │ Amortized fsync  │                │ Zero Sidecars    │          │ Timestamp Rotate │
+└──────────────────┘          └──────────────────┘                └──────────────────┘          └──────────────────┘
+        │                              │                                    │                              │
+        └──────────────────────────────┴─────────────────────┬──────────────┴──────────────────────────────┘
+                                                             │
+                                ┌────────────────────────────┴───────────────────────────┐
+                                ▼                                                        ▼
+                    ┌────────────────────────┐                              ┌────────────────────────┐
+                    │      Piawaian 5:       │                              │      Piawaian 6:       │
+                    │ Open-Format Dump (CLI) │                              │ Wire Protocol Hardening│
+                    │ Streaming JSONL & SQL  │                              │ Extended Query & Joins │
+                    │ Anti-Vendor Lock-in    │                              │ Mongo O(1) Fast Path   │
+                    └────────────────────────┘                              └────────────────────────┘
+```
+
+---
+
+## 🛡️ Piawaian 1: Gabenor Bebanan Sambungan (Max Connections Governor)
+
+### 1.1 Latar Belakang & Masalah Industri
+Apabila ribuan klien atau aplikasi mengalami pepijat kebocoran sambungan (*connection leak*) atau serangan penafian perkhidmatan (DDoS), pangkalan data tanpa gabenor sambungan akan terus membuka fail deskriptor (FD) dan memulakan *task* baharu sehingga sistem operasi kehabisan memori (*Out-Of-Memory / OOM*), meruntuhkan keseluruhan proses pelayan.
+
+### 1.2 Mekanisme & Seni Bina FaizDB
+FaizDB melaksanakan kawalan kemasukan (*Admission Control*) menggunakan `tokio::sync::Semaphore` tak segerak (*asynchronous semaphore*) pada peringkat pintu masuk rangkaian (*TCP listener*):
+
+* **Fail Terlibat:**
+  - [`faizdb-server/src/wire/listener.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/wire/listener.rs) (MongoDB Gateway - Port 27017)
+  - [`faizdb-server/src/wire/postgres/listener.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/wire/postgres/listener.rs) (PostgreSQL Gateway - Port 5432)
+* **Konfigurasi:**
+  ```bash
+  export FAIZDB_MAX_CONNECTIONS=10000 # Nilai lalai: 10,000 sambungan serentak
+  ```
+* **Tingkah Laku Penolakan Anggun (*Graceful Rejection*):**
+  - **Protokol PostgreSQL:** Jika kapasiti penuh, sambungan baharu **tidak digugurkan secara kasar**. Sebaliknya, pelayan membalas dengan mesej ralat sah standard PostgreSQL Wire berserta kod ralat rasmi SQLSTATE:
+    ```text
+    Severity: FATAL
+    Code: 53300 (too_many_clients_already)
+    Message: sorry, too many clients already (limit: 10000)
+    ```
+    Klien SQL (seperti `psql`, Prisma, DBeaver) akan memahami ralat ini dengan teratur tanpa mengalami sambungan beku (*hanging*).
+  - **Protokol MongoDB:** Sambungan soket ditutup dengan kemas tanpa kebocoran fail deskriptor atau alokasi buffer pemprosesan kueri.
+
+---
+
+## ⚡ Piawaian 2: WAL Group Commit & Ketahanan Berkelompok (Batch Durability)
+
+### 2.1 Masalah Kekangan Fizikal IOPS
+Cakera storan moden (termasuk SSD NVMe gred perusahaan) terikat dengan had fizikal kitaran `fsync` (sekitar 20,000 – 100,000 IOPS). Melakukan panggilan sistem `fsync` bagi setiap transaksi individu akan melumpuhkan kelajuan sistem apabila ratusan ribu pengguna menulis data serentak.
+
+### 2.2 Inovasi Group Commit FaizDB
+FaizDB mengimplementasikan pengelompokan atomik tunggal (*single-buffer atomic batching*):
+
+* **Fail Terlibat:**
+  - [`faizdb-core/src/storage/wal.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/src/storage/wal.rs)
+  - [`faizdb-core/src/storage/engine.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/src/storage/engine.rs)
+* **Antara Muka API Teras:**
+  ```rust
+  // Menulis siri operasi dalam satu penimbal bersiri dengan 1 panggilan fsync tunggal
+  pub fn append_batch(&self, ops: &[(WalOpType, &[u8], &[u8])]) -> FaizResult<Vec<u64>>
+  
+  // Memasukkan kumpulan rekod ke MemTable dan WAL serentak secara atomik
+  pub fn put_batch(&self, entries: &[(&[u8], &[u8])]) -> FaizResult<()>
+  ```
+* **Jaminan Integriti:**
+  - Setiap rekod log dalam kumpulan (*batch*) mengekalkan penjajaran urutan LSN (*Log Sequence Number*) dan semakan integriti CRC32 unik.
+  - Sekiranya pelayan dimatikan secara paksa (`pkill -9`), enjin storan memainkan semula (*replay*) rekod log yang sah sehingga LSN terakhir yang berjaya di-commit.
+
+---
+
+## ☸️ Piawaian 3: Siasatan Kesihatan Natif Kubernetes (Liveness & Readiness Probes)
+
+### 3.1 Menghapuskan Keperluan "Sidecar" & "Operator"
+Pangkalan data era lama (PostgreSQL atau MySQL asal) memerlukan *sidecar container* tambahan atau *Kubernetes Operator* untuk mendedahkan status kesihatan nod melalui HTTP. FaizDB menyertakan *native HTTP probes* terus di dalam binari pelayan (Port 27018).
+
+* **Fail Terlibat:**
+  - [`faizdb-server/src/api/health.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/api/health.rs)
+  - [`faizdb-server/src/api/mod.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/api/mod.rs)
+
+### 3.2 Spesifikasi Endpoint
+1. **Liveness Probe (`GET /v1/health/liveness`):**
+   - **Tujuan:** Mengesahkan bahawa *event-loop* proses pelayan FaizDB tidak terhenti (*deadlock*) dan mampu membalas permintaan HTTP.
+   - **Respons:** `HTTP 200 OK` dengan payload:
+     ```json
+     {
+       "status": "alive"
+     }
+     ```
+   - **Tindakan Kubelet:** Jika gagal melepasi ambang kegagalan, Kubernetes akan memulakan semula (*restart*) Pod secara automatik.
+
+2. **Readiness Probe (`GET /v1/health/readiness`):**
+   - **Tujuan:** Mengesahkan bahawa enjin storan FaizDB dalam keadaan sedia menerima kueri trafik pengeluaran (bukan dalam mod pemulihan kerosakan atau migrasi cakera).
+   - **Respons:** `HTTP 200 OK` dengan payload:
+     ```json
+     {
+       "status": "ready",
+       "database": "faizdb",
+       "engine": "active"
+     }
+     ```
+   - **Tindakan Kubelet:** Jika endpoint belum bersedia, Kubernetes tidak akan menghalakan trafik perkhidmatan (*Service ingress/cluster IP*) ke Pod ini.
+
+### 3.3 Contoh Konfigurasi Kubernetes Pod / StatefulSet
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: faizdb-cluster
+spec:
+  serviceName: "faizdb"
+  replicas: 3
+  template:
+    spec:
+      containers:
+      - name: faizdb
+        image: ictdothouse/faizdb:v0.1.0
+        ports:
+        - containerPort: 27018
+          name: http-rest
+        - containerPort: 5432
+          name: postgres-wire
+        - containerPort: 27017
+          name: mongo-wire
+        - containerPort: 50051
+          name: grpc
+        livenessProbe:
+          httpGet:
+            path: /v1/health/liveness
+            port: 27018
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /v1/health/readiness
+            port: 27018
+          initialDelaySeconds: 3
+          periodSeconds: 5
+```
+
+---
+
+## ⏰ Piawaian 4: Daemon Sandaran Automatik Berjadual (Automated Snapshot Daemon)
+
+### 4.1 Sandaran Autonomi Tanpa Cron Luaran
+FaizDB mengandungi gelung latar belakang tak segerak (*asynchronous background daemon*) yang berjalan bersama pelayan pangkalan data. Bagi penggunaan *standalone* atau kontena Docker, pentadbir sistem tidak perlu lagi mengkonfigurasi *Linux cronjob* di luar kontena.
+
+* **Fail Terlibat:** [`faizdb-server/src/lib.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/src/lib.rs)
+* **Pembolehubah Persekitaran:**
+  | Pembolehubah | Nilai Lalai | Penerangan |
+  | :--- | :---: | :--- |
+  | `FAIZDB_AUTO_BACKUP` | `false` | Tetapkan kepada `true` untuk mengaktifkan daemon automatik |
+  | `FAIZDB_BACKUP_INTERVAL_SECS`| `3600` (1 jam) | Sela masa sandaran dalam unit saat |
+  | `FAIZDB_BACKUP_DIR` | `./backups` | Direktori destinasi fail snapshot |
+
+* **Penamaan Fail & Integriti:**
+  Snapshot disimpan secara atomik dengan format nama:
+  ```text
+  ./backups/faizdb_snapshot_<timestamp_nanos>.json
+  ```
+  Setiap snapshot merekodkan keadaan koleksi secara konsisten dengan pengecam LSN terkini bagi membolehkan pemulihan titik masa (*Point-In-Time Recovery / PITR*).
+
+---
+
+## 📦 Piawaian 5: Kebolehsalinan Data Format Terbuka (Anti-Vendor Lock-in)
+
+### 5.1 Kedaulatan & Pemindahan Data Bebas
+FaizDB mengamalkan polisi sumber terbuka mutlak tanpa memerangkap data pengguna (*Zero Vendor Lock-in*). Pengguna bebas mengekstrak keseluruhan pangkalan data ke format standard industri pada bila-bila masa menggunakan alat rasmi CLI.
+
+* **Fail Terlibat:** [`faizdb-cli/src/main.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-cli/src/main.rs)
+* **Sintaks Perintah:**
+  ```bash
+  # 1. Eksport ke format JSONL (sesuai untuk BigQuery, Snowflake, ClickHouse, Apache Spark)
+  faizdb dump --data-dir ./faizdb_data --format jsonl --output backup.jsonl
+
+  # 2. Eksport ke fail arahan SQL standard (serasi terus dengan PostgreSQL, MySQL, SQLite)
+  faizdb dump --data-dir ./faizdb_data --format sql --output backup.sql
+
+  # 3. Eksport koleksi terpilih sahaja
+  faizdb dump --data-dir ./faizdb_data --collection users --format sql --output users.sql
+  ```
+
+* **Kecekapan Penstriman (Streaming Efficiency):**
+  Proses eksport membaca kunci dan nilai terus melalui *Zero-Copy Iterator* enjin storan secara berurutan. Ini membolehkan eksport pangkalan data bersaiz puluhan gigabait berjalan dengan penggunaan memori RAM yang malar (*$O(1)$ memory consumption*) tanpa membebankan pelayan.
+
+---
+
+## 🔌 Piawaian 6: Pemerkasaan Protokol Wire (PostgreSQL & MongoDB)
+
+### 6.1 Protokol Kueri Lanjutan PostgreSQL (Extended Query Protocol)
+Bagi menyokong sepenuhnya pustaka ORM moden (Prisma, Hibernate, SQLAlchemy, TypeORM, `sqlx`), FaizDB menyokong kitaran penuh mesej Extended Query:
+* `'P'` (**Parse**): Menghurai dan menyimpan penyata berparameter (`$1`, `$2`, `$3`).
+* `'B'` (**Bind**): Mengikat nilai parameter ke dalam penyata bagi menghapuskan risiko serangan SQL Injection.
+* `'D'` (**Describe**): Memulangkan metadata lajur dan jenis data bagi prapenyediaan kueri.
+* `'E'` (**Execute**): Menjalankan kueri dan memulangkan hasil baris data.
+* `'S'` (**Sync**): Mengakhiri kitaran kueri dan memulangkan status `ReadyForQuery`.
+
+### 6.2 Carian Pantas $O(1)$ & Paginasi Kursor MongoDB Wire
+* **$O(1)$ ID Fast-Path:** Kueri yang mengandungi penapis `{ "_id": ... }` tidak lagi melakukan imbasan lelaran $O(N)$, sebaliknya terus mengakses indeks primer enjin storan pada kelajuan $O(1)$.
+* **Paginasi Kursor Berkeadaan (*Stateful Cursor*):** Menyokong arahan `getMore` dan `killCursors` MongoDB untuk penstriman data berskala besar tanpa menyekat sambungan klien.
+
+### 6.3 Relational SQL: Multi-Table Hash Join
+Enjin kueri FaizQL menyokong cantuman berbilang jadual (*Multi-Table Joins*):
+```sql
+SELECT orders.id, users.name, orders.amount 
+FROM orders 
+INNER JOIN users ON orders.user_id = users.id 
+WHERE orders.status = 'completed';
+```
+Enjin menggunakan algoritma **In-Memory Hash Join** berkelajuan tinggi yang memetakan baris padanan dengan masa lelurus $O(N + M)$.
+
+---
+
+## 📊 Matriks Status Pengesahan Pengeluaran
+
+| Komponen Pengeluaran | Fail Suite Ujian Pengesahan | Status | Bilangan Ujian |
+| :--- | :--- | :---: | :---: |
+| **Connection Governor & Probes** | [`faizdb-server/tests/test_production_hardening_and_features.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_production_hardening_and_features.rs) | **PASS** | 4 Ujian Integrasi |
+| **Extended Query & Hash Joins** | [`faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs) | **PASS** | 6 Ujian Integrasi |
+| **Wire Security & Throughput** | [`faizdb-server/tests/test_wire_security_and_performance.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_wire_security_and_performance.rs) | **PASS** | 5 Ujian Berjadual |
+| **Durability & Crash Recovery** | [`faizdb-core/tests/test_storage_durability.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/tests/test_storage_durability.rs) | **PASS** | 3 Ujian Integrasi |
+| **Audit Security & Correctness**| [`faizdb-server/tests/test_audit_security_and_correctness.rs`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-server/tests/test_audit_security_and_correctness.rs) | **PASS** | 3 Ujian Regresi |
+| **Saiz Binari Akhir (Release)** | `target/release/faizdb` (LTO Fat, Symbols Stripped) | **7.70 MB** | Sedia Diagihkan |
+
+---
+*FaizDB — Diarkitekkan untuk Kestabilan Maksimum, Keselamatan Memori Mutlak, dan Kesiapsiagaan Pengeluaran Global.*

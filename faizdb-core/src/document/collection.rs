@@ -7,8 +7,8 @@
 //! - Thread-safe for concurrent access
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -148,7 +148,10 @@ impl Collection {
     }
 
     /// Create a collection backed by a persistent StorageEngine (WAL + MemTable + SSTables)
-    pub fn with_storage(name: impl Into<String>, storage: Arc<crate::storage::engine::StorageEngine>) -> Self {
+    pub fn with_storage(
+        name: impl Into<String>,
+        storage: Arc<crate::storage::engine::StorageEngine>,
+    ) -> Self {
         let mut col = Self::new(name);
         col.storage = Some(storage);
         col
@@ -454,13 +457,13 @@ impl Collection {
 
     /// Delete a document by ID.
     pub fn delete_by_id(&self, id: &str) -> FaizResult<Document> {
-        let (_, doc) =
-            self.documents
-                .remove(id)
-                .ok_or_else(|| FaizError::DocumentNotFound {
-                    collection: self.config.name.clone(),
-                    id: id.to_string(),
-                })?;
+        let (_, doc) = self
+            .documents
+            .remove(id)
+            .ok_or_else(|| FaizError::DocumentNotFound {
+                collection: self.config.name.clone(),
+                id: id.to_string(),
+            })?;
 
         self.doc_count.fetch_sub(1, Ordering::Relaxed);
         self.total_size
@@ -483,7 +486,12 @@ impl Collection {
     }
 
     /// Full-Text Search with Okapi BM25 Ranking and Fuzzy typo-tolerance
-    pub fn search_text(&self, query: &str, fuzzy: bool, top_k: usize) -> Vec<(Document, f64, Vec<String>)> {
+    pub fn search_text(
+        &self,
+        query: &str,
+        fuzzy: bool,
+        top_k: usize,
+    ) -> Vec<(Document, f64, Vec<String>)> {
         let results = self.text_index.search(query, fuzzy, top_k);
         let mut out = Vec::new();
 
@@ -502,7 +510,8 @@ impl Collection {
         for id in &expired_ids {
             if let Some((_, doc)) = self.documents.remove(id) {
                 self.doc_count.fetch_sub(1, Ordering::Relaxed);
-                self.total_size.fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
+                self.total_size
+                    .fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
                 self.update_indexes_delete(&doc);
                 self.text_index.remove_document(id);
             }
@@ -609,14 +618,22 @@ impl Collection {
     }
 
     /// Check if a secondary index exists on a field
-    pub fn get_secondary_index(&self, field: &str) -> Option<Arc<crate::document::index::SecondaryIndex>> {
+    pub fn get_secondary_index(
+        &self,
+        field: &str,
+    ) -> Option<Arc<crate::document::index::SecondaryIndex>> {
         let index_name = format!("idx_{field}");
-        self.secondary_indexes.get(&index_name).map(|i| i.value().clone())
+        self.secondary_indexes
+            .get(&index_name)
+            .map(|i| i.value().clone())
     }
 
     /// List all secondary indexes
     pub fn list_secondary_indexes(&self) -> Vec<crate::document::index::SecondaryIndexDef> {
-        self.secondary_indexes.iter().map(|i| i.value().def.clone()).collect()
+        self.secondary_indexes
+            .iter()
+            .map(|i| i.value().def.clone())
+            .collect()
     }
 
     /// Drop a secondary index

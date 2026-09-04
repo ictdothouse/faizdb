@@ -1,8 +1,8 @@
 //! Change Stream Event Data Model.
 
-use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::document::model::{Document, Value};
@@ -55,7 +55,12 @@ impl ChangeEvent {
     }
 
     /// Create an Update change event
-    pub fn update(collection: &str, doc_id: &str, updated_fields: BTreeMap<String, Value>, full_doc: Option<Document>) -> Self {
+    pub fn update(
+        collection: &str,
+        doc_id: &str,
+        updated_fields: BTreeMap<String, Value>,
+        full_doc: Option<Document>,
+    ) -> Self {
         Self {
             resume_token: Uuid::now_v7().to_string(),
             timestamp: Utc::now(),

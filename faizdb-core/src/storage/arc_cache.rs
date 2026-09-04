@@ -44,7 +44,7 @@ impl ArcCacheStats {
 /// Adaptive Replacement Cache (ARC)
 pub struct ArcCache<K, V> {
     capacity: usize,
-    p: usize, // Target size for T1
+    p: usize,        // Target size for T1
     t1: VecDeque<K>, // Recent entries
     t2: VecDeque<K>, // Frequent entries
     b1: VecDeque<K>, // Ghost recent keys
@@ -170,7 +170,8 @@ impl<K: Clone + Eq + Hash, V: Clone> ArcCache<K, V> {
     /// Subroutine to evict an item from T1 or T2 to ghost lists B1 or B2
     fn replace(&mut self, _key: &K) {
         if !self.t1.is_empty()
-            && ((self.t1.len() > self.p) || (self.b2.iter().any(|k| k == _key) && self.t1.len() == self.p))
+            && ((self.t1.len() > self.p)
+                || (self.b2.iter().any(|k| k == _key) && self.t1.len() == self.p))
         {
             if let Some(old_k) = self.t1.pop_front() {
                 self.store.remove(&old_k);
@@ -240,6 +241,9 @@ mod tests {
         // Access k1 again -> Ghost hit in B1!
         cache.put("k1", 150);
         assert!(cache.stats().ghost_hits_b1 > 0);
-        assert!(cache.target_p() > 0, "p should dynamically adapt upwards on B1 hit");
+        assert!(
+            cache.target_p() > 0,
+            "p should dynamically adapt upwards on B1 hit"
+        );
     }
 }

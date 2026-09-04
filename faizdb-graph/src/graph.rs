@@ -3,9 +3,9 @@
 //! Enables rich relationship traversal, knowledge graphs, and hybrid AI GraphRAG
 //! without needing a separate graph database like Neo4j.
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use serde::{Deserialize, Serialize};
 use faizdb_core::document::model::Document;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Direction for traversing relationships
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,7 +60,11 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(from: impl Into<String>, to: impl Into<String>, relation: impl Into<String>) -> Self {
+    pub fn new(
+        from: impl Into<String>,
+        to: impl Into<String>,
+        relation: impl Into<String>,
+    ) -> Self {
         Self {
             from: from.into(),
             to: to.into(),
@@ -117,17 +121,83 @@ impl GraphStore {
         self.incoming.entry(id).or_default();
     }
 
-    /// Add an edge
+    /// Add an edge (deduplicating existing edges with identical from, to, and relation)
     pub fn add_edge(&mut self, edge: Edge) {
         let from = edge.from.clone();
         let to = edge.to.clone();
 
         // Ensure vertices exist
-        self.vertices.entry(from.clone()).or_insert_with(|| Vertex::new(from.clone(), "Generic"));
-        self.vertices.entry(to.clone()).or_insert_with(|| Vertex::new(to.clone(), "Generic"));
+        self.vertices
+            .entry(from.clone())
+            .or_insert_with(|| Vertex::new(from.clone(), "Generic"));
+        self.vertices
+            .entry(to.clone())
+            .or_insert_with(|| Vertex::new(to.clone(), "Generic"));
 
-        self.outgoing.entry(from).or_default().push(edge.clone());
-        self.incoming.entry(to).or_default().push(edge);
+        let out_list = self.outgoing.entry(from).or_default();
+        if let Some(existing) = out_list
+            .iter_mut()
+            .find(|e| e.to == edge.to && e.relation == edge.relation)
+        {
+            existing.weight = edge.weight;
+            existing.properties = edge.properties.clone();
+        } else {
+            out_list.push(edge.clone());
+        }
+
+        let in_list = self.incoming.entry(to).or_default();
+        if let Some(existing) = in_list
+            .iter_mut()
+            .find(|e| e.from == edge.from && e.relation == edge.relation)
+        {
+            existing.weight = edge.weight;
+            existing.properties = edge.properties;
+        } else {
+            in_list.push(edge);
+        }
+    }
+
+    /// Remove an edge between vertices, optionally matching a relation type
+    pub fn remove_edge(&mut self, from: &str, to: &str, relation: Option<&str>) -> bool {
+        let mut removed = false;
+        if let Some(out_list) = self.outgoing.get_mut(from) {
+            let initial_len = out_list.len();
+            out_list.retain(|e| !(e.to == to && relation.is_none_or(|r| e.relation == r)));
+            if out_list.len() < initial_len {
+                removed = true;
+            }
+        }
+        if let Some(in_list) = self.incoming.get_mut(to) {
+            in_list.retain(|e| !(e.from == from && relation.is_none_or(|r| e.relation == r)));
+        }
+        removed
+    }
+
+    /// Remove a vertex and all incident edges (preventing dangling references)
+    pub fn remove_vertex(&mut self, id: &str) -> bool {
+        if self.vertices.remove(id).is_none() {
+            return false;
+        }
+
+        // 1. Remove outgoing edges and clean corresponding incoming in peers
+        if let Some(out_edges) = self.outgoing.remove(id) {
+            for edge in out_edges {
+                if let Some(in_list) = self.incoming.get_mut(&edge.to) {
+                    in_list.retain(|e| e.from != id);
+                }
+            }
+        }
+
+        // 2. Remove incoming edges and clean corresponding outgoing in peers
+        if let Some(in_edges) = self.incoming.remove(id) {
+            for edge in in_edges {
+                if let Some(out_list) = self.outgoing.get_mut(&edge.from) {
+                    out_list.retain(|e| e.to != id);
+                }
+            }
+        }
+
+        true
     }
 
     /// Get vertex by ID
@@ -194,7 +264,11 @@ impl GraphStore {
                         if relation_filter.is_none_or(|r| edge.relation == r)
                             && visited.insert(edge.to.clone())
                         {
-                            queue.push_back((edge.to.clone(), Some(edge.relation.clone()), depth + 1));
+                            queue.push_back((
+                                edge.to.clone(),
+                                Some(edge.relation.clone()),
+                                depth + 1,
+                            ));
                         }
                     }
                 }
@@ -298,5 +372,40 @@ mod tests {
         let path = graph.shortest_path("A", "C").unwrap();
         // Should find direct shortcut A -> C
         assert_eq!(path, vec!["A", "C"]);
+    }
+
+    #[test]
+    fn test_graph_edge_deduplication_and_vertex_deletion() {
+        let mut graph = GraphStore::new();
+
+        // 1. Edge deduplication: adding identical edge 3 times should only result in 1 edge
+        graph.add_edge(Edge::new("User1", "User2", "FOLLOWS"));
+        graph.add_edge(Edge::new("User1", "User2", "FOLLOWS"));
+        graph.add_edge(Edge::new("User1", "User2", "FOLLOWS"));
+
+        assert_eq!(graph.edge_count(), 1, "Duplicate edges must be merged");
+        assert_eq!(graph.vertex_count(), 2);
+
+        // 2. Remove edge
+        assert!(graph.remove_edge("User1", "User2", Some("FOLLOWS")));
+        assert_eq!(graph.edge_count(), 0);
+
+        // 3. Multi-node dangling reference prevention
+        let mut graph2 = GraphStore::new();
+        graph2.add_edge(Edge::new("A", "B", "CONNECTS"));
+        graph2.add_edge(Edge::new("B", "C", "CONNECTS"));
+        assert_eq!(graph2.vertex_count(), 3);
+        assert_eq!(graph2.edge_count(), 2);
+
+        // Remove node B: all edges (A->B and B->C) must be cleanly pruned
+        assert!(graph2.remove_vertex("B"));
+        assert_eq!(graph2.vertex_count(), 2);
+        assert_eq!(
+            graph2.edge_count(),
+            0,
+            "All edges incident to B must be removed"
+        );
+        assert!(graph2.edges("A", Direction::Outgoing, None).is_empty());
+        assert!(graph2.edges("C", Direction::Incoming, None).is_empty());
     }
 }

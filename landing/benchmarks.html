@@ -163,7 +163,7 @@
         <tbody>
           <tr style="background: rgba(16, 185, 129, 0.08);">
             <td><strong>⚡ FaizDB (Full Server)</strong></td>
-            <td><strong>7.55 MB</strong> (7,918,880 bytes)</td>
+            <td><strong>7.70 MB</strong> (8,080,104 bytes)</td>
             <td><strong>23.05 MB</strong> (23,608 kB idle, 69.9 MB peak)</td>
             <td><strong>✅ Document + Vector + Graph + SQL + 4 Gateways</strong></td>
           </tr>
@@ -278,7 +278,7 @@
         <div><span class="c-cmd">./target/release/faizdb</span> benchmark --count 50000</div>
         <div style="margin-top: 8px;"><span class="c-comment"># 3. Measure kernel resident memory (VmRSS) directly from /proc/&lt;pid&gt;/status</span></div>
         <div><span class="c-cmd">bash</span> scripts/measure_memory.sh</div>
-        <div style="margin-top: 8px;"><span class="c-comment"># 4. Run full automated workspace test suite across all 23 suites (183 / 183 passing)</span></div>
+        <div style="margin-top: 8px;"><span class="c-comment"># 4. Run full automated workspace test suite across all 26 suites (196+ passing)</span></div>
         <div><span class="c-cmd">cargo</span> test --workspace</div>
       </div>
     </div>

@@ -26,7 +26,9 @@ fn test_wal_crash_recovery_durability() {
         for i in 0..100 {
             let key = format!("user:{i:04}");
             let val = format!("{{\"name\":\"User_{i}\",\"score\":{i}}}");
-            engine.put(key.as_bytes(), val.as_bytes()).expect("Put succeeds");
+            engine
+                .put(key.as_bytes(), val.as_bytes())
+                .expect("Put succeeds");
         }
         // Simulating crash: engine drops without manual flush or compaction
     }
@@ -65,7 +67,12 @@ fn test_sstable_bloom_filter_guarantee() {
         for i in 0..500 {
             let key = format!("key_{i:04}");
             let val = format!("val_{i:04}");
-            writer.write_entry(key.as_bytes(), &faizdb_core::storage::memtable::MemEntry::Value(val.as_bytes().to_vec())).expect("Add to SSTable");
+            writer
+                .write_entry(
+                    key.as_bytes(),
+                    &faizdb_core::storage::memtable::MemEntry::Value(val.as_bytes().to_vec()),
+                )
+                .expect("Add to SSTable");
         }
         writer.finish().expect("Finish SSTable");
     }
@@ -75,10 +82,16 @@ fn test_sstable_bloom_filter_guarantee() {
 
     for i in 0..500 {
         let key = format!("key_{i:04}");
-        assert!(reader.may_contain(key.as_bytes()), "Bloom filter must never produce false negative");
+        assert!(
+            reader.may_contain(key.as_bytes()),
+            "Bloom filter must never produce false negative"
+        );
         let val = reader.get(key.as_bytes()).expect("Get succeeds");
         assert!(val.is_some());
-        assert_eq!(val.unwrap().as_value().unwrap(), format!("val_{i:04}").as_bytes());
+        assert_eq!(
+            val.unwrap().as_value().unwrap(),
+            format!("val_{i:04}").as_bytes()
+        );
     }
 
     // Verify key definitely not present
@@ -105,10 +118,16 @@ fn test_collection_persistence_with_storage_engine() {
     // Verify retrieval through collection
     let retrieved = col.find_by_id(doc_id.as_str());
     assert!(retrieved.is_ok());
-    assert_eq!(retrieved.unwrap().get("name").unwrap().as_str().unwrap(), "Alice");
+    assert_eq!(
+        retrieved.unwrap().get("name").unwrap().as_str().unwrap(),
+        "Alice"
+    );
 
     // Verify raw key in storage engine starts with doc:customers:
     let expected_key = format!("doc:customers:{}", doc_id.as_str());
     let raw = storage.get(expected_key.as_bytes()).unwrap();
-    assert!(raw.is_some(), "Document must be stored under doc prefix in storage engine");
+    assert!(
+        raw.is_some(),
+        "Document must be stored under doc prefix in storage engine"
+    );
 }

@@ -111,8 +111,12 @@ impl DistributedQueryCoordinator {
         for part in partial_results {
             total_count += part.count;
             total_sum += part.sum;
-            if part.min < global_min { global_min = part.min; }
-            if part.max > global_max { global_max = part.max; }
+            if part.min < global_min {
+                global_min = part.min;
+            }
+            if part.max > global_max {
+                global_max = part.max;
+            }
             max_shard_time_us = max_shard_time_us.max(part.execution_time_us);
             combined_rows.extend(part.rows);
         }
@@ -133,14 +137,22 @@ impl DistributedQueryCoordinator {
             Some(AggregationOp::Min) => (
                 None,
                 None,
-                Some(if global_min.is_infinite() { 0.0 } else { global_min }),
+                Some(if global_min.is_infinite() {
+                    0.0
+                } else {
+                    global_min
+                }),
                 None,
             ),
             Some(AggregationOp::Max) => (
                 None,
                 None,
                 None,
-                Some(if global_max.is_infinite() { 0.0 } else { global_max }),
+                Some(if global_max.is_infinite() {
+                    0.0
+                } else {
+                    global_max
+                }),
             ),
             None => (None, None, None, None),
         };

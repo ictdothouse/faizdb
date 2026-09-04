@@ -20,12 +20,11 @@
 //! - Fast writes (sequential I/O, like MongoDB)
 //! - Fast reads (cached, indexed, like PostgreSQL)
 
+pub mod arc_cache;
+pub mod columnar;
+pub mod compaction;
 pub mod engine;
 pub mod memtable;
 pub mod sstable;
-pub mod wal;
-pub mod compaction;
-pub mod columnar;
 pub mod tiered;
-pub mod arc_cache;
-
+pub mod wal;

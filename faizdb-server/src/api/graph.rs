@@ -1,16 +1,16 @@
 //! Knowledge Graph REST API handlers supporting vertices, edges, BFS traversal, and shortest path.
 
-use std::sync::Arc;
 use axum::{
-    extract::{Path, Query, Json, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde::Deserialize;
+use std::sync::Arc;
 
+use crate::api::{ApiResponse, AppState};
 use faizdb_core::document::model::Document;
 use faizdb_graph::{Edge, Vertex};
-use crate::api::{ApiResponse, AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateVertexRequest {
@@ -45,7 +45,8 @@ pub async fn create_vertex(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateVertexRequest>,
 ) -> impl IntoResponse {
-    let doc = payload.properties
+    let doc = payload
+        .properties
         .and_then(Document::from_json_value)
         .unwrap_or_default();
 
@@ -58,7 +59,9 @@ pub async fn create_vertex(
                 if let Err(e) = storage.put(key.as_bytes(), &val) {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::err(format!("Failed to persist vertex to storage engine: {e}"))),
+                        Json(ApiResponse::err(format!(
+                            "Failed to persist vertex to storage engine: {e}"
+                        ))),
                     );
                 }
             }
@@ -73,11 +76,14 @@ pub async fn create_vertex(
 
     state.db.graph_store().write().add_vertex(vertex);
 
-    (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
-        "id": payload.id,
-        "label": payload.label,
-        "status": "Created",
-    }))))
+    (
+        StatusCode::CREATED,
+        Json(ApiResponse::ok(serde_json::json!({
+            "id": payload.id,
+            "label": payload.label,
+            "status": "Created",
+        }))),
+    )
 }
 
 pub async fn get_vertex(
@@ -89,13 +95,19 @@ pub async fn get_vertex(
     match graph.get_vertex(&id) {
         Some(v) => {
             let props = serde_json::to_value(&v.properties).unwrap_or(serde_json::Value::Null);
-            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-                "id": v.id,
-                "label": v.label,
-                "properties": props,
-            }))))
+            (
+                StatusCode::OK,
+                Json(ApiResponse::ok(serde_json::json!({
+                    "id": v.id,
+                    "label": v.label,
+                    "properties": props,
+                }))),
+            )
         }
-        None => (StatusCode::NOT_FOUND, Json(ApiResponse::err(format!("Vertex '{id}' not found")))),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::err(format!("Vertex '{id}' not found"))),
+        ),
     }
 }
 
@@ -103,7 +115,8 @@ pub async fn create_edge(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateEdgeRequest>,
 ) -> impl IntoResponse {
-    let doc = payload.properties
+    let doc = payload
+        .properties
         .and_then(Document::from_json_value)
         .unwrap_or_default();
 
@@ -116,13 +129,18 @@ pub async fn create_edge(
     edge.properties = doc;
 
     if let Some(storage) = state.db.storage() {
-        let key = format!("graph:e:{}:{}:{}", payload.from, payload.to, payload.relation);
+        let key = format!(
+            "graph:e:{}:{}:{}",
+            payload.from, payload.to, payload.relation
+        );
         match serde_json::to_vec(&edge) {
             Ok(val) => {
                 if let Err(e) = storage.put(key.as_bytes(), &val) {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::err(format!("Failed to persist edge to storage engine: {e}"))),
+                        Json(ApiResponse::err(format!(
+                            "Failed to persist edge to storage engine: {e}"
+                        ))),
                     );
                 }
             }
@@ -137,12 +155,15 @@ pub async fn create_edge(
 
     state.db.graph_store().write().add_edge(edge);
 
-    (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
-        "from": payload.from,
-        "to": payload.to,
-        "relation": payload.relation,
-        "status": "Created",
-    }))))
+    (
+        StatusCode::CREATED,
+        Json(ApiResponse::ok(serde_json::json!({
+            "from": payload.from,
+            "to": payload.to,
+            "relation": payload.relation,
+            "status": "Created",
+        }))),
+    )
 }
 
 pub async fn traverse_graph(
@@ -154,12 +175,15 @@ pub async fn traverse_graph(
     let graph = store.read();
     let paths = graph.traverse_bfs(&query.start, depth, query.relation.as_deref());
 
-    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-        "start": query.start,
-        "depth": depth,
-        "visited_count": paths.len(),
-        "paths": paths,
-    }))))
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "start": query.start,
+            "depth": depth,
+            "visited_count": paths.len(),
+            "paths": paths,
+        }))),
+    )
 }
 
 pub async fn shortest_path(
@@ -169,19 +193,23 @@ pub async fn shortest_path(
     let store = state.db.graph_store();
     let graph = store.read();
     match graph.shortest_path(&query.start, &query.target) {
-        Some(path) => (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-            "start": query.start,
-            "target": query.target,
-            "hop_count": path.len().saturating_sub(1),
-            "path": path,
-        })))),
-        None => (StatusCode::NOT_FOUND, Json(ApiResponse::err("No path found between vertices"))),
+        Some(path) => (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
+                "start": query.start,
+                "target": query.target,
+                "hop_count": path.len().saturating_sub(1),
+                "path": path,
+            }))),
+        ),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::err("No path found between vertices")),
+        ),
     }
 }
 
-pub async fn graph_stats(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn graph_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let store = state.db.graph_store();
     let graph = store.read();
     Json(ApiResponse::ok(serde_json::json!({

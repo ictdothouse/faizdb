@@ -91,14 +91,22 @@ fn test_chaos_concurrent_pn_counter_partition() {
     let mut counter_node3 = CrdtPnCounter::new("node3");
 
     // Node 1 receives 50 increments
-    for _ in 0..50 { counter_node1.increment(); }
+    for _ in 0..50 {
+        counter_node1.increment();
+    }
 
     // Node 2 receives 30 increments and 10 decrements
-    for _ in 0..30 { counter_node2.increment(); }
-    for _ in 0..10 { counter_node2.decrement(); }
+    for _ in 0..30 {
+        counter_node2.increment();
+    }
+    for _ in 0..10 {
+        counter_node2.decrement();
+    }
 
     // Node 3 receives 20 decrements
-    for _ in 0..20 { counter_node3.decrement(); }
+    for _ in 0..20 {
+        counter_node3.decrement();
+    }
 
     // Healing phase: Merge all states into each node
     let delta1 = counter_node1.clone();

@@ -1,19 +1,25 @@
 //! End-to-end integration tests for HTTP Transaction lifecycle, TLS serving, and $lookup aggregation.
 
-use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tower::ServiceExt;
 
 use faizdb_server::api::{create_router, AppState};
 
 fn setup_test_app() -> (axum::Router, Arc<AppState>, String) {
     let db = Arc::new(faizdb_query::DatabaseContext::new());
-    let auth = Arc::new(faizdb_security::auth::AuthManager::new(b"test-secret-key-1234567890123456"));
-    let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new("test-region".to_string()));
+    let auth = Arc::new(faizdb_security::auth::AuthManager::new(
+        b"test-secret-key-1234567890123456",
+    ));
+    let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(
+        "test-region".to_string(),
+    ));
 
-    let token = auth.generate_token("admin_user", faizdb_security::auth::Role::Admin, 3600).unwrap();
+    let token = auth
+        .generate_token("admin_user", faizdb_security::auth::Role::Admin, 3600)
+        .unwrap();
 
     let state = Arc::new(AppState {
         db,
@@ -48,7 +54,9 @@ async fn test_http_transaction_commit_no_deadlock() {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     let txn_id = body_json["data"]["txn_id"].as_str().unwrap().to_string();
     assert!(!txn_id.is_empty());
@@ -59,14 +67,17 @@ async fn test_http_transaction_commit_no_deadlock() {
         .uri("/v1/collections/orders/insert")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
-        .body(Body::from(json!({
-            "document": {
-                "_id": "order_101",
-                "item": "CyberTruck Model",
-                "amount": 42000.0
-            },
-            "txn_id": txn_id
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "document": {
+                    "_id": "order_101",
+                    "item": "CyberTruck Model",
+                    "amount": 42000.0
+                },
+                "txn_id": txn_id
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -77,17 +88,22 @@ async fn test_http_transaction_commit_no_deadlock() {
         .uri("/v1/transaction/commit")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
-        .body(Body::from(json!({
-            "txn_id": txn_id
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "txn_id": txn_id
+            })
+            .to_string(),
+        ))
         .unwrap();
-    let res = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        app.clone().oneshot(req)
-    ).await.expect("Transaction commit timed out! Deadlock detected").unwrap();
+    let res = tokio::time::timeout(std::time::Duration::from_secs(3), app.clone().oneshot(req))
+        .await
+        .expect("Transaction commit timed out! Deadlock detected")
+        .unwrap();
 
     assert_eq!(res.status(), StatusCode::OK);
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(body_json["data"]["status"], "Committed");
 
@@ -96,16 +112,21 @@ async fn test_http_transaction_commit_no_deadlock() {
         .uri("/v1/health")
         .body(Body::empty())
         .unwrap();
-    let res = tokio::time::timeout(
-        std::time::Duration::from_secs(1),
-        app.clone().oneshot(req)
-    ).await.expect("Health check timed out after commit! Server deadlocked").unwrap();
+    let res = tokio::time::timeout(std::time::Duration::from_secs(1), app.clone().oneshot(req))
+        .await
+        .expect("Health check timed out after commit! Server deadlocked")
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
     // 6. Verify committed document is visible in collection
     let col = state.db.get_or_create_collection("orders");
-    let doc = col.find_by_id("order_101").expect("Committed document not found in collection!");
-    assert_eq!(doc.get("item").unwrap().as_str().unwrap(), "CyberTruck Model");
+    let doc = col
+        .find_by_id("order_101")
+        .expect("Committed document not found in collection!");
+    assert_eq!(
+        doc.get("item").unwrap().as_str().unwrap(),
+        "CyberTruck Model"
+    );
 }
 
 #[tokio::test]
@@ -120,7 +141,9 @@ async fn test_http_transaction_rollback_no_deadlock() {
         .body(Body::empty())
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     let txn_id = body_json["data"]["txn_id"].as_str().unwrap().to_string();
 
@@ -130,13 +153,16 @@ async fn test_http_transaction_rollback_no_deadlock() {
         .uri("/v1/collections/orders/insert")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
-        .body(Body::from(json!({
-            "document": {
-                "_id": "order_cancelled",
-                "item": "Cancelled Item"
-            },
-            "txn_id": txn_id
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "document": {
+                    "_id": "order_cancelled",
+                    "item": "Cancelled Item"
+                },
+                "txn_id": txn_id
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -147,17 +173,22 @@ async fn test_http_transaction_rollback_no_deadlock() {
         .uri("/v1/transaction/rollback")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
-        .body(Body::from(json!({
-            "txn_id": txn_id
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "txn_id": txn_id
+            })
+            .to_string(),
+        ))
         .unwrap();
-    let res = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        app.clone().oneshot(req)
-    ).await.expect("Transaction rollback timed out! Deadlock detected").unwrap();
+    let res = tokio::time::timeout(std::time::Duration::from_secs(3), app.clone().oneshot(req))
+        .await
+        .expect("Transaction rollback timed out! Deadlock detected")
+        .unwrap();
 
     assert_eq!(res.status(), StatusCode::OK);
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(body_json["data"]["status"], "Aborted");
 
@@ -175,18 +206,26 @@ async fn test_vector_insert_into_missing_index_returns_404() {
         .uri("/v1/vector/insert")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
-        .body(Body::from(json!({
-            "index_name": "phantom_index_does_not_exist",
-            "id": "v1",
-            "vector": [0.1, 0.2, 0.3, 0.4]
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "index_name": "phantom_index_does_not_exist",
+                "id": "v1",
+                "vector": [0.1, 0.2, 0.3, 0.4]
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
-    assert!(body_json["error"].as_str().unwrap().contains("does not exist"));
+    assert!(body_json["error"]
+        .as_str()
+        .unwrap()
+        .contains("does not exist"));
 }
 
 #[tokio::test]
@@ -214,23 +253,28 @@ async fn test_rest_aggregation_lookup_pipeline() {
         .uri("/v1/collections/customers/aggregate")
         .header("authorization", format!("Bearer {token}"))
         .header("content-type", "application/json")
-        .body(Body::from(json!({
-            "pipeline": [
-                {
-                    "$lookup": {
-                        "from": "orders",
-                        "localField": "_id",
-                        "foreignField": "customer_id",
-                        "as": "customer_orders"
+        .body(Body::from(
+            json!({
+                "pipeline": [
+                    {
+                        "$lookup": {
+                            "from": "orders",
+                            "localField": "_id",
+                            "foreignField": "customer_id",
+                            "as": "customer_orders"
+                        }
                     }
-                }
-            ]
-        }).to_string()))
+                ]
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_json: Value = serde_json::from_slice(&body_bytes).unwrap();
     let results = body_json["data"].as_array().unwrap();
     assert_eq!(results.len(), 1);
@@ -243,7 +287,9 @@ async fn test_rest_aggregation_lookup_pipeline() {
 async fn test_tls_rustls_config_and_server_binding() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let (certs, key) = faizdb_security::generate_self_signed_cert(&["localhost".into(), "127.0.0.1".into()]).unwrap();
+    let (certs, key) =
+        faizdb_security::generate_self_signed_cert(&["localhost".into(), "127.0.0.1".into()])
+            .unwrap();
     let certs_der: Vec<Vec<u8>> = certs.into_iter().map(|c| c.to_vec()).collect();
     let key_der = match key {
         rustls_pki_types::PrivateKeyDer::Pkcs8(p) => p.secret_pkcs8_der().to_vec(),

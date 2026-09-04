@@ -40,8 +40,10 @@ pub mod transaction;
 pub mod ttl;
 
 // Re-export commonly used types
-pub use backup::{build_snapshot, load_and_verify_snapshot, save_snapshot_file, SnapshotArchive, SnapshotManifest};
-pub use cluster::{RaftNode, NodeRole, ShardRouter, ShardDistribution};
+pub use backup::{
+    build_snapshot, load_and_verify_snapshot, save_snapshot_file, SnapshotArchive, SnapshotManifest,
+};
+pub use cluster::{NodeRole, RaftNode, ShardDistribution, ShardRouter};
 pub use document::{Document, DocumentId, Value};
 pub use error::{FaizError, FaizResult};
 pub use search::{InvertedIndex, SearchResult};

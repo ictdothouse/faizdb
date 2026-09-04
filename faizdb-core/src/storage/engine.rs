@@ -176,7 +176,8 @@ impl StorageEngine {
         );
 
         let cache_capacity = config.block_cache_size.max(16);
-        let block_cache = parking_lot::Mutex::new(crate::storage::arc_cache::ArcCache::new(cache_capacity));
+        let block_cache =
+            parking_lot::Mutex::new(crate::storage::arc_cache::ArcCache::new(cache_capacity));
 
         Ok(Self {
             config,
@@ -215,7 +216,42 @@ impl StorageEngine {
         self.active_memtable.put(key.to_vec(), value.to_vec())?;
 
         // Update block cache
-        self.block_cache.lock().put(key.to_vec(), Some(value.to_vec()));
+        self.block_cache
+            .lock()
+            .put(key.to_vec(), Some(value.to_vec()));
+
+        // Step 3: Check if MemTable needs flushing
+        if self.active_memtable.should_flush() {
+            self.maybe_flush_memtable()?;
+        }
+
+        Ok(())
+    }
+
+    /// Put a batch of key-value pairs into the storage engine atomically (Group Commit).
+    ///
+    /// The entire batch is logged to the WAL in a single flush, providing maximum
+    /// write throughput and transactional durability.
+    pub fn put_batch(&self, entries: &[(&[u8], &[u8])]) -> FaizResult<()> {
+        self.check_open()?;
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        // Step 1: Write batch to WAL
+        if let Some(wal) = &self.wal {
+            let ops: Vec<(WalOpType, &[u8], &[u8])> = entries
+                .iter()
+                .map(|&(k, v)| (WalOpType::Put, k, v))
+                .collect();
+            wal.append_batch(&ops)?;
+        }
+
+        // Step 2: Write to MemTable & Block Cache
+        for &(k, v) in entries {
+            self.active_memtable.put(k.to_vec(), v.to_vec())?;
+            self.block_cache.lock().put(k.to_vec(), Some(v.to_vec()));
+        }
 
         // Step 3: Check if MemTable needs flushing
         if self.active_memtable.should_flush() {
@@ -498,7 +534,8 @@ impl StorageEngine {
             if ssts.len() < 2 {
                 return Ok(0);
             }
-            let paths: Vec<std::path::PathBuf> = ssts.iter().map(|s| s.path().to_path_buf()).collect();
+            let paths: Vec<std::path::PathBuf> =
+                ssts.iter().map(|s| s.path().to_path_buf()).collect();
             let count = ssts.len();
             (paths, count)
         };
@@ -566,11 +603,7 @@ impl std::fmt::Display for StorageStats {
             "  MemTable: {} entries ({} bytes)",
             self.memtable_entries, self.memtable_size
         )?;
-        writeln!(
-            f,
-            "  Immutable MemTables: {}",
-            self.immutable_memtables
-        )?;
+        writeln!(f, "  Immutable MemTables: {}", self.immutable_memtables)?;
         writeln!(
             f,
             "  SSTables: {} ({} total entries)",
@@ -666,10 +699,7 @@ mod tests {
         // Re-open — should recover from WAL
         {
             let engine = test_engine(dir.path());
-            assert_eq!(
-                engine.get(b"wal_key").unwrap(),
-                Some(b"wal_value".to_vec())
-            );
+            assert_eq!(engine.get(b"wal_key").unwrap(), Some(b"wal_value".to_vec()));
         }
     }
 
@@ -707,11 +737,7 @@ mod tests {
             let key = format!("key_{i:04}");
             let expected = format!("value_{i}");
             let result = engine.get(key.as_bytes()).unwrap();
-            assert_eq!(
-                result,
-                Some(expected.into_bytes()),
-                "Failed at key_{i:04}"
-            );
+            assert_eq!(result, Some(expected.into_bytes()), "Failed at key_{i:04}");
         }
 
         let stats = engine.stats();

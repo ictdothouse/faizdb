@@ -1,13 +1,16 @@
 //! TLS configuration, self-signed certificate generation, and PEM parsing using Rustls & Ring.
 
-use std::sync::Arc;
 use rustls::ServerConfig;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
+use std::sync::Arc;
 
 /// Generate a production-ready or development self-signed certificate and private key.
 pub fn generate_self_signed_cert(
     subject_alt_names: &[String],
-) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     let sans: Vec<String> = if subject_alt_names.is_empty() {
         vec!["localhost".to_string(), "127.0.0.1".to_string()]
     } else {
@@ -28,7 +31,10 @@ pub fn generate_self_signed_cert(
 pub fn load_pem_cert_and_key(
     cert_pem: &str,
     key_pem: &str,
-) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<
+    (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
     // Parse certificates from PEM
     let mut certs = Vec::new();
     let cert_parsed = pem::parse_many(cert_pem)?;
@@ -64,7 +70,8 @@ pub fn load_pem_cert_and_key(
         }
     }
 
-    let key = private_key.ok_or("No supported PRIVATE KEY (PKCS#8, PKCS#1, SEC1) found in key PEM")?;
+    let key =
+        private_key.ok_or("No supported PRIVATE KEY (PKCS#8, PKCS#1, SEC1) found in key PEM")?;
     Ok((certs, key))
 }
 
@@ -73,10 +80,11 @@ pub fn create_rustls_server_config(
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
 ) -> Result<Arc<ServerConfig>, rustls::Error> {
-    let mut config = ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_safe_default_protocol_versions()?
-        .with_no_client_auth()
-        .with_single_cert(certs, key)?;
+    let mut config =
+        ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()?
+            .with_no_client_auth()
+            .with_single_cert(certs, key)?;
 
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Ok(Arc::new(config))
@@ -88,7 +96,8 @@ mod tests {
 
     #[test]
     fn test_self_signed_cert_generation_and_server_config() {
-        let (certs, key) = generate_self_signed_cert(&["localhost".into(), "127.0.0.1".into()]).unwrap();
+        let (certs, key) =
+            generate_self_signed_cert(&["localhost".into(), "127.0.0.1".into()]).unwrap();
         assert!(!certs.is_empty());
 
         let server_config = create_rustls_server_config(certs, key);

@@ -4,13 +4,15 @@
 //! short-range links and upper layers contain fewer vertices with long-range skip links.
 //! Searching begins at top layer (fast skip) and zooms in at bottom layers.
 
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::distance::DistanceMetric;
-use crate::quantization::{BinaryQuantizedVector, BinaryQuantizer, QuantizationType, QuantizedVector, ScalarQuantizer};
+use crate::quantization::{
+    BinaryQuantizedVector, BinaryQuantizer, QuantizationType, QuantizedVector, ScalarQuantizer,
+};
 
 /// Configuration for the HNSW index
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,7 +109,10 @@ impl PartialOrd for Candidate {
 impl Ord for Candidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering so lowest distance has highest priority
-        other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
+        other
+            .distance
+            .partial_cmp(&self.distance)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -128,7 +133,9 @@ impl PartialOrd for MaxCandidate {
 
 impl Ord for MaxCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.distance.partial_cmp(&other.distance).unwrap_or(Ordering::Equal)
+        self.distance
+            .partial_cmp(&other.distance)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -149,6 +156,8 @@ pub struct HnswIndex {
     pub config: HnswConfig,
     nodes: Vec<HnswNode>,
     id_to_idx: HashMap<String, usize>,
+    #[serde(default)]
+    deleted: HashSet<usize>,
     entry_point: Option<usize>,
     max_level: usize,
 }
@@ -160,19 +169,30 @@ impl HnswIndex {
             config,
             nodes: Vec::new(),
             id_to_idx: HashMap::new(),
+            deleted: HashSet::new(),
             entry_point: None,
             max_level: 0,
         }
     }
 
-    /// Number of vectors stored
+    /// Number of active (non-deleted) vectors stored
     pub fn len(&self) -> usize {
+        self.id_to_idx.len()
+    }
+
+    /// Total number of nodes including tombstones
+    pub fn total_nodes(&self) -> usize {
         self.nodes.len()
     }
 
-    /// Check if empty
+    /// Count of deleted (tombstone) vectors
+    pub fn deleted_count(&self) -> usize {
+        self.deleted.len()
+    }
+
+    /// Check if empty of active vectors
     pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
+        self.id_to_idx.is_empty()
     }
 
     /// Check if index contains an entry with given ID
@@ -207,7 +227,9 @@ impl HnswIndex {
     fn dist_nodes(&self, a_idx: usize, b_idx: usize) -> f32 {
         let node_a = &self.nodes[a_idx];
         let node_b = &self.nodes[b_idx];
-        if let (Some(ref bv_a), Some(ref bv_b)) = (&node_a.binary_quantized, &node_b.binary_quantized) {
+        if let (Some(ref bv_a), Some(ref bv_b)) =
+            (&node_a.binary_quantized, &node_b.binary_quantized)
+        {
             BinaryQuantizer::normalized_hamming_distance(bv_a, bv_b)
         } else if let Some(ref qv_b) = node_b.quantized {
             if !node_a.vector.is_empty() {
@@ -245,6 +267,27 @@ impl HnswIndex {
             }
         }
         total
+    }
+
+    /// Delete a vector by ID using tombstone deletion (GDPR & dynamic dataset compliant)
+    pub fn delete(&mut self, id: &str) -> bool {
+        if let Some(idx) = self.id_to_idx.remove(id) {
+            self.deleted.insert(idx);
+            // If the deleted node was the entry point, re-elect a new entry point
+            if self.entry_point == Some(idx) {
+                self.entry_point = self.id_to_idx.values().copied().next();
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// In-place update of a vector with the same document ID
+    pub fn update(&mut self, id: impl Into<String>, vector: Vec<f32>) -> Result<(), String> {
+        let id_str = id.into();
+        self.delete(&id_str);
+        self.insert(id_str, vector)
     }
 
     /// Insert a vector with its external document ID
@@ -289,7 +332,6 @@ impl HnswIndex {
         self.nodes.push(new_node);
         self.id_to_idx.insert(id_str, new_idx);
 
-
         let ep = match self.entry_point {
             None => {
                 self.entry_point = Some(new_idx);
@@ -325,11 +367,17 @@ impl HnswIndex {
         let mut ep_candidates = vec![curr_ep];
 
         for lc in (0..=start_layer).rev() {
-            let candidates = self.search_layer(&vector, &ep_candidates, self.config.ef_construction, lc);
-            let m_max = if lc == 0 { self.config.m0 } else { self.config.m };
+            let candidates =
+                self.search_layer(&vector, &ep_candidates, self.config.ef_construction, lc);
+            let m_max = if lc == 0 {
+                self.config.m0
+            } else {
+                self.config.m
+            };
 
             // Select M best neighbors
-            let selected_neighbors: Vec<usize> = candidates.iter().take(m_max).map(|c| c.idx).collect();
+            let selected_neighbors: Vec<usize> =
+                candidates.iter().take(m_max).map(|c| c.idx).collect();
 
             // Connect new node -> neighbors
             self.nodes[new_idx].neighbors[lc] = selected_neighbors.clone();
@@ -380,13 +428,19 @@ impl HnswIndex {
     ) -> Vec<Candidate> {
         let mut visited = HashSet::new();
         let mut candidates = BinaryHeap::new(); // min-heap (best first)
-        let mut results = BinaryHeap::new();    // max-heap (furthest of top ef first)
+        let mut results = BinaryHeap::new(); // max-heap (furthest of top ef first)
 
         for &ep in enter_points {
             let dist = self.dist(query, ep);
             visited.insert(ep);
-            candidates.push(Candidate { idx: ep, distance: dist });
-            results.push(MaxCandidate { idx: ep, distance: dist });
+            candidates.push(Candidate {
+                idx: ep,
+                distance: dist,
+            });
+            results.push(MaxCandidate {
+                idx: ep,
+                distance: dist,
+            });
         }
 
         while let Some(current) = candidates.pop() {
@@ -401,8 +455,14 @@ impl HnswIndex {
                         let d = self.dist(query, nbr);
                         let furthest = results.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
                         if d < furthest || results.len() < ef {
-                            candidates.push(Candidate { idx: nbr, distance: d });
-                            results.push(MaxCandidate { idx: nbr, distance: d });
+                            candidates.push(Candidate {
+                                idx: nbr,
+                                distance: d,
+                            });
+                            results.push(MaxCandidate {
+                                idx: nbr,
+                                distance: d,
+                            });
                             if results.len() > ef {
                                 results.pop();
                             }
@@ -414,14 +474,25 @@ impl HnswIndex {
 
         let mut sorted: Vec<Candidate> = results
             .into_iter()
-            .map(|c| Candidate { idx: c.idx, distance: c.distance })
+            .map(|c| Candidate {
+                idx: c.idx,
+                distance: c.distance,
+            })
             .collect();
-        sorted.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(Ordering::Equal));
+        sorted.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(Ordering::Equal)
+        });
         sorted
     }
 
     /// Search K nearest neighbors with non-panicking dimension validation
-    pub fn try_search(&self, query: &[f32], top_k: usize) -> Result<Vec<VectorSearchResult>, String> {
+    pub fn try_search(
+        &self,
+        query: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<VectorSearchResult>, String> {
         if self.nodes.is_empty() || top_k == 0 {
             return Ok(Vec::new());
         }
@@ -439,7 +510,7 @@ impl HnswIndex {
 
     /// Search K nearest neighbors for a query vector
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<VectorSearchResult> {
-        if self.nodes.is_empty() || top_k == 0 {
+        if self.is_empty() || top_k == 0 {
             return Vec::new();
         }
 
@@ -450,8 +521,11 @@ impl HnswIndex {
         );
 
         let ep = match self.entry_point {
-            Some(ep) => ep,
-            None => return Vec::new(),
+            Some(ep) if !self.deleted.contains(&ep) => ep,
+            _ => match self.id_to_idx.values().copied().next() {
+                Some(valid_ep) => valid_ep,
+                None => return Vec::new(),
+            },
         };
 
         let mut curr_ep = ep;
@@ -476,11 +550,15 @@ impl HnswIndex {
         }
 
         // Layer 0: Search with ef_search
-        let ef = self.config.ef_search.max(top_k);
+        let ef = self
+            .config
+            .ef_search
+            .max(top_k + self.deleted.len().min(self.config.ef_search));
         let candidates = self.search_layer(query, &[curr_ep], ef, 0);
 
         candidates
             .into_iter()
+            .filter(|c| !self.deleted.contains(&c.idx))
             .take(top_k)
             .map(|c| {
                 let id = self.nodes[c.idx].id.clone();
@@ -519,7 +597,8 @@ impl HnswIndex {
 
     /// Load the HNSW index graph from a disk file path.
     pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, String> {
-        let bytes = std::fs::read(path).map_err(|e| format!("Failed to read HNSW index file: {e}"))?;
+        let bytes =
+            std::fs::read(path).map_err(|e| format!("Failed to read HNSW index file: {e}"))?;
         Self::from_bytes(&bytes)
     }
 }
@@ -624,7 +703,10 @@ mod tests {
         let results = index.search(&vectors[0], 3);
         assert!(!results.is_empty());
         assert_eq!(results[0].id, "item_0");
-        assert!(results[0].distance < 0.05, "Quantized distance to exact vector should be near 0");
+        assert!(
+            results[0].distance < 0.05,
+            "Quantized distance to exact vector should be near 0"
+        );
     }
 
     #[test]
@@ -684,6 +766,46 @@ mod tests {
         assert!(!results.is_empty());
         assert_eq!(results[0].id, "bin_doc_0");
     }
+
+    #[test]
+    fn test_hnsw_tombstone_deletion_and_update() {
+        let dim = 8;
+        let config = HnswConfig::new(dim, DistanceMetric::Euclidean);
+        let mut index = HnswIndex::new(config);
+
+        index
+            .insert("v1", vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            .unwrap();
+        index
+            .insert("v2", vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            .unwrap();
+        index
+            .insert("v3", vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            .unwrap();
+
+        assert_eq!(index.len(), 3);
+        assert_eq!(index.deleted_count(), 0);
+
+        // Search near v1
+        let res = index.search(&[0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1);
+        assert_eq!(res[0].id, "v1");
+
+        // Delete v1 (tombstone)
+        assert!(index.delete("v1"));
+        assert_eq!(index.len(), 2);
+        assert_eq!(index.deleted_count(), 1);
+        assert!(!index.contains_id("v1"));
+
+        // Search again near v1 — v1 must NOT appear
+        let res_after = index.search(&[0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2);
+        assert!(!res_after.iter().any(|r| r.id == "v1"));
+
+        // Update v2 with new coordinates
+        index
+            .update("v2", vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            .unwrap();
+        assert_eq!(index.len(), 2);
+        let res_v2 = index.search(&[0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1);
+        assert_eq!(res_v2[0].id, "v2");
+    }
 }
-
-

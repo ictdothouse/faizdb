@@ -7,11 +7,11 @@
 //! - Adaptive query execution: automatically chooses index scan or sequential scan
 //!   based on predicate selectivity and data distribution.
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
-use faizdb_core::document::model::{Document, Value};
 use crate::ast::{FilterExpr, Operator};
+use faizdb_core::document::model::{Document, Value};
 
 /// A single bucket within an equi-width or equi-depth histogram
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -66,7 +66,11 @@ impl ColumnHistogram {
             } else {
                 lower + step
             };
-            buckets.push(HistogramBucket { lower, upper, count: 0 });
+            buckets.push(HistogramBucket {
+                lower,
+                upper,
+                count: 0,
+            });
         }
 
         for &v in &values {
@@ -110,7 +114,8 @@ impl ColumnHistogram {
                             return 1.0 / total;
                         }
                         // Equality selectivity is fraction of bucket divided by distinct spread
-                        return (b.count as f64 / total).min(1.0 / (b.count as f64).sqrt().max(1.0));
+                        return (b.count as f64 / total)
+                            .min(1.0 / (b.count as f64).sqrt().max(1.0));
                     }
                 }
                 0.001 // Target out of range
@@ -219,8 +224,14 @@ impl TableStatistics {
             let null_count = field_nulls.get(&field).copied().unwrap_or(0);
 
             let numeric_vals = field_values.remove(&field).unwrap_or_default();
-            let min_numeric = numeric_vals.iter().cloned().min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let max_numeric = numeric_vals.iter().cloned().max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let min_numeric = numeric_vals
+                .iter()
+                .cloned()
+                .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let max_numeric = numeric_vals
+                .iter()
+                .cloned()
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let histogram = if !numeric_vals.is_empty() {
                 ColumnHistogram::build_equi_width(numeric_vals, 10)
@@ -263,7 +274,9 @@ impl CostModel {
     /// Compute estimated cost of a sequential table scan
     pub fn seq_scan_cost(total_docs: usize, avg_size_bytes: usize) -> f64 {
         let total_bytes = total_docs * avg_size_bytes.max(64);
-        let pages = ((total_bytes as f64) / (Self::PAGE_SIZE as f64)).ceil().max(1.0);
+        let pages = ((total_bytes as f64) / (Self::PAGE_SIZE as f64))
+            .ceil()
+            .max(1.0);
         (pages * Self::SEQ_PAGE_COST) + (total_docs as f64 * Self::CPU_TUPLE_COST)
     }
 
@@ -330,7 +343,10 @@ impl QueryOptimizer {
                     return 1.0;
                 }
                 // Independence assumption
-                exprs.iter().map(|e| Self::estimate_selectivity(stats, e)).fold(1.0, |acc, s| acc * s)
+                exprs
+                    .iter()
+                    .map(|e| Self::estimate_selectivity(stats, e))
+                    .fold(1.0, |acc, s| acc * s)
             }
             FilterExpr::Or(exprs) => {
                 if exprs.is_empty() {
@@ -343,9 +359,7 @@ impl QueryOptimizer {
                 }
                 1.0 - p_none
             }
-            FilterExpr::Not(inner) => {
-                1.0 - Self::estimate_selectivity(stats, inner)
-            }
+            FilterExpr::Not(inner) => 1.0 - Self::estimate_selectivity(stats, inner),
         }
     }
 
@@ -371,7 +385,8 @@ impl QueryOptimizer {
                     index_scan_cost: None,
                     selectivity_pct: 100.0,
                     estimated_rows: total_docs,
-                    rationale: "No filter predicate provided; full table sequential scan chosen".to_string(),
+                    rationale: "No filter predicate provided; full table sequential scan chosen"
+                        .to_string(),
                 };
             }
         };
@@ -438,15 +453,24 @@ mod tests {
 
         // Test < 30: should be approximately 0.29 - 0.30
         let sel_lt30 = hist.estimate_selectivity(&Operator::Lt, 30.0);
-        assert!((sel_lt30 - 0.30).abs() < 0.05, "Expected ~0.30, got {sel_lt30}");
+        assert!(
+            (sel_lt30 - 0.30).abs() < 0.05,
+            "Expected ~0.30, got {sel_lt30}"
+        );
 
         // Test >= 50: should be approximately 0.50
         let sel_gte50 = hist.estimate_selectivity(&Operator::Gte, 50.0);
-        assert!((sel_gte50 - 0.50).abs() < 0.05, "Expected ~0.50, got {sel_gte50}");
+        assert!(
+            (sel_gte50 - 0.50).abs() < 0.05,
+            "Expected ~0.50, got {sel_gte50}"
+        );
 
         // Test equality = 50: should be small (< 0.15)
         let sel_eq50 = hist.estimate_selectivity(&Operator::Eq, 50.0);
-        assert!(sel_eq50 < 0.15, "Expected small selectivity for Eq, got {sel_eq50}");
+        assert!(
+            sel_eq50 < 0.15,
+            "Expected small selectivity for Eq, got {sel_eq50}"
+        );
     }
 
     #[test]

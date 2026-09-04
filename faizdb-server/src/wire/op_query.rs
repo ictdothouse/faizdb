@@ -1,7 +1,7 @@
 //! Legacy MongoDB OP_QUERY (2004) and OP_REPLY (1) implementations.
 
-use std::io::{self, Cursor, Read, Write};
 use bson::Document as BsonDocument;
+use std::io::{self, Cursor, Read, Write};
 
 use super::header::{MsgHeader, OpCode, HEADER_LEN};
 

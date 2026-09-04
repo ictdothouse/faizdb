@@ -1,22 +1,22 @@
 //! Aggregation Pipeline Execution Engine.
 
-use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 
-use faizdb_core::document::model::{Document, Value};
 use crate::ast::FilterExpr;
+use faizdb_core::document::model::{Document, Value};
 
 /// Statistical accumulator operators in `$group` stage
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Accumulator {
-    Sum(String),    // "$field" or literal "1"
-    Avg(String),    // "$field"
-    Min(String),    // "$field"
-    Max(String),    // "$field"
-    Count,          // Equivalent to $sum: 1
-    Push(String),   // Accumulate array of values
-    First(String),  // First value encountered
-    Last(String),   // Last value encountered
+    Sum(String),   // "$field" or literal "1"
+    Avg(String),   // "$field"
+    Min(String),   // "$field"
+    Max(String),   // "$field"
+    Count,         // Equivalent to $sum: 1
+    Push(String),  // Accumulate array of values
+    First(String), // First value encountered
+    Last(String),  // Last value encountered
 }
 
 /// A stage in the aggregation pipeline
@@ -58,17 +58,21 @@ where
 {
     for stage in stages {
         docs = match stage {
-            PipelineStage::Match(filter) => docs
-                .into_iter()
-                .filter(|doc| filter.matches(doc))
-                .collect(),
-
-            PipelineStage::Group { id_expr, accumulators } => {
-                execute_group_stage(docs, id_expr, accumulators)
+            PipelineStage::Match(filter) => {
+                docs.into_iter().filter(|doc| filter.matches(doc)).collect()
             }
 
-            PipelineStage::Project { inclusions, exclusions } => {
-                docs.into_iter().map(|doc| {
+            PipelineStage::Group {
+                id_expr,
+                accumulators,
+            } => execute_group_stage(docs, id_expr, accumulators),
+
+            PipelineStage::Project {
+                inclusions,
+                exclusions,
+            } => docs
+                .into_iter()
+                .map(|doc| {
                     let mut new_doc = Document::new();
                     if let Some(id) = doc.get("_id") {
                         new_doc.set("_id", id.clone());
@@ -87,8 +91,8 @@ where
                         }
                     }
                     new_doc
-                }).collect()
-            }
+                })
+                .collect(),
 
             PipelineStage::Sort(sort_keys) => {
                 docs.sort_by(|a, b| {
@@ -125,7 +129,10 @@ where
                 vec![doc]
             }
 
-            PipelineStage::Unwind { path, preserve_null_and_empty_arrays } => {
+            PipelineStage::Unwind {
+                path,
+                preserve_null_and_empty_arrays,
+            } => {
                 let clean_path = path.strip_prefix('$').unwrap_or(path);
                 let mut unwound = Vec::new();
                 for doc in docs {
@@ -229,13 +236,14 @@ fn execute_group_stage(
                     if field == "1" || field_expr == "1" {
                         out_doc.set(out_field.clone(), group_docs.len() as i64);
                     } else {
-                        let sum: f64 = group_docs.iter().filter_map(|d| {
-                            match d.get_nested(field) {
+                        let sum: f64 = group_docs
+                            .iter()
+                            .filter_map(|d| match d.get_nested(field) {
                                 Some(Value::Integer(i)) => Some(*i as f64),
                                 Some(Value::Float(f)) => Some(*f),
                                 _ => None,
-                            }
-                        }).sum();
+                            })
+                            .sum();
                         if sum.fract() == 0.0 {
                             out_doc.set(out_field.clone(), sum as i64);
                         } else {
@@ -246,13 +254,14 @@ fn execute_group_stage(
 
                 Accumulator::Avg(field_expr) => {
                     let field = field_expr.trim_start_matches('$');
-                    let values: Vec<f64> = group_docs.iter().filter_map(|d| {
-                        match d.get_nested(field) {
+                    let values: Vec<f64> = group_docs
+                        .iter()
+                        .filter_map(|d| match d.get_nested(field) {
                             Some(Value::Integer(i)) => Some(*i as f64),
                             Some(Value::Float(f)) => Some(*f),
                             _ => None,
-                        }
-                    }).collect();
+                        })
+                        .collect();
 
                     if !values.is_empty() {
                         let avg = values.iter().sum::<f64>() / (values.len() as f64);
@@ -309,9 +318,10 @@ fn execute_group_stage(
 
                 Accumulator::Push(field_expr) => {
                     let field = field_expr.trim_start_matches('$');
-                    let arr: Vec<Value> = group_docs.iter().filter_map(|d| {
-                        d.get_nested(field).cloned()
-                    }).collect();
+                    let arr: Vec<Value> = group_docs
+                        .iter()
+                        .filter_map(|d| d.get_nested(field).cloned())
+                        .collect();
                     out_doc.set(out_field.clone(), Value::Array(arr));
                 }
 
@@ -349,23 +359,24 @@ mod tests {
     fn test_unwind_pipeline_stage() {
         let mut d1 = Document::new();
         d1.set("name", "Faiz");
-        d1.set("skills", Value::Array(vec![
-            Value::String("Rust".into()),
-            Value::String("Databases".into()),
-            Value::String("AI".into()),
-        ]));
+        d1.set(
+            "skills",
+            Value::Array(vec![
+                Value::String("Rust".into()),
+                Value::String("Databases".into()),
+                Value::String("AI".into()),
+            ]),
+        );
 
         let mut d2 = Document::new();
         d2.set("name", "Solo");
         d2.set("skills", Value::Array(vec![]));
 
         let docs = vec![d1, d2];
-        let stages = vec![
-            PipelineStage::Unwind {
-                path: "$skills".into(),
-                preserve_null_and_empty_arrays: false,
-            }
-        ];
+        let stages = vec![PipelineStage::Unwind {
+            path: "$skills".into(),
+            preserve_null_and_empty_arrays: false,
+        }];
 
         let res = execute_pipeline(docs.clone(), &stages);
         assert_eq!(res.len(), 3);
@@ -373,12 +384,10 @@ mod tests {
         assert_eq!(res[1].get("skills").unwrap().as_str().unwrap(), "Databases");
         assert_eq!(res[2].get("skills").unwrap().as_str().unwrap(), "AI");
 
-        let stages_preserve = vec![
-            PipelineStage::Unwind {
-                path: "$skills".into(),
-                preserve_null_and_empty_arrays: true,
-            }
-        ];
+        let stages_preserve = vec![PipelineStage::Unwind {
+            path: "$skills".into(),
+            preserve_null_and_empty_arrays: true,
+        }];
         let res_preserve = execute_pipeline(docs, &stages_preserve);
         assert_eq!(res_preserve.len(), 4);
     }
@@ -406,14 +415,12 @@ mod tests {
         let users = vec![user1, user2];
         let orders = vec![order1, order2];
 
-        let stages = vec![
-            PipelineStage::Lookup {
-                from: "orders".into(),
-                local_field: "_id".into(),
-                foreign_field: "user_id".into(),
-                as_field: "user_orders".into(),
-            }
-        ];
+        let stages = vec![PipelineStage::Lookup {
+            from: "orders".into(),
+            local_field: "_id".into(),
+            foreign_field: "user_id".into(),
+            as_field: "user_orders".into(),
+        }];
 
         let res = execute_pipeline_with_collections(users, &stages, |from_col| {
             if from_col == "orders" {

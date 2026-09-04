@@ -10,8 +10,8 @@
 //! is flushed to an SSTable on disk. A new empty MemTable is created
 //! for incoming writes.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use parking_lot::RwLock;
 
@@ -198,9 +198,7 @@ impl MemTable {
     /// Used when flushing to an SSTable.
     pub fn entries(&self) -> Vec<(Vec<u8>, MemEntry)> {
         let data = self.data.read();
-        data.iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
+        data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 
     /// Perform a range scan over keys.

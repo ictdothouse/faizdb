@@ -1,9 +1,7 @@
 //! Multi-node Raft Consensus, Persistent Replicated Log & Quorum Failover Integration Tests.
 
+use faizdb_core::cluster::raft::{InMemoryRaftRouter, RaftConfig, RaftNode};
 use tempfile::tempdir;
-use faizdb_core::cluster::raft::{
-    InMemoryRaftRouter, RaftConfig, RaftNode
-};
 
 #[test]
 fn test_multi_node_election_and_failover() {
@@ -46,7 +44,9 @@ fn test_multi_node_election_and_failover() {
     assert_eq!(info2.term, 2);
 
     // 3. Node 2 proposes new command
-    let idx = node2.propose("ADD_DOCUMENT", Some(serde_json::json!({ "id": "doc_100" }))).unwrap();
+    let idx = node2
+        .propose("ADD_DOCUMENT", Some(serde_json::json!({ "id": "doc_100" })))
+        .unwrap();
     assert_eq!(idx, 1);
 }
 
@@ -62,7 +62,8 @@ fn test_persistent_raft_log_and_recovery() {
     {
         let node = RaftNode::with_config("leader_node", "127.0.0.1:29010", config.clone());
         for i in 1..=5 {
-            node.propose(format!("CMD_{i}"), Some(serde_json::json!({ "val": i }))).unwrap();
+            node.propose(format!("CMD_{i}"), Some(serde_json::json!({ "val": i })))
+                .unwrap();
         }
         let info = node.get_info();
         assert_eq!(info.persistent_log_entries, 6); // Genesis + 5
@@ -72,7 +73,10 @@ fn test_persistent_raft_log_and_recovery() {
     {
         let recovered = RaftNode::with_config("leader_node", "127.0.0.1:29010", config);
         let info = recovered.get_info();
-        assert_eq!(info.persistent_log_entries, 6, "Must recover all 6 entries from disk");
+        assert_eq!(
+            info.persistent_log_entries, 6,
+            "Must recover all 6 entries from disk"
+        );
         assert_eq!(info.commit_index, 5);
     }
 }

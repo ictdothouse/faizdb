@@ -31,7 +31,10 @@ fn test_eddsa_full_auth_flow() {
 fn test_expired_token_is_rejected() {
     let auth = AuthManager::generate_ephemeral();
     let token = auth.generate_token("dave", Role::Admin, 0).unwrap();
-    assert!(auth.verify_token(&token).is_err(), "Expired token must be rejected");
+    assert!(
+        auth.verify_token(&token).is_err(),
+        "Expired token must be rejected"
+    );
 }
 
 #[test]
@@ -44,7 +47,10 @@ fn test_tampered_token_is_rejected() {
     let last = tampered.pop().unwrap();
     tampered.push(if last == 'A' { 'B' } else { 'A' });
 
-    assert!(auth.verify_token(&tampered).is_err(), "Tampered signature must be rejected");
+    assert!(
+        auth.verify_token(&tampered).is_err(),
+        "Tampered signature must be rejected"
+    );
 }
 
 #[test]
@@ -54,7 +60,10 @@ fn test_different_keypairs_cannot_cross_verify() {
 
     let token = auth1.generate_token("frank", Role::Admin, 3600).unwrap();
     // auth2 has a different public key — verification must fail
-    assert!(auth2.verify_token(&token).is_err(), "Cross-keypair verification must be rejected");
+    assert!(
+        auth2.verify_token(&token).is_err(),
+        "Cross-keypair verification must be rejected"
+    );
 }
 
 #[test]

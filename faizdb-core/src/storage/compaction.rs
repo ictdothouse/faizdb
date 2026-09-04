@@ -68,12 +68,15 @@ pub fn merge_sstables(
     }
     impl Ord for HeapEntry {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            self.key.cmp(&other.key)
+            self.key
+                .cmp(&other.key)
                 .then_with(|| other.table_idx.cmp(&self.table_idx))
         }
     }
     impl PartialOrd for HeapEntry {
-        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
     }
 
     // Open iterators for all input SSTables
@@ -98,7 +101,11 @@ pub fn merge_sstables(
     for (table_idx, iter) in iterators.iter_mut().enumerate() {
         if let Some(result) = iter.next() {
             let (key, entry) = result?;
-            heap.push(Reverse(HeapEntry { key, entry, table_idx }));
+            heap.push(Reverse(HeapEntry {
+                key,
+                entry,
+                table_idx,
+            }));
         }
     }
 
@@ -106,11 +113,20 @@ pub fn merge_sstables(
     let mut writer = SSTableWriter::new(output_path, 0)?;
     let mut last_written_key: Option<Vec<u8>> = None;
 
-    while let Some(Reverse(HeapEntry { key, entry, table_idx })) = heap.pop() {
+    while let Some(Reverse(HeapEntry {
+        key,
+        entry,
+        table_idx,
+    })) = heap.pop()
+    {
         // Advance the iterator that produced this entry
         if let Some(result) = iterators[table_idx].next() {
             let (next_key, next_entry) = result?;
-            heap.push(Reverse(HeapEntry { key: next_key, entry: next_entry, table_idx }));
+            heap.push(Reverse(HeapEntry {
+                key: next_key,
+                entry: next_entry,
+                table_idx,
+            }));
         }
 
         // Skip stale copies of the same key (already written the newest version)
@@ -180,7 +196,9 @@ mod tests {
             writer
                 .write_entry(b"alpha", &MemEntry::Value(b"new_a".to_vec()))
                 .unwrap();
-            writer.write_entry(b"charlie", &MemEntry::Tombstone).unwrap();
+            writer
+                .write_entry(b"charlie", &MemEntry::Tombstone)
+                .unwrap();
             writer.finish().unwrap();
         }
 

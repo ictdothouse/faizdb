@@ -25,14 +25,23 @@ fn test_basic_put_get_delete() {
     engine.put(b"users:1", b"{\"name\":\"Faiz\"}").unwrap();
     engine.put(b"users:2", b"{\"name\":\"Ali\"}").unwrap();
 
-    assert_eq!(engine.get(b"users:1").unwrap(), Some(b"{\"name\":\"Faiz\"}".to_vec()));
-    assert_eq!(engine.get(b"users:2").unwrap(), Some(b"{\"name\":\"Ali\"}".to_vec()));
+    assert_eq!(
+        engine.get(b"users:1").unwrap(),
+        Some(b"{\"name\":\"Faiz\"}".to_vec())
+    );
+    assert_eq!(
+        engine.get(b"users:2").unwrap(),
+        Some(b"{\"name\":\"Ali\"}".to_vec())
+    );
     assert_eq!(engine.get(b"users:99").unwrap(), None);
 
     engine.delete(b"users:1").unwrap();
     assert_eq!(engine.get(b"users:1").unwrap(), None);
     // users:2 must still be accessible
-    assert_eq!(engine.get(b"users:2").unwrap(), Some(b"{\"name\":\"Ali\"}".to_vec()));
+    assert_eq!(
+        engine.get(b"users:2").unwrap(),
+        Some(b"{\"name\":\"Ali\"}".to_vec())
+    );
 }
 
 #[test]
@@ -43,7 +52,10 @@ fn test_overwrite_returns_latest() {
     engine.put(b"config:mode", b"debug").unwrap();
     engine.put(b"config:mode", b"release").unwrap();
 
-    assert_eq!(engine.get(b"config:mode").unwrap(), Some(b"release".to_vec()));
+    assert_eq!(
+        engine.get(b"config:mode").unwrap(),
+        Some(b"release".to_vec())
+    );
 }
 
 #[test]
@@ -52,8 +64,18 @@ fn test_prefix_scan_isolation() {
     let engine = open_test_engine(dir.path());
 
     for i in 0..5u32 {
-        engine.put(format!("users:{i}").as_bytes(), format!("user_{i}").as_bytes()).unwrap();
-        engine.put(format!("orders:{i}").as_bytes(), format!("order_{i}").as_bytes()).unwrap();
+        engine
+            .put(
+                format!("users:{i}").as_bytes(),
+                format!("user_{i}").as_bytes(),
+            )
+            .unwrap();
+        engine
+            .put(
+                format!("orders:{i}").as_bytes(),
+                format!("order_{i}").as_bytes(),
+            )
+            .unwrap();
     }
 
     let users = engine.prefix_scan(b"users:").unwrap();
@@ -64,7 +86,10 @@ fn test_prefix_scan_isolation() {
 
     // Ensure no cross-contamination between prefixes
     for (key, _) in &users {
-        assert!(key.starts_with(b"users:"), "User scan returned non-user key");
+        assert!(
+            key.starts_with(b"users:"),
+            "User scan returned non-user key"
+        );
     }
 }
 

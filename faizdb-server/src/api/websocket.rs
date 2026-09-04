@@ -3,7 +3,10 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Path, State},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Path, State,
+    },
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -63,7 +66,9 @@ async fn handle_change_stream_socket(
         while let Ok(event) = rx.recv().await {
             if filter_for_task == "*" || filter_for_task == event.collection {
                 if let Ok(json) = serde_json::to_string(&event) {
-                    if sender.send(Message::Text(json.into())).await.is_err() { break; }
+                    if sender.send(Message::Text(json.into())).await.is_err() {
+                        break;
+                    }
                 }
             }
         }
@@ -71,7 +76,9 @@ async fn handle_change_stream_socket(
 
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
-            if let Message::Close(_) = msg { break; }
+            if let Message::Close(_) = msg {
+                break;
+            }
         }
     });
 
@@ -80,5 +87,8 @@ async fn handle_change_stream_socket(
         _ = (&mut recv_task) => send_task.abort(),
     };
 
-    debug!("WebSocket client disconnected from Change Stream '{}'", col_filter);
+    debug!(
+        "WebSocket client disconnected from Change Stream '{}'",
+        col_filter
+    );
 }

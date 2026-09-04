@@ -261,9 +261,9 @@ impl Wal {
         // Check if we need to rotate the WAL file
         if self.file_size.load(Ordering::Relaxed) + record_size > MAX_WAL_SIZE {
             // Flush current writer
-            writer.flush().map_err(|e| {
-                FaizError::io(self.current_path.lock().clone(), e)
-            })?;
+            writer
+                .flush()
+                .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
 
             // Create new WAL file
             let gen_num = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -300,6 +300,72 @@ impl Wal {
         self.file_size.fetch_add(record_size, Ordering::Relaxed);
 
         Ok(seq)
+    }
+
+    /// Append a batch of records to the WAL atomically (Group Commit).
+    ///
+    /// Serializes all records into a single contiguous buffer, writes to disk,
+    /// and flushes once, providing high-throughput batched write performance.
+    pub fn append_batch(&self, ops: &[(WalOpType, &[u8], &[u8])]) -> FaizResult<Vec<u64>> {
+        if ops.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut seqs = Vec::with_capacity(ops.len());
+        let mut combined_bytes = Vec::new();
+
+        for &(op_type, key, value) in ops {
+            let seq = self.sequence.fetch_add(1, Ordering::SeqCst);
+            seqs.push(seq);
+            let record = WalRecord {
+                sequence: seq,
+                op_type,
+                key: key.to_vec(),
+                value: value.to_vec(),
+            };
+            combined_bytes.extend_from_slice(&record.to_bytes());
+        }
+
+        let batch_size = combined_bytes.len() as u64;
+        let mut writer = self.writer.lock();
+
+        // Check if we need to rotate the WAL file
+        if self.file_size.load(Ordering::Relaxed) + batch_size > MAX_WAL_SIZE {
+            writer
+                .flush()
+                .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+
+            let gen_num = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+            let new_path = self.dir.join(format!("wal_{gen_num:06}.log"));
+
+            let new_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&new_path)
+                .map_err(|e| FaizError::io(&new_path, e))?;
+
+            let mut new_writer = BufWriter::new(new_file);
+            new_writer
+                .write_all(WAL_MAGIC)
+                .map_err(|e| FaizError::io(&new_path, e))?;
+
+            *writer = new_writer;
+            *self.current_path.lock() = new_path;
+            self.file_size.store(8, Ordering::Relaxed);
+        }
+
+        writer
+            .write_all(&combined_bytes)
+            .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+
+        writer
+            .flush()
+            .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+
+        self.file_size.fetch_add(batch_size, Ordering::Relaxed);
+
+        Ok(seqs)
     }
 
     /// Write a Put operation to the WAL

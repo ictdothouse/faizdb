@@ -1,7 +1,7 @@
 //! Parser for SQL, MongoDB, and FaizQL dialect statements into AST Statements.
 
+use crate::ast::{FilterExpr, Operator, Statement, TraverseClause, VectorSearchClause};
 use faizdb_core::document::model::{Document, Value};
-use crate::ast::{FilterExpr, Operator, Statement, VectorSearchClause, TraverseClause};
 
 /// Parse any supported query string into a [`Statement`]
 pub fn parse_query(input: &str) -> Result<Statement, String> {
@@ -71,28 +71,39 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
 /// Parse MongoDB syntax: `db.<collection>.<action>(<args>)`
 fn parse_mongo_query(input: &str) -> Result<Statement, String> {
     let without_db = input.strip_prefix("db.").unwrap();
-    let dot_pos = without_db.find('.').ok_or("Expected collection name after 'db.'")?;
+    let dot_pos = without_db
+        .find('.')
+        .ok_or("Expected collection name after 'db.'")?;
     let collection = without_db[..dot_pos].to_string();
 
     let remainder = &without_db[dot_pos + 1..];
-    let (remainder_method, remainder_args, sort_args) = if let Some(sort_idx) = remainder.find(".sort(") {
-        let first_call = remainder[..sort_idx].trim();
-        let sort_part = remainder[sort_idx + 6..].trim();
-        let sort_close = sort_part.rfind(')').unwrap_or(sort_part.len());
-        let s_args = sort_part[..sort_close].trim().to_string();
+    let (remainder_method, remainder_args, sort_args) =
+        if let Some(sort_idx) = remainder.find(".sort(") {
+            let first_call = remainder[..sort_idx].trim();
+            let sort_part = remainder[sort_idx + 6..].trim();
+            let sort_close = sort_part.rfind(')').unwrap_or(sort_part.len());
+            let s_args = sort_part[..sort_close].trim().to_string();
 
-        let p_open = first_call.find('(').ok_or("Expected '(' after method name")?;
-        let p_close = first_call.rfind(')').ok_or("Expected ')' after method args")?;
-        let m = first_call[..p_open].trim().to_string();
-        let a = first_call[p_open + 1..p_close].trim().to_string();
-        (m, a, Some(s_args))
-    } else {
-        let paren_open = remainder.find('(').ok_or("Expected '(' after method name")?;
-        let paren_close = remainder.rfind(')').ok_or("Expected ')' at end of statement")?;
-        let m = remainder[..paren_open].trim().to_string();
-        let a = remainder[paren_open + 1..paren_close].trim().to_string();
-        (m, a, None)
-    };
+            let p_open = first_call
+                .find('(')
+                .ok_or("Expected '(' after method name")?;
+            let p_close = first_call
+                .rfind(')')
+                .ok_or("Expected ')' after method args")?;
+            let m = first_call[..p_open].trim().to_string();
+            let a = first_call[p_open + 1..p_close].trim().to_string();
+            (m, a, Some(s_args))
+        } else {
+            let paren_open = remainder
+                .find('(')
+                .ok_or("Expected '(' after method name")?;
+            let paren_close = remainder
+                .rfind(')')
+                .ok_or("Expected ')' at end of statement")?;
+            let m = remainder[..paren_open].trim().to_string();
+            let a = remainder[paren_open + 1..paren_close].trim().to_string();
+            (m, a, None)
+        };
 
     let method = remainder_method.as_str();
     let args_str = remainder_args.as_str();
@@ -106,8 +117,12 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                 if let Some(obj) = v.as_object_mut() {
                     if let Some(t_val) = obj.remove("$traverse") {
                         if let Some(from_id) = t_val.get("from").and_then(|x| x.as_str()) {
-                            let depth = t_val.get("depth").and_then(|x| x.as_u64()).unwrap_or(1) as usize;
-                            let via = t_val.get("via").and_then(|x| x.as_str()).map(|s| s.to_string());
+                            let depth =
+                                t_val.get("depth").and_then(|x| x.as_u64()).unwrap_or(1) as usize;
+                            let via = t_val
+                                .get("via")
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string());
                             trav = Some(TraverseClause {
                                 start_id: from_id.to_string(),
                                 max_depth: depth,
@@ -153,6 +168,7 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                 skip: None,
                 vector_search: None,
                 traverse,
+                joins: Vec::new(),
             })
         }
         "update" | "updateOne" | "updateMany" => {
@@ -177,11 +193,12 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
             let mut updates = Vec::new();
             if let Some(u_val) = items.get(1) {
                 if let Some(u_obj) = u_val.as_object() {
-                    let fields_obj = if let Some(set_val) = u_obj.get("$set").and_then(|s| s.as_object()) {
-                        set_val
-                    } else {
-                        u_obj
-                    };
+                    let fields_obj =
+                        if let Some(set_val) = u_obj.get("$set").and_then(|s| s.as_object()) {
+                            set_val
+                        } else {
+                            u_obj
+                        };
                     for (k, v) in fields_obj {
                         updates.push((k.clone(), Value::from(v.clone())));
                     }
@@ -195,8 +212,8 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
             })
         }
         "insert" | "insertOne" => {
-            let doc_val: serde_json::Value =
-                serde_json::from_str(args_str).map_err(|e| format!("Invalid JSON document: {e}"))?;
+            let doc_val: serde_json::Value = serde_json::from_str(args_str)
+                .map_err(|e| format!("Invalid JSON document: {e}"))?;
             let doc = Document::from_json_value(doc_val).ok_or("Expected JSON object")?;
             Ok(Statement::Insert {
                 collection,
@@ -218,12 +235,22 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
         "createIndex" => {
             let val: serde_json::Value =
                 serde_json::from_str(args_str).unwrap_or_else(|_| serde_json::json!({}));
-            let field = val.as_object().and_then(|o| o.keys().next().cloned()).unwrap_or_else(|| "id".to_string());
-            let unique = args_str.to_lowercase().contains("unique") && args_str.to_lowercase().contains("true");
-            Ok(Statement::CreateIndex { collection, field, unique })
+            let field = val
+                .as_object()
+                .and_then(|o| o.keys().next().cloned())
+                .unwrap_or_else(|| "id".to_string());
+            let unique = args_str.to_lowercase().contains("unique")
+                && args_str.to_lowercase().contains("true");
+            Ok(Statement::CreateIndex {
+                collection,
+                field,
+                unique,
+            })
         }
         "dropIndex" => {
-            let field = args_str.trim_matches(|c| c == '"' || c == '\'' || c == ' ').to_string();
+            let field = args_str
+                .trim_matches(|c| c == '"' || c == '\'' || c == ' ')
+                .to_string();
             Ok(Statement::DropIndex { collection, field })
         }
         _ => Err(format!("Unsupported MongoDB method: '{method}'")),
@@ -334,6 +361,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     let mut vector_search = None;
     let mut traverse = None;
     let mut sort_by = None;
+    let mut joins = Vec::new();
 
     while i < tokens.len() {
         let token_upper = tokens[i].to_uppercase();
@@ -343,7 +371,12 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             let mut where_tokens = Vec::new();
             while i < tokens.len() {
                 let next_upper = tokens[i].to_uppercase();
-                if ["LIMIT", "SKIP", "OFFSET", "ORDER", "VECTOR", "TRAVERSE"].contains(&next_upper.as_str()) {
+                if [
+                    "LIMIT", "SKIP", "OFFSET", "ORDER", "VECTOR", "TRAVERSE", "JOIN", "INNER",
+                    "LEFT",
+                ]
+                .contains(&next_upper.as_str())
+                {
                     break;
                 }
                 where_tokens.push(tokens[i]);
@@ -352,6 +385,70 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             if !where_tokens.is_empty() {
                 filter = Some(parse_sql_where(&where_tokens.join(" "))?);
             }
+        } else if token_upper == "JOIN" || token_upper == "INNER" || token_upper == "LEFT" {
+            let join_type = if token_upper == "LEFT" {
+                i += 1;
+                if i < tokens.len() && tokens[i].eq_ignore_ascii_case("OUTER") {
+                    i += 1;
+                }
+                if i < tokens.len() && tokens[i].eq_ignore_ascii_case("JOIN") {
+                    i += 1;
+                }
+                crate::ast::JoinType::Left
+            } else {
+                if token_upper == "INNER" {
+                    i += 1;
+                }
+                if i < tokens.len() && tokens[i].eq_ignore_ascii_case("JOIN") {
+                    i += 1;
+                }
+                crate::ast::JoinType::Inner
+            };
+
+            let joined_table = if i < tokens.len() {
+                let name = tokens[i]
+                    .trim_matches(|c| c == '\'' || c == '"' || c == ';')
+                    .to_string();
+                i += 1;
+                name
+            } else {
+                return Err("Expected table name after JOIN".to_string());
+            };
+
+            if i < tokens.len() && tokens[i].eq_ignore_ascii_case("ON") {
+                i += 1;
+            } else {
+                return Err(format!("Expected ON clause after JOIN {joined_table}"));
+            }
+
+            let on_left = if i < tokens.len() {
+                let col = tokens[i].to_string();
+                i += 1;
+                col
+            } else {
+                return Err("Expected left column in JOIN ON clause".to_string());
+            };
+
+            if i < tokens.len() && tokens[i] == "=" {
+                i += 1;
+            } else {
+                return Err("Expected '=' in JOIN ON clause".to_string());
+            }
+
+            let on_right = if i < tokens.len() {
+                let col = tokens[i].trim_matches(';').to_string();
+                i += 1;
+                col
+            } else {
+                return Err("Expected right column in JOIN ON clause".to_string());
+            };
+
+            joins.push(crate::ast::JoinClause {
+                join_type,
+                collection: joined_table,
+                on_left,
+                on_right,
+            });
         } else if token_upper == "LIMIT" {
             i += 1;
             if i < tokens.len() {
@@ -371,7 +468,9 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
                 i += 1;
             }
             if i < tokens.len() {
-                let field = tokens[i].trim_matches(|c| c == ';' || c == ',' || c == '"' || c == '\'').to_string();
+                let field = tokens[i]
+                    .trim_matches(|c| c == ';' || c == ',' || c == '"' || c == '\'')
+                    .to_string();
                 i += 1;
                 let mut dir = 1i8;
                 if i < tokens.len() {
@@ -406,7 +505,10 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             }
             let top_k = if i < tokens.len() && tokens[i].eq_ignore_ascii_case("TOP") {
                 i += 1;
-                let k = tokens.get(i).and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
+                let k = tokens
+                    .get(i)
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(10);
                 i += 1;
                 k
             } else {
@@ -418,13 +520,21 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
                 && tokens[i].eq_ignore_ascii_case("USING")
                 && tokens[i + 1].eq_ignore_ascii_case("INDEX")
             {
-                index_name = Some(tokens[i + 2].trim_matches(|c| c == '\'' || c == '"' || c == ';').to_string());
+                index_name = Some(
+                    tokens[i + 2]
+                        .trim_matches(|c| c == '\'' || c == '"' || c == ';')
+                        .to_string(),
+                );
                 i += 3;
             }
 
             let vec_parsed: Result<Vec<f32>, _> = serde_json::from_str(vec_str.trim());
             if let Ok(v) = vec_parsed {
-                vector_search = Some(VectorSearchClause { vector: v, top_k, index_name });
+                vector_search = Some(VectorSearchClause {
+                    vector: v,
+                    top_k,
+                    index_name,
+                });
             }
         } else if token_upper == "TRAVERSE" {
             // Sintaks: TRAVERSE FROM "start_id" DEPTH <n> [VIA "relation_type"]
@@ -436,7 +546,9 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             if i < tokens.len() && tokens[i].eq_ignore_ascii_case("FROM") {
                 i += 1;
                 if i < tokens.len() {
-                    start_id = tokens[i].trim_matches(|c| c == '\'' || c == '"' || c == ';').to_string();
+                    start_id = tokens[i]
+                        .trim_matches(|c| c == '\'' || c == '"' || c == ';')
+                        .to_string();
                     i += 1;
                 }
             }
@@ -452,7 +564,11 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             if i < tokens.len() && tokens[i].eq_ignore_ascii_case("VIA") {
                 i += 1;
                 if i < tokens.len() {
-                    relation = Some(tokens[i].trim_matches(|c| c == '\'' || c == '"' || c == ';').to_string());
+                    relation = Some(
+                        tokens[i]
+                            .trim_matches(|c| c == '\'' || c == '"' || c == ';')
+                            .to_string(),
+                    );
                     i += 1;
                 }
             }
@@ -477,6 +593,7 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
         skip,
         vector_search,
         traverse,
+        joins,
     })
 }
 
@@ -600,7 +717,13 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
             if let Some(paren_end) = before_values.rfind(')') {
                 before_values[paren_start + 1..paren_end]
                     .split(',')
-                    .map(|s| s.trim().trim_matches('"').trim_matches('\'').trim().to_string())
+                    .map(|s| {
+                        s.trim()
+                            .trim_matches('"')
+                            .trim_matches('\'')
+                            .trim()
+                            .to_string()
+                    })
                     .collect()
             } else {
                 Vec::new()
@@ -635,7 +758,10 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
         });
     }
 
-    Err("INSERT requires JSON body or VALUES clause: INSERT INTO <table> (cols) VALUES (vals)".to_string())
+    Err(
+        "INSERT requires JSON body or VALUES clause: INSERT INTO <table> (cols) VALUES (vals)"
+            .to_string(),
+    )
 }
 
 /// Parse UPDATE <table> SET col1 = val1, col2 = val2 [WHERE ...]
@@ -650,7 +776,9 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
 
     let collection = tokens[1].trim_matches(';').to_string();
 
-    let set_pos = upper.find("SET").ok_or("Expected 'SET' clause in UPDATE statement")?;
+    let set_pos = upper
+        .find("SET")
+        .ok_or("Expected 'SET' clause in UPDATE statement")?;
     let after_set = clean[set_pos + 3..].trim();
 
     let (set_part, where_part) = if let Some(where_pos) = after_set.to_uppercase().find("WHERE") {
@@ -681,7 +809,9 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
     }
 
     if updates.is_empty() {
-        return Err("UPDATE statement requires at least one field assignment in SET clause".to_string());
+        return Err(
+            "UPDATE statement requires at least one field assignment in SET clause".to_string(),
+        );
     }
 
     let filter = if let Some(w) = where_part {
@@ -705,7 +835,10 @@ fn parse_delete_query(input: &str) -> Result<Statement, String> {
     }
 
     let collection = tokens[2].to_string();
-    let where_pos = input.to_uppercase().find("WHERE").ok_or("DELETE requires WHERE clause")?;
+    let where_pos = input
+        .to_uppercase()
+        .find("WHERE")
+        .ok_or("DELETE requires WHERE clause")?;
     let where_str = &input[where_pos + 5..].trim_end_matches(';').trim();
     let filter = parse_sql_where(where_str)?;
 
@@ -736,11 +869,17 @@ fn parse_create_index_query(input: &str) -> Result<Statement, String> {
     let upper = clean.to_uppercase();
     let unique = upper.contains("UNIQUE");
 
-    let on_pos = upper.find("ON").ok_or("Expected 'ON <collection>(<field>)' in CREATE INDEX")?;
+    let on_pos = upper
+        .find("ON")
+        .ok_or("Expected 'ON <collection>(<field>)' in CREATE INDEX")?;
     let target = clean[on_pos + 2..].trim();
-    
-    let paren_open = target.find('(').ok_or("Expected '(' around indexed field name")?;
-    let paren_close = target.find(')').ok_or("Expected ')' around indexed field name")?;
+
+    let paren_open = target
+        .find('(')
+        .ok_or("Expected '(' around indexed field name")?;
+    let paren_close = target
+        .find(')')
+        .ok_or("Expected ')' around indexed field name")?;
 
     let collection = target[..paren_open].trim().to_string();
     let field = target[paren_open + 1..paren_close].trim().to_string();
@@ -749,17 +888,28 @@ fn parse_create_index_query(input: &str) -> Result<Statement, String> {
         return Err("Invalid collection or field in CREATE INDEX".to_string());
     }
 
-    Ok(Statement::CreateIndex { collection, field, unique })
+    Ok(Statement::CreateIndex {
+        collection,
+        field,
+        unique,
+    })
 }
 
 /// Parse DROP INDEX [idx_name] ON <collection> or DROP INDEX <field> ON <collection>
 fn parse_drop_index_query(input: &str) -> Result<Statement, String> {
     let clean = input.trim_end_matches(';').trim();
     let upper = clean.to_uppercase();
-    let on_pos = upper.find("ON").ok_or("Expected 'ON <collection>' in DROP INDEX")?;
-    
+    let on_pos = upper
+        .find("ON")
+        .ok_or("Expected 'ON <collection>' in DROP INDEX")?;
+
     let index_part = clean[..on_pos].trim();
-    let field = index_part.split_whitespace().last().unwrap_or("").trim_start_matches("idx_").to_string();
+    let field = index_part
+        .split_whitespace()
+        .last()
+        .unwrap_or("")
+        .trim_start_matches("idx_")
+        .to_string();
     let collection = clean[on_pos + 2..].trim().to_string();
 
     Ok(Statement::DropIndex { collection, field })
@@ -773,7 +923,9 @@ mod tests {
     fn test_parse_mongo_find() {
         let stmt = parse_query(r#"db.users.find({"city": "KL", "age": {"$gt": 25}})"#).unwrap();
         match stmt {
-            Statement::Find { collection, filter, .. } => {
+            Statement::Find {
+                collection, filter, ..
+            } => {
                 assert_eq!(collection, "users");
                 assert!(filter.is_some());
             }
@@ -783,9 +935,15 @@ mod tests {
 
     #[test]
     fn test_parse_sql_select() {
-        let stmt = parse_query("SELECT * FROM users WHERE age >= 21 AND city = 'KL' LIMIT 10").unwrap();
+        let stmt =
+            parse_query("SELECT * FROM users WHERE age >= 21 AND city = 'KL' LIMIT 10").unwrap();
         match stmt {
-            Statement::Find { collection, limit, filter, .. } => {
+            Statement::Find {
+                collection,
+                limit,
+                filter,
+                ..
+            } => {
                 assert_eq!(collection, "users");
                 assert_eq!(limit, Some(10));
                 assert!(filter.is_some());
@@ -796,12 +954,19 @@ mod tests {
 
     #[test]
     fn test_parse_mongo_insert() {
-        let stmt = parse_query(r#"db.articles.insert({"title": "FaizDB AI", "views": 1000})"#).unwrap();
+        let stmt =
+            parse_query(r#"db.articles.insert({"title": "FaizDB AI", "views": 1000})"#).unwrap();
         match stmt {
-            Statement::Insert { collection, documents } => {
+            Statement::Insert {
+                collection,
+                documents,
+            } => {
                 assert_eq!(collection, "articles");
                 assert_eq!(documents.len(), 1);
-                assert_eq!(documents[0].get("title").unwrap().as_str(), Some("FaizDB AI"));
+                assert_eq!(
+                    documents[0].get("title").unwrap().as_str(),
+                    Some("FaizDB AI")
+                );
             }
             _ => panic!("Expected Statement::Insert"),
         }
@@ -811,7 +976,12 @@ mod tests {
     fn test_parse_faizql_traverse() {
         let stmt = parse_query("FIND prod TRAVERSE FROM 'p1' DEPTH 2").unwrap();
         match stmt {
-            Statement::Find { collection, traverse, filter, .. } => {
+            Statement::Find {
+                collection,
+                traverse,
+                filter,
+                ..
+            } => {
                 assert_eq!(collection, "prod");
                 assert!(filter.is_none());
                 let trav = traverse.expect("TRAVERSE clause should be parsed");
@@ -825,11 +995,21 @@ mod tests {
 
     #[test]
     fn test_parse_faizql_where_and_traverse() {
-        let stmt = parse_query("FIND prod WHERE cat = 'tech' TRAVERSE FROM 'p1' DEPTH 3 VIA 'related'").unwrap();
+        let stmt =
+            parse_query("FIND prod WHERE cat = 'tech' TRAVERSE FROM 'p1' DEPTH 3 VIA 'related'")
+                .unwrap();
         match stmt {
-            Statement::Find { collection, filter, traverse, .. } => {
+            Statement::Find {
+                collection,
+                filter,
+                traverse,
+                ..
+            } => {
                 assert_eq!(collection, "prod");
-                assert!(filter.is_some(), "WHERE filter must not be eaten by TRAVERSE");
+                assert!(
+                    filter.is_some(),
+                    "WHERE filter must not be eaten by TRAVERSE"
+                );
                 let trav = traverse.expect("TRAVERSE clause should be parsed");
                 assert_eq!(trav.start_id, "p1");
                 assert_eq!(trav.max_depth, 3);
@@ -841,9 +1021,17 @@ mod tests {
 
     #[test]
     fn test_parse_faizql_vector_using_index() {
-        let stmt = parse_query("FIND prod WHERE cat = 'tech' VECTOR NEAR [1.0, 0.5] TOP 3 USING INDEX 'custom_emb'").unwrap();
+        let stmt = parse_query(
+            "FIND prod WHERE cat = 'tech' VECTOR NEAR [1.0, 0.5] TOP 3 USING INDEX 'custom_emb'",
+        )
+        .unwrap();
         match stmt {
-            Statement::Find { collection, filter, vector_search, .. } => {
+            Statement::Find {
+                collection,
+                filter,
+                vector_search,
+                ..
+            } => {
                 assert_eq!(collection, "prod");
                 assert!(filter.is_some());
                 let vec_clause = vector_search.expect("VECTOR clause should be parsed");
@@ -858,7 +1046,12 @@ mod tests {
     fn test_parse_mongo_traverse() {
         let stmt = parse_query(r#"db.prod.find({"cat": "tech", "$traverse": {"from": "p1", "depth": 2, "via": "knows"}})"#).unwrap();
         match stmt {
-            Statement::Find { collection, filter, traverse, .. } => {
+            Statement::Find {
+                collection,
+                filter,
+                traverse,
+                ..
+            } => {
                 assert_eq!(collection, "prod");
                 assert!(filter.is_some());
                 let trav = traverse.expect("TRAVERSE clause should be parsed from Mongo syntax");
@@ -872,9 +1065,15 @@ mod tests {
 
     #[test]
     fn test_parse_sql_update() {
-        let stmt = parse_query("UPDATE users SET age = 30, city = 'Kuala Lumpur' WHERE name = 'Alice'").unwrap();
+        let stmt =
+            parse_query("UPDATE users SET age = 30, city = 'Kuala Lumpur' WHERE name = 'Alice'")
+                .unwrap();
         match stmt {
-            Statement::Update { collection, filter, updates } => {
+            Statement::Update {
+                collection,
+                filter,
+                updates,
+            } => {
                 assert_eq!(collection, "users");
                 assert_eq!(updates.len(), 2);
                 assert_eq!(updates[0].0, "age");
@@ -895,9 +1094,14 @@ mod tests {
 
     #[test]
     fn test_parse_mongo_update() {
-        let stmt = parse_query(r#"db.users.updateOne({"name": "Alice"}, {"$set": {"age": 31}})"#).unwrap();
+        let stmt =
+            parse_query(r#"db.users.updateOne({"name": "Alice"}, {"$set": {"age": 31}})"#).unwrap();
         match stmt {
-            Statement::Update { collection, updates, .. } => {
+            Statement::Update {
+                collection,
+                updates,
+                ..
+            } => {
                 assert_eq!(collection, "users");
                 assert_eq!(updates.len(), 1);
                 assert_eq!(updates[0].0, "age");
@@ -909,9 +1113,15 @@ mod tests {
 
     #[test]
     fn test_parse_sql_order_by() {
-        let stmt = parse_query("SELECT * FROM users WHERE age >= 21 ORDER BY age DESC LIMIT 10").unwrap();
+        let stmt =
+            parse_query("SELECT * FROM users WHERE age >= 21 ORDER BY age DESC LIMIT 10").unwrap();
         match stmt {
-            Statement::Find { collection, sort_by, limit, .. } => {
+            Statement::Find {
+                collection,
+                sort_by,
+                limit,
+                ..
+            } => {
                 assert_eq!(collection, "users");
                 assert_eq!(sort_by, Some(("age".to_string(), -1)));
                 assert_eq!(limit, Some(10));
@@ -924,11 +1134,49 @@ mod tests {
     fn test_parse_mongo_sort() {
         let stmt = parse_query(r#"db.users.find({"active": true}).sort({"score": 1})"#).unwrap();
         match stmt {
-            Statement::Find { collection, sort_by, .. } => {
+            Statement::Find {
+                collection,
+                sort_by,
+                ..
+            } => {
                 assert_eq!(collection, "users");
                 assert_eq!(sort_by, Some(("score".to_string(), 1)));
             }
             _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_sql_joins() {
+        let stmt = parse_query("SELECT * FROM orders JOIN customers ON orders.user_id = customers.id WHERE orders.amount > 100").unwrap();
+        match stmt {
+            Statement::Find {
+                collection,
+                filter,
+                joins,
+                ..
+            } => {
+                assert_eq!(collection, "orders");
+                assert!(filter.is_some());
+                assert_eq!(joins.len(), 1);
+                assert_eq!(joins[0].join_type, crate::ast::JoinType::Inner);
+                assert_eq!(joins[0].collection, "customers");
+                assert_eq!(joins[0].on_left, "orders.user_id");
+                assert_eq!(joins[0].on_right, "customers.id");
+            }
+            _ => panic!("Expected Statement::Find with JOIN"),
+        }
+
+        let left_stmt =
+            parse_query("SELECT * FROM orders LEFT JOIN profiles ON orders.user_id = profiles.id")
+                .unwrap();
+        match left_stmt {
+            Statement::Find { joins, .. } => {
+                assert_eq!(joins.len(), 1);
+                assert_eq!(joins[0].join_type, crate::ast::JoinType::Left);
+                assert_eq!(joins[0].collection, "profiles");
+            }
+            _ => panic!("Expected Statement::Find with LEFT JOIN"),
         }
     }
 }

@@ -8,10 +8,10 @@
 //! - Auto-generated IDs (UUID v7 — time-sortable)
 //! - Optional schema validation
 
-pub mod model;
 pub mod collection;
 pub mod index;
+pub mod model;
 
-pub use model::{Document, DocumentId, Value};
 pub use collection::Collection;
 pub use index::{SecondaryIndex, SecondaryIndexDef};
+pub use model::{Document, DocumentId, Value};

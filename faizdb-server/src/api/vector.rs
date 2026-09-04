@@ -1,15 +1,15 @@
 //! Vector Search REST API handlers powered by HNSW index.
 
-use std::sync::Arc;
 use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-use faizdb_vector::{HnswConfig, HnswIndex, DistanceMetric, QuantizationType};
 use crate::api::{ApiResponse, AppState};
+use faizdb_vector::{DistanceMetric, HnswConfig, HnswIndex, QuantizationType};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateVectorIndexRequest {
@@ -71,28 +71,38 @@ pub async fn create_vector_index(
                 if let Err(e) = storage.put(key.as_bytes(), &val) {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::err(format!("Failed to persist vector index metadata: {e}"))),
+                        Json(ApiResponse::err(format!(
+                            "Failed to persist vector index metadata: {e}"
+                        ))),
                     );
                 }
             }
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::err(format!("Failed to serialize vector index configuration: {e}"))),
+                    Json(ApiResponse::err(format!(
+                        "Failed to serialize vector index configuration: {e}"
+                    ))),
                 );
             }
         }
     }
 
     let index = Arc::new(parking_lot::RwLock::new(HnswIndex::new(config.clone())));
-    state.db.vector_indexes().insert(payload.name.clone(), index);
+    state
+        .db
+        .vector_indexes()
+        .insert(payload.name.clone(), index);
 
-    (StatusCode::CREATED, Json(ApiResponse::ok(serde_json::json!({
-        "index_name": payload.name,
-        "dimensions": payload.dimensions,
-        "metric": format!("{:?}", metric),
-        "status": "Ready",
-    }))))
+    (
+        StatusCode::CREATED,
+        Json(ApiResponse::ok(serde_json::json!({
+            "index_name": payload.name,
+            "dimensions": payload.dimensions,
+            "metric": format!("{:?}", metric),
+            "status": "Ready",
+        }))),
+    )
 }
 
 pub async fn insert_vector(
@@ -152,14 +162,18 @@ pub async fn insert_vector(
                 if let Err(e) = storage.put(storage_key.as_bytes(), &val) {
                     return (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(ApiResponse::err(format!("Failed to persist vector to storage engine: {e}"))),
+                        Json(ApiResponse::err(format!(
+                            "Failed to persist vector to storage engine: {e}"
+                        ))),
                     );
                 }
             }
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ApiResponse::err(format!("Failed to serialize vector payload: {e}"))),
+                    Json(ApiResponse::err(format!(
+                        "Failed to serialize vector payload: {e}"
+                    ))),
                 );
             }
         }
@@ -169,21 +183,28 @@ pub async fn insert_vector(
     let mut index = index_lock.write();
     let total_nodes = index.len() + 1;
     match index.insert(payload.id.clone(), payload.vector.clone()) {
-        Ok(_) => {
-            (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
+        Ok(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
                 "id": payload.id,
                 "index_name": payload.index_name,
                 "total_nodes": total_nodes,
-            }))))
-        }
+            }))),
+        ),
         Err(e) => {
             // Compensating removal: clean up persisted record to prevent orphaned disk state
             if let Some(storage) = state.db.storage() {
                 if let Err(del_err) = storage.delete(storage_key.as_bytes()) {
-                    tracing::warn!("Compensating removal failed for key '{}': {del_err}", storage_key);
+                    tracing::warn!(
+                        "Compensating removal failed for key '{}': {del_err}",
+                        storage_key
+                    );
                 }
             }
-            (StatusCode::BAD_REQUEST, Json(ApiResponse::err(format!("Failed to insert vector: {e}"))))
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::err(format!("Failed to insert vector: {e}"))),
+            )
         }
     }
 }
@@ -194,7 +215,15 @@ pub async fn search_vector(
 ) -> impl IntoResponse {
     let index_lock = match state.db.vector_indexes().get(&payload.index_name) {
         Some(idx) => idx.clone(),
-        None => return (StatusCode::NOT_FOUND, Json(ApiResponse::err(format!("Vector index '{}' not found", payload.index_name)))),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::err(format!(
+                    "Vector index '{}' not found",
+                    payload.index_name
+                ))),
+            )
+        }
     };
 
     let top_k = payload.top_k.unwrap_or(10);
@@ -238,17 +267,18 @@ pub async fn search_vector(
         })
         .collect();
 
-    (StatusCode::OK, Json(ApiResponse::ok(serde_json::json!({
-        "index_name": payload.index_name,
-        "query_dimensions": payload.query.len(),
-        "top_k": top_k,
-        "results": mapped,
-    }))))
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "index_name": payload.index_name,
+            "query_dimensions": payload.query.len(),
+            "top_k": top_k,
+            "results": mapped,
+        }))),
+    )
 }
 
-pub async fn list_vector_indexes(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn list_vector_indexes(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let indexes: Vec<serde_json::Value> = state
         .db
         .vector_indexes()

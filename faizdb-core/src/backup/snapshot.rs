@@ -6,12 +6,12 @@
 //! - Point-in-Time Recovery (PITR) with continuous WAL replay
 //! - Zero-Trust AES-256-GCM encryption at rest with PBKDF2/SHA256 key derivation
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
 use chrono::{DateTime, Utc};
 use crc32fast::Hasher;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use uuid::Uuid;
 
 use crate::document::model::Document;
@@ -77,9 +77,7 @@ pub struct WalReplayRecord {
 }
 
 /// Generate a full snapshot data structure with integrity checksum
-pub fn build_snapshot(
-    collections: &[(String, Vec<Document>)],
-) -> SnapshotArchive {
+pub fn build_snapshot(collections: &[(String, Vec<Document>)]) -> SnapshotArchive {
     build_snapshot_with_lsn(collections, 0, 0)
 }
 
@@ -101,7 +99,10 @@ pub fn build_snapshot_with_lsn(
             .map(|d| {
                 let mut v = serde_json::to_value(&d.fields).unwrap_or(serde_json::Value::Null);
                 if let Some(obj) = v.as_object_mut() {
-                    obj.insert("_id".to_string(), serde_json::Value::String(d.id.as_str().to_string()));
+                    obj.insert(
+                        "_id".to_string(),
+                        serde_json::Value::String(d.id.as_str().to_string()),
+                    );
                 }
                 v
             })
@@ -159,7 +160,10 @@ pub fn build_incremental_snapshot(
             .map(|d| {
                 let mut v = serde_json::to_value(&d.fields).unwrap_or(serde_json::Value::Null);
                 if let Some(obj) = v.as_object_mut() {
-                    obj.insert("_id".to_string(), serde_json::Value::String(d.id.as_str().to_string()));
+                    obj.insert(
+                        "_id".to_string(),
+                        serde_json::Value::String(d.id.as_str().to_string()),
+                    );
                 }
                 v
             })
@@ -240,7 +244,10 @@ pub fn apply_incremental_snapshot(
             let new_id = new_doc.get("_id").and_then(|v| v.as_str());
             if let Some(id_str) = new_id {
                 // If doc exists, replace it
-                if let Some(pos) = entry.iter().position(|d| d.get("_id").and_then(|v| v.as_str()) == Some(id_str)) {
+                if let Some(pos) = entry
+                    .iter()
+                    .position(|d| d.get("_id").and_then(|v| v.as_str()) == Some(id_str))
+                {
                     entry[pos] = new_doc.clone();
                 } else {
                     entry.push(new_doc.clone());
@@ -314,20 +321,26 @@ pub fn encrypt_snapshot(
 
     // 1. Generate 16-byte random salt
     let mut salt = [0u8; 16];
-    rng.fill(&mut salt).map_err(|e| format!("RNG failed: {e}"))?;
+    rng.fill(&mut salt)
+        .map_err(|e| format!("RNG failed: {e}"))?;
 
     // 2. Generate 12-byte random nonce
     let mut nonce_bytes = [0u8; 12];
-    rng.fill(&mut nonce_bytes).map_err(|e| format!("RNG failed: {e}"))?;
+    rng.fill(&mut nonce_bytes)
+        .map_err(|e| format!("RNG failed: {e}"))?;
 
     // 3. Derive 32-byte key
     let key_bytes = derive_aes_key(passphrase, &salt);
-    let unbound_key = UnboundKey::new(&AES_256_GCM, &key_bytes).map_err(|e| format!("Key error: {e}"))?;
+    let unbound_key =
+        UnboundKey::new(&AES_256_GCM, &key_bytes).map_err(|e| format!("Key error: {e}"))?;
 
     struct OneNonce(Option<[u8; 12]>);
     impl NonceSequence for OneNonce {
         fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-            self.0.take().map(Nonce::assume_unique_for_key).ok_or(ring::error::Unspecified)
+            self.0
+                .take()
+                .map(Nonce::assume_unique_for_key)
+                .ok_or(ring::error::Unspecified)
         }
     }
 
@@ -370,12 +383,16 @@ pub fn decrypt_snapshot(
     nonce_bytes.copy_from_slice(&envelope.nonce);
 
     let key_bytes = derive_aes_key(passphrase, &envelope.salt);
-    let unbound_key = UnboundKey::new(&AES_256_GCM, &key_bytes).map_err(|e| format!("Key error: {e}"))?;
+    let unbound_key =
+        UnboundKey::new(&AES_256_GCM, &key_bytes).map_err(|e| format!("Key error: {e}"))?;
 
     struct OneNonce(Option<[u8; 12]>);
     impl NonceSequence for OneNonce {
         fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-            self.0.take().map(Nonce::assume_unique_for_key).ok_or(ring::error::Unspecified)
+            self.0
+                .take()
+                .map(Nonce::assume_unique_for_key)
+                .ok_or(ring::error::Unspecified)
         }
     }
 
@@ -384,7 +401,10 @@ pub fn decrypt_snapshot(
     let mut in_out = envelope.ciphertext.clone();
     let decrypted_bytes = opening_key
         .open_in_place(Aad::empty(), &mut in_out)
-        .map_err(|_| "Decryption failed: incorrect passphrase or corrupted ciphertext (AEAD tag mismatch)".to_string())?;
+        .map_err(|_| {
+            "Decryption failed: incorrect passphrase or corrupted ciphertext (AEAD tag mismatch)"
+                .to_string()
+        })?;
 
     // Verify plaintext checksum
     let mut hasher = Hasher::new();
@@ -398,7 +418,8 @@ pub fn decrypt_snapshot(
         ));
     }
 
-    let archive: SnapshotArchive = serde_json::from_slice(decrypted_bytes).map_err(|e| e.to_string())?;
+    let archive: SnapshotArchive =
+        serde_json::from_slice(decrypted_bytes).map_err(|e| e.to_string())?;
     Ok(archive)
 }
 
@@ -432,9 +453,14 @@ impl PitrEngine {
                     if let Some(payload) = &rec.payload {
                         let mut doc_val = payload.clone();
                         if let Some(obj) = doc_val.as_object_mut() {
-                            obj.insert("_id".to_string(), serde_json::Value::String(rec.doc_id.clone()));
+                            obj.insert(
+                                "_id".to_string(),
+                                serde_json::Value::String(rec.doc_id.clone()),
+                            );
                         }
-                        if let Some(pos) = col.iter().position(|d| d.get("_id").and_then(|v| v.as_str()) == Some(&rec.doc_id)) {
+                        if let Some(pos) = col.iter().position(|d| {
+                            d.get("_id").and_then(|v| v.as_str()) == Some(&rec.doc_id)
+                        }) {
                             col[pos] = doc_val;
                         } else {
                             col.push(doc_val);
@@ -503,9 +529,14 @@ impl PitrEngine {
                     if let Some(payload) = &rec.payload {
                         let mut doc_val = payload.clone();
                         if let Some(obj) = doc_val.as_object_mut() {
-                            obj.insert("_id".to_string(), serde_json::Value::String(rec.doc_id.clone()));
+                            obj.insert(
+                                "_id".to_string(),
+                                serde_json::Value::String(rec.doc_id.clone()),
+                            );
                         }
-                        if let Some(pos) = col.iter().position(|d| d.get("_id").and_then(|v| v.as_str()) == Some(&rec.doc_id)) {
+                        if let Some(pos) = col.iter().position(|d| {
+                            d.get("_id").and_then(|v| v.as_str()) == Some(&rec.doc_id)
+                        }) {
                             col[pos] = doc_val;
                         } else {
                             col.push(doc_val);
@@ -607,7 +638,8 @@ pub fn load_and_verify_snapshot(path: &Path) -> Result<SnapshotArchive, String> 
 /// Load and decrypt an encrypted snapshot archive from a file
 pub fn load_and_decrypt_snapshot(path: &Path, passphrase: &str) -> Result<SnapshotArchive, String> {
     let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let envelope: EncryptedSnapshotEnvelope = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    let envelope: EncryptedSnapshotEnvelope =
+        serde_json::from_str(&content).map_err(|e| e.to_string())?;
     decrypt_snapshot(&envelope, passphrase)
 }
 
@@ -738,16 +770,24 @@ mod tests {
         ];
 
         // PITR recover to t2 (before deletion disaster!)
-        let restored = PitrEngine::replay_to_timestamp(&base, &wal_records, t2).expect("PITR replay succeeds");
+        let restored =
+            PitrEngine::replay_to_timestamp(&base, &wal_records, t2).expect("PITR replay succeeds");
         assert_eq!(restored.manifest.total_documents, 2);
         let docs = restored.collections_data.get("users").unwrap();
         let u1 = docs.iter().find(|d| d.get("_id").unwrap() == &id1).unwrap();
         assert_eq!(u1.get("name").unwrap(), "User One Updated");
 
         // PITR recover to LSN 11 (only user 2 inserted)
-        let restored_lsn = PitrEngine::replay_to_lsn(&base, &wal_records, 11).expect("PITR LSN succeeds");
+        let restored_lsn =
+            PitrEngine::replay_to_lsn(&base, &wal_records, 11).expect("PITR LSN succeeds");
         assert_eq!(restored_lsn.manifest.total_documents, 2);
-        let u1_old = restored_lsn.collections_data.get("users").unwrap().iter().find(|d| d.get("_id").unwrap() == &id1).unwrap();
+        let u1_old = restored_lsn
+            .collections_data
+            .get("users")
+            .unwrap()
+            .iter()
+            .find(|d| d.get("_id").unwrap() == &id1)
+            .unwrap();
         assert_eq!(u1_old.get("name").unwrap(), "Initial Doc");
     }
 }

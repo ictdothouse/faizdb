@@ -33,36 +33,51 @@ fn test_cbo_analyze_and_explain_plan() {
     .unwrap();
 
     // 3. Run ANALYZE to collect table statistics and build histograms
-    let analyze_res = db.execute(Statement::Analyze {
-        collection: "metrics".to_string(),
-    }).unwrap();
+    let analyze_res = db
+        .execute(Statement::Analyze {
+            collection: "metrics".to_string(),
+        })
+        .unwrap();
 
     match analyze_res {
         QueryResult::Success(msg) => {
-            assert!(msg.contains("metrics"), "Analyze message should mention collection name");
-            assert!(msg.contains("500 documents"), "Analyze message should mention doc count");
+            assert!(
+                msg.contains("metrics"),
+                "Analyze message should mention collection name"
+            );
+            assert!(
+                msg.contains("500 documents"),
+                "Analyze message should mention doc count"
+            );
         }
         _ => panic!("Expected QueryResult::Success from ANALYZE"),
     }
 
     // 4. Run EXPLAIN on equality query (low selectivity -> should pick IndexScan)
-    let explain_res = db.execute(Statement::Explain(Box::new(Statement::Find {
-        collection: "metrics".to_string(),
-        filter: Some(FilterExpr::Field {
-            field: "cpu_usage".to_string(),
-            op: Operator::Eq,
-            value: Value::Float(50.0),
-        }),
-        sort_by: None,
-        limit: None,
-        skip: None,
-        vector_search: None,
-        traverse: None,
-    }))).unwrap();
+    let explain_res = db
+        .execute(Statement::Explain(Box::new(Statement::Find {
+            collection: "metrics".to_string(),
+            filter: Some(FilterExpr::Field {
+                field: "cpu_usage".to_string(),
+                op: Operator::Eq,
+                value: Value::Float(50.0),
+            }),
+            sort_by: None,
+            limit: None,
+            skip: None,
+            vector_search: None,
+            traverse: None,
+            joins: Vec::new(),
+        })))
+        .unwrap();
 
     match explain_res {
         QueryResult::Explain(plan) => {
-            assert!(plan.plan_type.starts_with("IndexScan"), "Low selectivity query should use IndexScan, got: {}", plan.plan_type);
+            assert!(
+                plan.plan_type.starts_with("IndexScan"),
+                "Low selectivity query should use IndexScan, got: {}",
+                plan.plan_type
+            );
             assert!(plan.index_used.is_some());
             assert!(plan.estimated_cost_score > 0.0);
             assert!(plan.estimated_selectivity_pct.is_some());

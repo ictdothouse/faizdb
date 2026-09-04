@@ -33,10 +33,10 @@ pub enum Role {
 /// JWT Claims payload
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,    // Username
-    pub role: Role,     // User role
-    pub exp: usize,     // Expiration timestamp (Unix seconds)
-    pub iat: usize,     // Issued-at timestamp
+    pub sub: String, // Username
+    pub role: Role,  // User role
+    pub exp: usize,  // Expiration timestamp (Unix seconds)
+    pub iat: usize,  // Issued-at timestamp
 }
 
 /// Authentication manager with Ed25519 keypair for JWT signing.
@@ -82,8 +82,8 @@ impl AuthManager {
     /// Generate an ephemeral Ed25519 keypair for development/testing.
     pub fn generate_ephemeral() -> Self {
         let rng = ring::rand::SystemRandom::new();
-        let pkcs8_doc = Ed25519KeyPair::generate_pkcs8(&rng)
-            .expect("Failed to generate Ed25519 keypair");
+        let pkcs8_doc =
+            Ed25519KeyPair::generate_pkcs8(&rng).expect("Failed to generate Ed25519 keypair");
         let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_doc.as_ref())
             .expect("Failed to parse Ed25519 keypair");
 
@@ -131,7 +131,12 @@ impl AuthManager {
     }
 
     /// Generate a signed EdDSA JWT token for a user.
-    pub fn generate_token(&self, username: &str, role: Role, valid_seconds: u64) -> Result<String, String> {
+    pub fn generate_token(
+        &self,
+        username: &str,
+        role: Role,
+        valid_seconds: u64,
+    ) -> Result<String, String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -176,10 +181,7 @@ fn build_ed25519_spki(raw_public_key: &[u8]) -> Vec<u8> {
     // RFC 8410 standard 12-byte header for Ed25519 SubjectPublicKeyInfo:
     // SEQUENCE (42 bytes) -> SEQUENCE (5 bytes: AlgorithmIdentifier id-Ed25519 1.3.101.112) -> BIT STRING (33 bytes, 0 unused bits)
     const ED25519_SPKI_PREFIX: [u8; 12] = [
-        0x30, 0x2a,
-        0x30, 0x05,
-        0x06, 0x03, 0x2b, 0x65, 0x70,
-        0x03, 0x21, 0x00,
+        0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
     ];
     let mut spki = Vec::with_capacity(ED25519_SPKI_PREFIX.len() + raw_public_key.len());
     spki.extend_from_slice(&ED25519_SPKI_PREFIX);
@@ -218,6 +220,9 @@ mod tests {
     fn test_expired_token_rejected() {
         let auth = AuthManager::generate_ephemeral();
         let token = auth.generate_token("faiz", Role::ReadOnly, 0).unwrap();
-        assert!(auth.verify_token(&token).is_err(), "Expired token should be rejected");
+        assert!(
+            auth.verify_token(&token).is_err(),
+            "Expired token should be rejected"
+        );
     }
 }

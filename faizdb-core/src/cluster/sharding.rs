@@ -1,9 +1,9 @@
 //! Consistent Hashing Ring & Auto-Sharding Engine.
 
-use std::collections::BTreeMap;
 use crc32fast::Hasher;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Total number of virtual hash slots across the cluster
 pub const TOTAL_SHARD_SLOTS: u16 = 16_384;

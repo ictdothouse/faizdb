@@ -212,7 +212,10 @@ where
                 impl<T: FaizDbService> tonic::server::UnaryService<VectorSearchRequest> for VectorSearchSvc<T> {
                     type Response = VectorSearchResponse;
                     type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                    fn call(&mut self, request: tonic::Request<VectorSearchRequest>) -> Self::Future {
+                    fn call(
+                        &mut self,
+                        request: tonic::Request<VectorSearchRequest>,
+                    ) -> Self::Future {
                         let inner = self.0.clone();
                         let fut = async move { T::vector_search(&inner, request).await };
                         Box::pin(fut)
@@ -247,7 +250,9 @@ where
             }
             "/faizdb.v1.FaizDbService/SubscribeChangeStream" => {
                 struct SubscribeChangeStreamSvc<T: FaizDbService>(pub Arc<T>);
-                impl<T: FaizDbService> tonic::server::ServerStreamingService<StreamRequest> for SubscribeChangeStreamSvc<T> {
+                impl<T: FaizDbService> tonic::server::ServerStreamingService<StreamRequest>
+                    for SubscribeChangeStreamSvc<T>
+                {
                     type Response = ChangeEventMsg;
                     type ResponseStream = T::SubscribeChangeStreamStream;
                     type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;

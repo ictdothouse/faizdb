@@ -1,8 +1,8 @@
 //! Integration tests for StorageEngine WAL persistence, startup recovery, and MVCC transactions.
 
-use tempfile::TempDir;
 use faizdb_core::document::model::Document;
 use faizdb_query::DatabaseContext;
+use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_storage_engine_crash_recovery() {
@@ -29,9 +29,11 @@ async fn test_storage_engine_crash_recovery() {
         assert!(users.find_by_id(id2.as_str()).is_ok());
 
         // Update doc1
-        users.update_by_id(id1.as_str(), |d| {
-            d.set("role", "Lead Engineer");
-        }).unwrap();
+        users
+            .update_by_id(id1.as_str(), |d| {
+                d.set("role", "Lead Engineer");
+            })
+            .unwrap();
 
         // Flush active memtable to SSTable to test multi-tier recovery
         if let Some(storage) = ctx.storage() {
@@ -56,7 +58,11 @@ async fn test_storage_engine_crash_recovery() {
         let all_docs = users.find_all(None);
         let names: Vec<String> = all_docs
             .iter()
-            .filter_map(|d| d.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .filter_map(|d| {
+                d.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect();
 
         assert!(names.contains(&"Alice".to_string()));
@@ -64,8 +70,14 @@ async fn test_storage_engine_crash_recovery() {
         assert!(names.contains(&"Charlie".to_string()));
 
         // Verify the updated role was preserved
-        let alice_doc = all_docs.iter().find(|d| d.get("name").and_then(|v| v.as_str()) == Some("Alice")).unwrap();
-        assert_eq!(alice_doc.get("role").unwrap().as_str(), Some("Lead Engineer"));
+        let alice_doc = all_docs
+            .iter()
+            .find(|d| d.get("name").and_then(|v| v.as_str()) == Some("Alice"))
+            .unwrap();
+        assert_eq!(
+            alice_doc.get("role").unwrap().as_str(),
+            Some("Lead Engineer")
+        );
 
         // Verify text search works on recovered documents
         let search_results = users.search_text("Engineer", false, 5);
@@ -93,7 +105,10 @@ async fn test_mvcc_transaction_commit_and_abort() {
 
     // Commit txn2 -> must fail due to write-write conflict with txn1!
     let commit2_result = tx_mgr.commit(&mut txn2);
-    assert!(commit2_result.is_err(), "Concurrent conflicting write should be rejected");
+    assert!(
+        commit2_result.is_err(),
+        "Concurrent conflicting write should be rejected"
+    );
 
     // Abort txn2 cleanly
     tx_mgr.abort(&mut txn2);
@@ -138,17 +153,36 @@ async fn test_vector_and_graph_persistence_recovery() {
 
         let v1 = vec![1.0, 0.0, 0.0, 0.0];
         let v2 = vec![0.0, 1.0, 0.0, 0.0];
-        storage.put(b"vec:data:test_emb:vec_1", &serde_json::to_vec(&v1).unwrap()).unwrap();
-        storage.put(b"vec:data:test_emb:vec_2", &serde_json::to_vec(&v2).unwrap()).unwrap();
+        storage
+            .put(
+                b"vec:data:test_emb:vec_1",
+                &serde_json::to_vec(&v1).unwrap(),
+            )
+            .unwrap();
+        storage
+            .put(
+                b"vec:data:test_emb:vec_2",
+                &serde_json::to_vec(&v2).unwrap(),
+            )
+            .unwrap();
 
         // Insert graph vertices & edge
         let vertex_a = faizdb_graph::Vertex::new("node_a", "Server");
         let vertex_b = faizdb_graph::Vertex::new("node_b", "Database");
         let edge = faizdb_graph::Edge::with_weight("node_a", "node_b", "CONNECTS_TO", 1.0);
 
-        storage.put(b"graph:v:node_a", &serde_json::to_vec(&vertex_a).unwrap()).unwrap();
-        storage.put(b"graph:v:node_b", &serde_json::to_vec(&vertex_b).unwrap()).unwrap();
-        storage.put(b"graph:e:node_a:node_b:CONNECTS_TO", &serde_json::to_vec(&edge).unwrap()).unwrap();
+        storage
+            .put(b"graph:v:node_a", &serde_json::to_vec(&vertex_a).unwrap())
+            .unwrap();
+        storage
+            .put(b"graph:v:node_b", &serde_json::to_vec(&vertex_b).unwrap())
+            .unwrap();
+        storage
+            .put(
+                b"graph:e:node_a:node_b:CONNECTS_TO",
+                &serde_json::to_vec(&edge).unwrap(),
+            )
+            .unwrap();
     } // Drop context simulating shutdown
 
     // 2. Second run: Re-open from disk and verify automatic recovery
@@ -156,7 +190,10 @@ async fn test_vector_and_graph_persistence_recovery() {
         let ctx = DatabaseContext::with_storage_dir(&data_path).expect("Failed to reopen storage");
 
         // Verify vector index and points recovered
-        let index_lock = ctx.vector_indexes().get("test_emb").expect("Vector index test_emb must be recovered");
+        let index_lock = ctx
+            .vector_indexes()
+            .get("test_emb")
+            .expect("Vector index test_emb must be recovered");
         let index = index_lock.read();
         assert_eq!(index.len(), 2, "Both vectors must be recovered");
 

@@ -253,11 +253,7 @@ pub async fn system_profile_handler(State(state): State<Arc<AppState>>) -> Respo
         }
     });
 
-    (
-        [(CONTENT_TYPE, "application/json")],
-        profile.to_string(),
-    )
-        .into_response()
+    ([(CONTENT_TYPE, "application/json")], profile.to_string()).into_response()
 }
 
 #[cfg(test)]
@@ -269,9 +265,13 @@ mod tests {
         let collector = MetricsCollector::default();
         collector.inserts_total.fetch_add(50, Ordering::Relaxed);
         collector.queries_total.fetch_add(150, Ordering::Relaxed);
-        collector.vector_searches_total.fetch_add(30, Ordering::Relaxed);
+        collector
+            .vector_searches_total
+            .fetch_add(30, Ordering::Relaxed);
         collector.cache_hits_total.fetch_add(90, Ordering::Relaxed);
-        collector.cache_misses_total.fetch_add(10, Ordering::Relaxed);
+        collector
+            .cache_misses_total
+            .fetch_add(10, Ordering::Relaxed);
 
         collector.record_query_latency(Duration::from_micros(250));
         collector.record_query_latency(Duration::from_micros(2500));

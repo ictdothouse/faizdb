@@ -2,8 +2,8 @@
 //!
 //! Standard message format used by all modern MongoDB drivers (v3.6+).
 
-use std::io::{self, Cursor, Read, Write};
 use bson::Document as BsonDocument;
+use std::io::{self, Cursor, Read, Write};
 
 use super::header::{MsgHeader, OpCode, HEADER_LEN};
 
@@ -58,7 +58,11 @@ impl OpMsg {
     /// Extract document sequence list if present (e.g. for bulk inserts)
     pub fn document_sequence(&self, expected_identifier: &str) -> Vec<BsonDocument> {
         for sec in &self.sections {
-            if let Section::Sequence { identifier, documents } = sec {
+            if let Section::Sequence {
+                identifier,
+                documents,
+            } = sec
+            {
                 if identifier == expected_identifier {
                     return documents.clone();
                 }
@@ -70,7 +74,10 @@ impl OpMsg {
     /// Decode an OP_MSG from raw bytes (including 16-byte header)
     pub fn decode(src: &[u8]) -> io::Result<Self> {
         if src.len() < HEADER_LEN + 4 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "OP_MSG too short"));
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "OP_MSG too short",
+            ));
         }
 
         let header = MsgHeader::decode(src)?;
@@ -122,9 +129,12 @@ impl OpMsg {
 
                     // Read BSON documents until sec_size is consumed
                     let mut documents = Vec::new();
-                    let sequence_end = cursor.position() as usize + sec_size.saturating_sub(4 + id_bytes.len() + 1);
+                    let sequence_end = cursor.position() as usize
+                        + sec_size.saturating_sub(4 + id_bytes.len() + 1);
 
-                    while (cursor.position() as usize) < sequence_end && (cursor.position() as usize) < payload_cursor_limit {
+                    while (cursor.position() as usize) < sequence_end
+                        && (cursor.position() as usize) < payload_cursor_limit
+                    {
                         match BsonDocument::from_reader(&mut cursor) {
                             Ok(doc) => documents.push(doc),
                             Err(_) => break,
@@ -169,7 +179,10 @@ impl OpMsg {
                     doc.to_writer(&mut body_bytes)
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
                 }
-                Section::Sequence { identifier, documents } => {
+                Section::Sequence {
+                    identifier,
+                    documents,
+                } => {
                     body_bytes.push(1); // Kind 1
                     let mut sec_buf = Vec::new();
                     sec_buf.write_all(identifier.as_bytes())?;

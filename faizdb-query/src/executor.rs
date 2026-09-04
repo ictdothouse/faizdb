@@ -1,15 +1,15 @@
 //! Query Executor for evaluating parsed statements against collections and indexes.
 
+use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Instant;
-use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
 
+use crate::ast::{ExplainPlan, FilterExpr, Operator, Statement};
 use faizdb_core::document::collection::Collection;
 use faizdb_core::document::model::{Document, Value};
 use faizdb_core::stream::{ChangeEvent, ChangeStreamBus};
-use crate::ast::{ExplainPlan, FilterExpr, Operator, Statement};
 
 /// Query execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +32,8 @@ pub struct DatabaseContext {
     shards: Arc<faizdb_core::cluster::ShardRouter>,
     storage: Option<Arc<faizdb_core::storage::engine::StorageEngine>>,
     tx_manager: Arc<faizdb_core::transaction::mvcc::TransactionManager>,
-    active_txns: DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>>,
+    active_txns:
+        DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>>,
     vector_indexes: DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>>,
     graph_store: Arc<parking_lot::RwLock<faizdb_graph::GraphStore>>,
     collection_stats: DashMap<String, crate::optimizer::TableStatistics>,
@@ -40,7 +41,10 @@ pub struct DatabaseContext {
 
 impl Default for DatabaseContext {
     fn default() -> Self {
-        let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new(
+            "node_1",
+            "127.0.0.1:27018",
+        ));
         let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
         shards.register_node("node_1", "127.0.0.1:27018");
 
@@ -90,8 +94,13 @@ impl DatabaseContext {
     }
 
     /// Create DatabaseContext with persistent StorageEngine and propagate recovery errors
-    pub fn try_with_storage(storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Result<Self, String> {
-        let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
+    pub fn try_with_storage(
+        storage: Arc<faizdb_core::storage::engine::StorageEngine>,
+    ) -> Result<Self, String> {
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new(
+            "node_1",
+            "127.0.0.1:27018",
+        ));
         let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
         shards.register_node("node_1", "127.0.0.1:27018");
 
@@ -114,7 +123,10 @@ impl DatabaseContext {
 
     /// Create DatabaseContext with an active persistent StorageEngine
     pub fn with_storage(storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Self {
-        let raft = Arc::new(faizdb_core::cluster::RaftNode::new("node_1", "127.0.0.1:27018"));
+        let raft = Arc::new(faizdb_core::cluster::RaftNode::new(
+            "node_1",
+            "127.0.0.1:27018",
+        ));
         let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
         shards.register_node("node_1", "127.0.0.1:27018");
 
@@ -136,7 +148,11 @@ impl DatabaseContext {
     }
 
     /// Create cluster DatabaseContext with persistent StorageEngine
-    pub fn with_node_and_storage(node_id: &str, address: &str, storage: Arc<faizdb_core::storage::engine::StorageEngine>) -> Self {
+    pub fn with_node_and_storage(
+        node_id: &str,
+        address: &str,
+        storage: Arc<faizdb_core::storage::engine::StorageEngine>,
+    ) -> Self {
         let raft = Arc::new(faizdb_core::cluster::RaftNode::new(node_id, address));
         let shards = Arc::new(faizdb_core::cluster::ShardRouter::new());
         shards.register_node(node_id, address);
@@ -173,7 +189,8 @@ impl DatabaseContext {
     pub fn recover_from_storage(&self) -> Result<(), String> {
         if let Some(storage) = &self.storage {
             // 1. Recover documents
-            let entries = storage.prefix_scan(b"doc:")
+            let entries = storage
+                .prefix_scan(b"doc:")
                 .map_err(|e| format!("Failed to scan documents from storage: {e}"))?;
             for (key_bytes, val_bytes) in entries {
                 if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
@@ -189,13 +206,18 @@ impl DatabaseContext {
             }
 
             // 2. Recover vector index definitions
-            let meta_entries = storage.prefix_scan(b"vec:meta:")
+            let meta_entries = storage
+                .prefix_scan(b"vec:meta:")
                 .map_err(|e| format!("Failed to scan vector index metadata from storage: {e}"))?;
             for (key_bytes, val_bytes) in meta_entries {
                 if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
                     if let Some(index_name) = key_str.strip_prefix("vec:meta:") {
-                        if let Ok(config) = serde_json::from_slice::<faizdb_vector::HnswConfig>(&val_bytes) {
-                            let index = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(config)));
+                        if let Ok(config) =
+                            serde_json::from_slice::<faizdb_vector::HnswConfig>(&val_bytes)
+                        {
+                            let index = Arc::new(parking_lot::RwLock::new(
+                                faizdb_vector::HnswIndex::new(config),
+                            ));
                             self.vector_indexes.insert(index_name.to_string(), index);
                         }
                     }
@@ -203,7 +225,8 @@ impl DatabaseContext {
             }
 
             // 3. Recover vector data points
-            let data_entries = storage.prefix_scan(b"vec:data:")
+            let data_entries = storage
+                .prefix_scan(b"vec:data:")
                 .map_err(|e| format!("Failed to scan vector data points from storage: {e}"))?;
             for (key_bytes, val_bytes) in data_entries {
                 if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
@@ -223,7 +246,8 @@ impl DatabaseContext {
             }
 
             // 4. Recover graph vertices
-            let v_entries = storage.prefix_scan(b"graph:v:")
+            let v_entries = storage
+                .prefix_scan(b"graph:v:")
                 .map_err(|e| format!("Failed to scan graph vertices from storage: {e}"))?;
             {
                 let mut graph = self.graph_store.write();
@@ -235,7 +259,8 @@ impl DatabaseContext {
             }
 
             // 5. Recover graph edges
-            let e_entries = storage.prefix_scan(b"graph:e:")
+            let e_entries = storage
+                .prefix_scan(b"graph:e:")
                 .map_err(|e| format!("Failed to scan graph edges from storage: {e}"))?;
             {
                 let mut graph = self.graph_store.write();
@@ -307,12 +332,17 @@ impl DatabaseContext {
     }
 
     /// Access active transactions map
-    pub fn active_txns(&self) -> &DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>> {
+    pub fn active_txns(
+        &self,
+    ) -> &DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>>
+    {
         &self.active_txns
     }
 
     /// Access vector indexes
-    pub fn vector_indexes(&self) -> &DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>> {
+    pub fn vector_indexes(
+        &self,
+    ) -> &DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>> {
         &self.vector_indexes
     }
 
@@ -339,7 +369,8 @@ impl DatabaseContext {
         let col = self.get_or_create_collection(collection);
         let docs = col.find_all(None);
         let stats = crate::optimizer::TableStatistics::analyze(collection, &docs);
-        self.collection_stats.insert(collection.to_string(), stats.clone());
+        self.collection_stats
+            .insert(collection.to_string(), stats.clone());
         stats
     }
 
@@ -364,7 +395,9 @@ impl DatabaseContext {
             Statement::Explain(inner_stmt) => {
                 let start = Instant::now();
                 match *inner_stmt {
-                    Statement::Find { collection, filter, .. } => {
+                    Statement::Find {
+                        collection, filter, ..
+                    } => {
                         let col = self.get_or_create_collection(&collection);
                         let stats = self.get_or_compute_stats(&collection);
 
@@ -374,7 +407,12 @@ impl DatabaseContext {
                         let mut index_field = None;
                         let mut docs_examined = stats.total_documents;
 
-                        if let Some(FilterExpr::Field { field, op: Operator::Eq, value }) = &filter {
+                        if let Some(FilterExpr::Field {
+                            field,
+                            op: Operator::Eq,
+                            value,
+                        }) = &filter
+                        {
                             if let Some(idx) = col.get_secondary_index(field) {
                                 index_name = Some(idx.def.name.clone());
                                 is_unique = idx.def.unique;
@@ -399,6 +437,7 @@ impl DatabaseContext {
                             skip: None,
                             vector_search: None,
                             traverse: None,
+                            joins: Vec::new(),
                         })?;
 
                         let docs_returned = match res {
@@ -451,6 +490,7 @@ impl DatabaseContext {
                 skip,
                 vector_search,
                 traverse,
+                joins,
             } => {
                 let col = self.get_or_create_collection(&collection);
                 let stats = self.get_or_compute_stats(&collection);
@@ -460,7 +500,12 @@ impl DatabaseContext {
                 let mut index_field = None;
                 let mut filter_val = None;
 
-                if let Some(FilterExpr::Field { field, op: Operator::Eq, value }) = &filter {
+                if let Some(FilterExpr::Field {
+                    field,
+                    op: Operator::Eq,
+                    value,
+                }) = &filter
+                {
                     if let Some(idx) = col.get_secondary_index(field) {
                         index_name = Some(idx.def.name.clone());
                         index_field = Some(field.as_str());
@@ -494,8 +539,13 @@ impl DatabaseContext {
 
                 // Graph traversal filtering if specified
                 if let Some(ref t_clause) = traverse {
-                    let paths = self.graph_store.read().traverse_bfs(&t_clause.start_id, t_clause.max_depth, t_clause.relation.as_deref());
-                    let reached_ids: std::collections::HashSet<String> = paths.into_iter().map(|p| p.vertex_id).collect();
+                    let paths = self.graph_store.read().traverse_bfs(
+                        &t_clause.start_id,
+                        t_clause.max_depth,
+                        t_clause.relation.as_deref(),
+                    );
+                    let reached_ids: std::collections::HashSet<String> =
+                        paths.into_iter().map(|p| p.vertex_id).collect();
                     filtered.retain(|d| reached_ids.contains(d.id.as_str()));
                 }
 
@@ -514,7 +564,10 @@ impl DatabaseContext {
                     } else if let Some(idx_lock) = self.vector_indexes.get(&collection) {
                         Some(idx_lock.clone())
                     } else if self.vector_indexes.len() == 1 {
-                        self.vector_indexes.iter().next().map(|entry| entry.value().clone())
+                        self.vector_indexes
+                            .iter()
+                            .next()
+                            .map(|entry| entry.value().clone())
                     } else {
                         None
                     };
@@ -529,7 +582,8 @@ impl DatabaseContext {
                             ));
                         }
                         let candidate_k = if filter.is_some() || traverse.is_some() {
-                            std::cmp::max(v_clause.top_k * 10, 100).min(idx.len().max(v_clause.top_k))
+                            std::cmp::max(v_clause.top_k * 10, 100)
+                                .min(idx.len().max(v_clause.top_k))
                         } else {
                             v_clause.top_k
                         };
@@ -541,21 +595,35 @@ impl DatabaseContext {
                             .collect();
 
                         filtered.retain(|d| id_rank.contains_key(d.id.as_str()));
-                        filtered.sort_by_key(|d| id_rank.get(d.id.as_str()).copied().unwrap_or(usize::MAX));
+                        filtered.sort_by_key(|d| {
+                            id_rank.get(d.id.as_str()).copied().unwrap_or(usize::MAX)
+                        });
                         filtered.truncate(v_clause.top_k);
                     } else {
                         let mut scored: Vec<(Document, f32)> = filtered
                             .into_iter()
                             .filter_map(|doc| {
-                                if let Some(val) = doc.get("vector").or_else(|| doc.get("embedding")) {
+                                if let Some(val) =
+                                    doc.get("vector").or_else(|| doc.get("embedding"))
+                                {
                                     if let Some(arr) = val.as_array() {
-                                        let vec: Vec<f32> = arr.iter().filter_map(|x| match x {
-                                            faizdb_core::document::model::Value::Float(f) => Some(*f as f32),
-                                            faizdb_core::document::model::Value::Integer(i) => Some(*i as f32),
-                                            _ => None,
-                                        }).collect();
+                                        let vec: Vec<f32> = arr
+                                            .iter()
+                                            .filter_map(|x| match x {
+                                                faizdb_core::document::model::Value::Float(f) => {
+                                                    Some(*f as f32)
+                                                }
+                                                faizdb_core::document::model::Value::Integer(i) => {
+                                                    Some(*i as f32)
+                                                }
+                                                _ => None,
+                                            })
+                                            .collect();
                                         if vec.len() == v_clause.vector.len() {
-                                            let dist = faizdb_vector::cosine_distance(&vec, &v_clause.vector);
+                                            let dist = faizdb_vector::cosine_distance(
+                                                &vec,
+                                                &v_clause.vector,
+                                            );
                                             return Some((doc, dist));
                                         }
                                     }
@@ -563,9 +631,74 @@ impl DatabaseContext {
                                 None
                             })
                             .collect();
-                        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-                        filtered = scored.into_iter().take(v_clause.top_k).map(|(d, _)| d).collect();
+                        scored.sort_by(|a, b| {
+                            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        filtered = scored
+                            .into_iter()
+                            .take(v_clause.top_k)
+                            .map(|(d, _)| d)
+                            .collect();
                     }
+                }
+
+                // Relational JOIN execution (Hash Join)
+                for join in &joins {
+                    let joined_col = self.get_or_create_collection(&join.collection);
+                    let right_docs = joined_col.find_all(None);
+
+                    let left_key = join.on_left.split('.').next_back().unwrap_or(&join.on_left);
+                    let right_key = join
+                        .on_right
+                        .split('.')
+                        .next_back()
+                        .unwrap_or(&join.on_right);
+
+                    let mut right_hash: std::collections::HashMap<String, Vec<Document>> =
+                        std::collections::HashMap::new();
+                    for rdoc in right_docs {
+                        let key_val_str = match right_key {
+                            "id" | "_id" => rdoc.id.as_str().to_string(),
+                            other => match rdoc.get_nested(other) {
+                                Some(Value::String(s)) => s.clone(),
+                                Some(Value::Integer(i)) => i.to_string(),
+                                Some(v) => format!("{v:?}"),
+                                None => continue,
+                            },
+                        };
+                        right_hash.entry(key_val_str).or_default().push(rdoc);
+                    }
+
+                    let mut joined_results = Vec::new();
+                    for left_doc in filtered {
+                        let left_val_str = match left_key {
+                            "id" | "_id" => left_doc.id.as_str().to_string(),
+                            other => match left_doc.get_nested(other) {
+                                Some(Value::String(s)) => s.clone(),
+                                Some(Value::Integer(i)) => i.to_string(),
+                                Some(v) => format!("{v:?}"),
+                                None => String::new(),
+                            },
+                        };
+
+                        if let Some(matching_rights) = right_hash.get(&left_val_str) {
+                            for right_doc in matching_rights {
+                                let mut combined = left_doc.clone();
+                                for (k, v) in &right_doc.fields {
+                                    combined
+                                        .fields
+                                        .insert(format!("{}_{}", join.collection, k), v.clone());
+                                    if !combined.fields.contains_key(k) {
+                                        combined.fields.insert(k.clone(), v.clone());
+                                    }
+                                }
+                                joined_results.push(combined);
+                            }
+                        } else if join.join_type == crate::ast::JoinType::Left {
+                            joined_results.push(left_doc);
+                        }
+                    }
+                    filtered = joined_results;
                 }
 
                 // Apply sort_by if specified
@@ -576,9 +709,15 @@ impl DatabaseContext {
                         let cmp = match (va, vb) {
                             (Some(x), Some(y)) => match (x, y) {
                                 (Value::Integer(ix), Value::Integer(iy)) => ix.cmp(iy),
-                                (Value::Float(fx), Value::Float(fy)) => fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
-                                (Value::Integer(ix), Value::Float(fy)) => (*ix as f64).partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
-                                (Value::Float(fx), Value::Integer(iy)) => fx.partial_cmp(&(*iy as f64)).unwrap_or(std::cmp::Ordering::Equal),
+                                (Value::Float(fx), Value::Float(fy)) => {
+                                    fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal)
+                                }
+                                (Value::Integer(ix), Value::Float(fy)) => (*ix as f64)
+                                    .partial_cmp(fy)
+                                    .unwrap_or(std::cmp::Ordering::Equal),
+                                (Value::Float(fx), Value::Integer(iy)) => fx
+                                    .partial_cmp(&(*iy as f64))
+                                    .unwrap_or(std::cmp::Ordering::Equal),
                                 (Value::String(sx), Value::String(sy)) => sx.cmp(sy),
                                 (Value::Boolean(bx), Value::Boolean(by)) => bx.cmp(by),
                                 _ => std::cmp::Ordering::Equal,
@@ -603,16 +742,20 @@ impl DatabaseContext {
 
                 Ok(QueryResult::Documents(final_docs))
             }
-            Statement::Insert { collection, documents } => {
+            Statement::Insert {
+                collection,
+                documents,
+            } => {
                 let col = self.get_or_create_collection(&collection);
                 let mut ids = Vec::with_capacity(documents.len());
                 for doc in documents {
                     let doc_clone = doc.clone();
                     let id = col.insert(doc).map_err(|e| e.to_string())?;
                     let id_str = id.as_str().to_string();
-                    
+
                     // Emit real-time change stream event
-                    self.bus.publish(ChangeEvent::insert(&collection, doc_clone));
+                    self.bus
+                        .publish(ChangeEvent::insert(&collection, doc_clone));
                     ids.push(id_str);
                 }
                 Ok(QueryResult::Inserted(ids))
@@ -620,11 +763,7 @@ impl DatabaseContext {
             Statement::Count { collection, filter } => {
                 let col = self.get_or_create_collection(&collection);
                 if let Some(f) = filter {
-                    let count = col
-                        .find_all(None)
-                        .iter()
-                        .filter(|d| f.matches(d))
-                        .count() as u64;
+                    let count = col.find_all(None).iter().filter(|d| f.matches(d)).count() as u64;
                     Ok(QueryResult::Count(count))
                 } else {
                     Ok(QueryResult::Count(col.stats().document_count))
@@ -647,7 +786,11 @@ impl DatabaseContext {
                 }
                 Ok(QueryResult::Deleted(count))
             }
-            Statement::Update { collection, filter, updates } => {
+            Statement::Update {
+                collection,
+                filter,
+                updates,
+            } => {
                 let col = self.get_or_create_collection(&collection);
                 let mut count = 0u64;
                 let matching_ids: Vec<String> = col
@@ -671,21 +814,25 @@ impl DatabaseContext {
                                     let rest = rest.trim();
                                     if let Some(num_str) = rest.strip_prefix('+') {
                                         if let Ok(delta) = num_str.trim().parse::<i64>() {
-                                            let cur = doc.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+                                            let cur =
+                                                doc.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
                                             doc.set(k.clone(), Value::Integer(cur + delta));
                                             continue;
                                         } else if let Ok(delta) = num_str.trim().parse::<f64>() {
-                                            let cur = doc.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+                                            let cur =
+                                                doc.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
                                             doc.set(k.clone(), Value::Float(cur + delta));
                                             continue;
                                         }
                                     } else if let Some(num_str) = rest.strip_prefix('-') {
                                         if let Ok(delta) = num_str.trim().parse::<i64>() {
-                                            let cur = doc.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+                                            let cur =
+                                                doc.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
                                             doc.set(k.clone(), Value::Integer(cur - delta));
                                             continue;
                                         } else if let Ok(delta) = num_str.trim().parse::<f64>() {
-                                            let cur = doc.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+                                            let cur =
+                                                doc.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
                                             doc.set(k.clone(), Value::Float(cur - delta));
                                             continue;
                                         }
@@ -697,7 +844,12 @@ impl DatabaseContext {
                     });
                     if res.is_ok() {
                         let updated_doc = col.find_by_id(&id).ok();
-                        self.bus.publish(ChangeEvent::update(&collection, &id, updates_map, updated_doc));
+                        self.bus.publish(ChangeEvent::update(
+                            &collection,
+                            &id,
+                            updates_map,
+                            updated_doc,
+                        ));
                         count += 1;
                     }
                 }
@@ -712,30 +864,42 @@ impl DatabaseContext {
                 self.bus.publish(ChangeEvent::drop_collection(&name));
                 Ok(QueryResult::Success(format!("Collection '{name}' dropped")))
             }
-            Statement::CreateIndex { collection, field, unique } => {
+            Statement::CreateIndex {
+                collection,
+                field,
+                unique,
+            } => {
                 let col = self.get_or_create_collection(&collection);
-                let idx_name = col.create_secondary_index(&field, unique).map_err(|e| e.to_string())?;
+                let idx_name = col
+                    .create_secondary_index(&field, unique)
+                    .map_err(|e| e.to_string())?;
                 let unique_tag = if unique { " UNIQUE" } else { "" };
-                Ok(QueryResult::Success(format!("Index '{idx_name}' created on '{collection}.{field}'{unique_tag}")))
+                Ok(QueryResult::Success(format!(
+                    "Index '{idx_name}' created on '{collection}.{field}'{unique_tag}"
+                )))
             }
             Statement::DropIndex { collection, field } => {
                 let col = self.get_or_create_collection(&collection);
                 let dropped = col.drop_secondary_index(&field);
                 if dropped {
-                    Ok(QueryResult::Success(format!("Index on '{collection}.{field}' dropped")))
+                    Ok(QueryResult::Success(format!(
+                        "Index on '{collection}.{field}' dropped"
+                    )))
                 } else {
-                    Ok(QueryResult::Success(format!("No index found on '{collection}.{field}'")))
+                    Ok(QueryResult::Success(format!(
+                        "No index found on '{collection}.{field}'"
+                    )))
                 }
             }
-            Statement::BeginTransaction => {
-                Ok(QueryResult::Success("ACID Transaction initialized (Snapshot Isolation)".into()))
-            }
-            Statement::CommitTransaction => {
-                Ok(QueryResult::Success("ACID Transaction committed successfully to WAL".into()))
-            }
-            Statement::RollbackTransaction => {
-                Ok(QueryResult::Success("ACID Transaction rolled back and changes discarded".into()))
-            }
+            Statement::BeginTransaction => Ok(QueryResult::Success(
+                "ACID Transaction initialized (Snapshot Isolation)".into(),
+            )),
+            Statement::CommitTransaction => Ok(QueryResult::Success(
+                "ACID Transaction committed successfully to WAL".into(),
+            )),
+            Statement::RollbackTransaction => Ok(QueryResult::Success(
+                "ACID Transaction rolled back and changes discarded".into(),
+            )),
         }
     }
 }
@@ -767,10 +931,18 @@ mod tests {
         col.insert(d3).unwrap();
 
         // Connect p1 -> p2 in graph store
-        ctx.graph_store.write().add_vertex(faizdb_graph::Vertex::new("p1", "Product"));
-        ctx.graph_store.write().add_vertex(faizdb_graph::Vertex::new("p2", "Product"));
-        ctx.graph_store.write().add_vertex(faizdb_graph::Vertex::new("p3", "Product"));
-        ctx.graph_store.write().add_edge(faizdb_graph::Edge::new("p1", "p2", "related"));
+        ctx.graph_store
+            .write()
+            .add_vertex(faizdb_graph::Vertex::new("p1", "Product"));
+        ctx.graph_store
+            .write()
+            .add_vertex(faizdb_graph::Vertex::new("p2", "Product"));
+        ctx.graph_store
+            .write()
+            .add_vertex(faizdb_graph::Vertex::new("p3", "Product"));
+        ctx.graph_store
+            .write()
+            .add_edge(faizdb_graph::Edge::new("p1", "p2", "related"));
 
         // 1. FIND prod TRAVERSE FROM "p1" DEPTH 1
         // Must return p1 and p2, NOT p3!
@@ -781,7 +953,10 @@ mod tests {
                 let ids: Vec<String> = docs.iter().map(|d| d.id.as_str().to_string()).collect();
                 assert!(ids.contains(&"p1".to_string()));
                 assert!(ids.contains(&"p2".to_string()));
-                assert!(!ids.contains(&"p3".to_string()), "p3 has no edge from p1 and must not be returned!");
+                assert!(
+                    !ids.contains(&"p3".to_string()),
+                    "p3 has no edge from p1 and must not be returned!"
+                );
                 assert_eq!(docs.len(), 2);
             }
             _ => panic!("Expected QueryResult::Documents"),
@@ -819,12 +994,15 @@ mod tests {
             metric: faizdb_vector::DistanceMetric::Cosine,
             ..Default::default()
         };
-        let idx = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(config)));
+        let idx = Arc::new(parking_lot::RwLock::new(faizdb_vector::HnswIndex::new(
+            config,
+        )));
         idx.write().insert("p1", vec![1.0, 0.0]).unwrap();
         ctx.vector_indexes().insert("custom_emb".to_string(), idx);
 
         // Query with USING INDEX 'custom_emb'
-        let stmt = parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'custom_emb'").unwrap();
+        let stmt =
+            parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'custom_emb'").unwrap();
         let res = ctx.execute(stmt).unwrap();
         match res {
             QueryResult::Documents(docs) => {
@@ -835,7 +1013,9 @@ mod tests {
         }
 
         // Query with missing index returns clear error
-        let stmt = parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'missing_index'").unwrap();
+        let stmt =
+            parse_query("FIND prod VECTOR NEAR [1.0, 0.0] TOP 2 USING INDEX 'missing_index'")
+                .unwrap();
         let err = ctx.execute(stmt).unwrap_err();
         assert!(err.contains("Vector index 'missing_index' not found"));
     }
@@ -861,7 +1041,9 @@ mod tests {
         col.insert(d3).unwrap();
 
         // 1. Test UPDATE with arithmetic increment
-        let update_stmt = parse_query("UPDATE leaderboards SET score = score + 500 WHERE player_id = 'p1'").unwrap();
+        let update_stmt =
+            parse_query("UPDATE leaderboards SET score = score + 500 WHERE player_id = 'p1'")
+                .unwrap();
         let update_res = ctx.execute(update_stmt).unwrap();
         match update_res {
             QueryResult::Updated(count) => assert_eq!(count, 1),
@@ -875,10 +1057,89 @@ mod tests {
             QueryResult::Documents(docs) => {
                 assert_eq!(docs.len(), 3);
                 // p1 now has 600, p2 has 300, p3 has 200
-                assert_eq!(docs[0].get("player_id"), Some(&Value::String("p1".to_string())));
+                assert_eq!(
+                    docs[0].get("player_id"),
+                    Some(&Value::String("p1".to_string()))
+                );
                 assert_eq!(docs[0].get("score"), Some(&Value::Integer(600)));
-                assert_eq!(docs[1].get("player_id"), Some(&Value::String("p2".to_string())));
-                assert_eq!(docs[2].get("player_id"), Some(&Value::String("p3".to_string())));
+                assert_eq!(
+                    docs[1].get("player_id"),
+                    Some(&Value::String("p2".to_string()))
+                );
+                assert_eq!(
+                    docs[2].get("player_id"),
+                    Some(&Value::String("p3".to_string()))
+                );
+            }
+            _ => panic!("Expected QueryResult::Documents"),
+        }
+    }
+
+    #[test]
+    fn test_executor_sql_inner_and_left_join() {
+        let ctx = DatabaseContext::new();
+        let orders = ctx.get_or_create_collection("orders");
+        let users = ctx.get_or_create_collection("users");
+
+        // Insert users
+        let mut u1 = Document::new();
+        u1.id = "u1".into();
+        u1.set("name", "Faiz");
+        users.insert(u1).unwrap();
+
+        let mut u2 = Document::new();
+        u2.id = "u2".into();
+        u2.set("name", "Sara");
+        users.insert(u2).unwrap();
+
+        // Insert orders (order 1 belongs to u1, order 2 belongs to u3 [no user])
+        let mut o1 = Document::new();
+        o1.id = "o1".into();
+        o1.set("user_id", "u1");
+        o1.set("amount", 250);
+        orders.insert(o1).unwrap();
+
+        let mut o2 = Document::new();
+        o2.id = "o2".into();
+        o2.set("user_id", "u3");
+        o2.set("amount", 100);
+        orders.insert(o2).unwrap();
+
+        // 1. INNER JOIN: only o1 has matching user
+        let inner_sql =
+            parse_query("SELECT * FROM orders JOIN users ON orders.user_id = users.id").unwrap();
+        let inner_res = ctx.execute(inner_sql).unwrap();
+        match inner_res {
+            QueryResult::Documents(docs) => {
+                assert_eq!(docs.len(), 1, "INNER JOIN must only return matched records");
+                assert_eq!(
+                    docs[0].get("user_id"),
+                    Some(&Value::String("u1".to_string()))
+                );
+                assert_eq!(
+                    docs[0].get("name"),
+                    Some(&Value::String("Faiz".to_string()))
+                );
+                assert_eq!(
+                    docs[0].get("users_name"),
+                    Some(&Value::String("Faiz".to_string()))
+                );
+                assert_eq!(docs[0].get("amount"), Some(&Value::Integer(250)));
+            }
+            _ => panic!("Expected QueryResult::Documents"),
+        }
+
+        // 2. LEFT JOIN: o1 (matched) and o2 (unmatched) should both be returned
+        let left_sql =
+            parse_query("SELECT * FROM orders LEFT JOIN users ON orders.user_id = users.id")
+                .unwrap();
+        let left_res = ctx.execute(left_sql).unwrap();
+        match left_res {
+            QueryResult::Documents(docs) => {
+                assert_eq!(docs.len(), 2, "LEFT JOIN must return all left records");
+                let ids: Vec<String> = docs.iter().map(|d| d.id.as_str().to_string()).collect();
+                assert!(ids.contains(&"o1".to_string()));
+                assert!(ids.contains(&"o2".to_string()));
             }
             _ => panic!("Expected QueryResult::Documents"),
         }

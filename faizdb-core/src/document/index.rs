@@ -1,8 +1,8 @@
 //! High-Performance B-Tree Secondary Index Engine with Unique Constraint Enforcement.
 
-use std::collections::{BTreeMap, HashSet};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
 
 use super::model::{Document, Value};
 use crate::error::{FaizError, FaizResult};
@@ -83,7 +83,10 @@ impl SecondaryIndex {
     pub fn lookup(&self, value: &Value) -> Vec<String> {
         let key = format!("{value}");
         let tree = self.tree.read();
-        tree.get(&key).cloned().map(|s| s.into_iter().collect()).unwrap_or_default()
+        tree.get(&key)
+            .cloned()
+            .map(|s| s.into_iter().collect())
+            .unwrap_or_default()
     }
 
     /// Range lookup between min and max values: O(log N + K)

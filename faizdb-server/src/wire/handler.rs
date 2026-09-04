@@ -3,12 +3,22 @@
 //! Executes commands requested by MongoDB drivers (Compass, Mongoose, PyMongo, Go, etc.)
 //! and converts between BSON and FaizDB internal document models.
 
-use std::sync::Arc;
 use bson::{doc, Bson, DateTime as BsonDateTime, Document as BsonDocument};
+use dashmap::DashMap;
+use std::sync::{Arc, LazyLock};
 
+use super::op_msg::OpMsg;
 use faizdb_core::document::model::{Document as FaizDocument, Value as FaizValue};
 use faizdb_query::DatabaseContext;
-use super::op_msg::OpMsg;
+
+struct CachedCursor {
+    ns: String,
+    docs: Vec<BsonDocument>,
+    #[allow(dead_code)]
+    created_at: std::time::Instant,
+}
+
+static CURSOR_CACHE: LazyLock<DashMap<i64, CachedCursor>> = LazyLock::new(DashMap::new);
 
 /// Session state for a MongoDB Wire Protocol connection
 #[derive(Debug, Clone)]
@@ -25,8 +35,16 @@ impl MongoSession {
             .unwrap_or(false);
         Self {
             client_addr,
-            authenticated_user: if no_auth { Some("admin".to_string()) } else { None },
-            role: if no_auth { Some(faizdb_security::Role::Admin) } else { None },
+            authenticated_user: if no_auth {
+                Some("admin".to_string())
+            } else {
+                None
+            },
+            role: if no_auth {
+                Some(faizdb_security::Role::Admin)
+            } else {
+                None
+            },
         }
     }
 
@@ -45,7 +63,13 @@ pub fn handle_op_msg(
     let req_id = msg.header.request_id;
     let primary_doc = match msg.primary_document() {
         Some(d) => d,
-        None => return OpMsg::response(0, req_id, doc! { "ok": 0.0, "errmsg": "Missing command document" }),
+        None => {
+            return OpMsg::response(
+                0,
+                req_id,
+                doc! { "ok": 0.0, "errmsg": "Missing command document" },
+            )
+        }
     };
 
     let response_body = dispatch_command(db, primary_doc, msg, session, user_store);
@@ -110,7 +134,10 @@ fn dispatch_command(
     // 3. Security Guard: All operational and metadata commands require authentication
     if !session.is_authenticated() {
         let cmd_name = cmd.keys().next().map(|s| s.as_str()).unwrap_or("unknown");
-        tracing::warn!("Unauthorized MongoDB command '{cmd_name}' rejected from {}", session.client_addr);
+        tracing::warn!(
+            "Unauthorized MongoDB command '{cmd_name}' rejected from {}",
+            session.client_addr
+        );
         return doc! {
             "ok": 0.0,
             "errmsg": format!("command '{cmd_name}' requires authentication"),
@@ -121,7 +148,10 @@ fn dispatch_command(
 
     // 4. RBAC Guard: ReadOnly users cannot perform write operations
     if session.role == Some(faizdb_security::Role::ReadOnly) {
-        if let Some(cmd_name) = ["insert", "update", "delete", "drop"].iter().find(|k| cmd.contains_key(**k)) {
+        if let Some(cmd_name) = ["insert", "update", "delete", "drop"]
+            .iter()
+            .find(|k| cmd.contains_key(**k))
+        {
             tracing::warn!(
                 "ReadOnly user '{}' attempted write command '{cmd_name}' from {}",
                 session.authenticated_user.as_deref().unwrap_or("unknown"),
@@ -154,7 +184,8 @@ fn dispatch_command(
         let first_batch: Vec<bson::Bson> = collections
             .into_iter()
             .map(|name| {
-                bson::to_bson(&doc! { "name": name, "type": "collection" }).unwrap_or(bson::Bson::Null)
+                bson::to_bson(&doc! { "name": name, "type": "collection" })
+                    .unwrap_or(bson::Bson::Null)
             })
             .collect();
         return doc! {
@@ -184,6 +215,14 @@ fn dispatch_command(
 
     if let Ok(col_name) = cmd.get_str("find") {
         return handle_find(db, col_name, cmd);
+    }
+
+    if cmd.contains_key("getMore") {
+        return handle_get_more(cmd);
+    }
+
+    if cmd.contains_key("killCursors") {
+        return handle_kill_cursors(cmd);
     }
 
     if let Ok(col_name) = cmd.get_str("aggregate") {
@@ -228,10 +267,16 @@ fn handle_authenticate(
     if let Some(role) = user_store.authenticate(user, pwd) {
         session.authenticated_user = Some(user.to_string());
         session.role = Some(role);
-        tracing::info!("🔐 User '{user}' authenticated successfully via MongoDB wire from {}", session.client_addr);
+        tracing::info!(
+            "🔐 User '{user}' authenticated successfully via MongoDB wire from {}",
+            session.client_addr
+        );
         doc! { "ok": 1.0 }
     } else {
-        tracing::warn!("MongoDB wire authentication failed for user '{user}' from {}", session.client_addr);
+        tracing::warn!(
+            "MongoDB wire authentication failed for user '{user}' from {}",
+            session.client_addr
+        );
         doc! {
             "ok": 0.0,
             "errmsg": "Authentication failed.",
@@ -265,12 +310,20 @@ fn handle_sasl_start(
     let parts: Vec<&[u8]> = payload_bytes.split(|&b| b == 0).collect();
     let (user_opt, pass_opt) = match parts.len() {
         3 => {
-            let u = if parts[1].is_empty() { parts[0] } else { parts[1] };
-            (String::from_utf8(u.to_vec()).ok(), String::from_utf8(parts[2].to_vec()).ok())
+            let u = if parts[1].is_empty() {
+                parts[0]
+            } else {
+                parts[1]
+            };
+            (
+                String::from_utf8(u.to_vec()).ok(),
+                String::from_utf8(parts[2].to_vec()).ok(),
+            )
         }
-        2 => {
-            (String::from_utf8(parts[0].to_vec()).ok(), String::from_utf8(parts[1].to_vec()).ok())
-        }
+        2 => (
+            String::from_utf8(parts[0].to_vec()).ok(),
+            String::from_utf8(parts[1].to_vec()).ok(),
+        ),
         _ => (None, None),
     };
 
@@ -279,7 +332,10 @@ fn handle_sasl_start(
             if let Some(role) = user_store.authenticate(&user, &pass) {
                 session.authenticated_user = Some(user.clone());
                 session.role = Some(role);
-                tracing::info!("🔐 User '{user}' authenticated successfully via MongoDB SASL PLAIN from {}", session.client_addr);
+                tracing::info!(
+                    "🔐 User '{user}' authenticated successfully via MongoDB SASL PLAIN from {}",
+                    session.client_addr
+                );
                 return doc! {
                     "conversationId": 1,
                     "done": true,
@@ -290,7 +346,10 @@ fn handle_sasl_start(
         }
     }
 
-    tracing::warn!("MongoDB SASL PLAIN authentication failed from {}", session.client_addr);
+    tracing::warn!(
+        "MongoDB SASL PLAIN authentication failed from {}",
+        session.client_addr
+    );
     doc! {
         "ok": 0.0,
         "errmsg": "Authentication failed.",
@@ -379,7 +438,11 @@ fn handle_insert(
         let faiz_doc = bson_to_faiz_document(&bdoc);
         let doc_clone = faiz_doc.clone();
         if col.insert(faiz_doc).is_ok() {
-            db.change_stream_bus().publish(faizdb_core::stream::ChangeEvent::insert(collection_name, doc_clone));
+            db.change_stream_bus()
+                .publish(faizdb_core::stream::ChangeEvent::insert(
+                    collection_name,
+                    doc_clone,
+                ));
             inserted_count += 1;
         }
     }
@@ -400,43 +463,65 @@ fn handle_find(
 
     let limit = cmd.get_i32("limit").ok().map(|l| l.max(0) as usize);
     let skip = cmd.get_i32("skip").ok().map(|s| s.max(0) as usize);
-
-    let all_docs = col.find_all(None);
+    let batch_size = cmd.get_i32("batchSize").ok().map(|b| b.max(0) as usize);
 
     let filter_doc = cmd.get_document("filter").ok();
 
-    let mut matched_docs: Vec<faizdb_core::document::model::Document> = all_docs
-        .into_iter()
-        .filter(|d| {
-            if let Some(filter) = filter_doc {
-                if filter.is_empty() {
-                    return true;
-                }
-                // Check exact field matches
-                for (k, v) in filter {
-                    if k == "_id" {
-                        let id_str = d.id.as_str();
-                        let matches_id = match v {
-                            bson::Bson::String(s) => s.as_str() == id_str,
-                            bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
-                            _ => false,
-                        };
-                        if !matches_id {
-                            return false;
-                        }
-                    } else if let Some(val) = d.get_nested(k) {
-                        let b_val = faiz_val_to_bson(val);
-                        if &b_val != v {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
+    // 1. Direct O(1) Primary Key Lookup if filter targets _id
+    let id_query = filter_doc.and_then(|f| {
+        if f.len() == 1 && f.contains_key("_id") {
+            match f.get("_id") {
+                Some(bson::Bson::String(s)) => Some(s.clone()),
+                Some(bson::Bson::ObjectId(oid)) => Some(oid.to_hex()),
+                _ => None,
             }
-            true
-        })
-        .collect();
+        } else {
+            None
+        }
+    });
+
+    let mut matched_docs: Vec<faizdb_core::document::model::Document> =
+        if let Some(ref id_str) = id_query {
+            if let Ok(doc) = col.find_by_id(id_str) {
+                vec![doc]
+            } else {
+                Vec::new()
+            }
+        } else {
+            let all_docs = col.find_all(None);
+            all_docs
+                .into_iter()
+                .filter(|d| {
+                    if let Some(filter) = filter_doc {
+                        if filter.is_empty() {
+                            return true;
+                        }
+                        // Check exact field matches
+                        for (k, v) in filter {
+                            if k == "_id" {
+                                let id_str = d.id.as_str();
+                                let matches_id = match v {
+                                    bson::Bson::String(s) => s.as_str() == id_str,
+                                    bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                                    _ => false,
+                                };
+                                if !matches_id {
+                                    return false;
+                                }
+                            } else if let Some(val) = d.get_nested(k) {
+                                let b_val = faiz_val_to_bson(val);
+                                if &b_val != v {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+                    }
+                    true
+                })
+                .collect()
+        };
 
     // Sort documents if "sort" document was supplied
     if let Ok(sort_doc) = cmd.get_document("sort") {
@@ -452,12 +537,34 @@ fn handle_find(
                 let vb = b.get_nested(k);
                 let cmp = match (va, vb) {
                     (Some(x), Some(y)) => match (x, y) {
-                        (faizdb_core::document::model::Value::Integer(ix), faizdb_core::document::model::Value::Integer(iy)) => ix.cmp(iy),
-                        (faizdb_core::document::model::Value::Float(fx), faizdb_core::document::model::Value::Float(fy)) => fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
-                        (faizdb_core::document::model::Value::Integer(ix), faizdb_core::document::model::Value::Float(fy)) => (*ix as f64).partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
-                        (faizdb_core::document::model::Value::Float(fx), faizdb_core::document::model::Value::Integer(iy)) => fx.partial_cmp(&(*iy as f64)).unwrap_or(std::cmp::Ordering::Equal),
-                        (faizdb_core::document::model::Value::String(sx), faizdb_core::document::model::Value::String(sy)) => sx.cmp(sy),
-                        (faizdb_core::document::model::Value::Boolean(bx), faizdb_core::document::model::Value::Boolean(by)) => bx.cmp(by),
+                        (
+                            faizdb_core::document::model::Value::Integer(ix),
+                            faizdb_core::document::model::Value::Integer(iy),
+                        ) => ix.cmp(iy),
+                        (
+                            faizdb_core::document::model::Value::Float(fx),
+                            faizdb_core::document::model::Value::Float(fy),
+                        ) => fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal),
+                        (
+                            faizdb_core::document::model::Value::Integer(ix),
+                            faizdb_core::document::model::Value::Float(fy),
+                        ) => (*ix as f64)
+                            .partial_cmp(fy)
+                            .unwrap_or(std::cmp::Ordering::Equal),
+                        (
+                            faizdb_core::document::model::Value::Float(fx),
+                            faizdb_core::document::model::Value::Integer(iy),
+                        ) => fx
+                            .partial_cmp(&(*iy as f64))
+                            .unwrap_or(std::cmp::Ordering::Equal),
+                        (
+                            faizdb_core::document::model::Value::String(sx),
+                            faizdb_core::document::model::Value::String(sy),
+                        ) => sx.cmp(sy),
+                        (
+                            faizdb_core::document::model::Value::Boolean(bx),
+                            faizdb_core::document::model::Value::Boolean(by),
+                        ) => bx.cmp(by),
                         _ => std::cmp::Ordering::Equal,
                     },
                     (Some(_), None) => std::cmp::Ordering::Greater,
@@ -473,19 +580,120 @@ fn handle_find(
         }
     }
 
-    let filtered: Vec<BsonDocument> = matched_docs
+    let effective_skip = skip.unwrap_or(0);
+    let effective_limit = limit.unwrap_or(usize::MAX);
+    let requested_batch_size = batch_size.unwrap_or(effective_limit);
+
+    let skipped_docs: Vec<faizdb_core::document::model::Document> = matched_docs
         .into_iter()
-        .skip(skip.unwrap_or(0))
-        .take(limit.unwrap_or(usize::MAX))
+        .skip(effective_skip)
+        .take(effective_limit)
+        .collect();
+
+    let initial_batch_count = requested_batch_size.min(skipped_docs.len());
+    let mut all_bson: Vec<BsonDocument> = skipped_docs
+        .into_iter()
         .map(|d| faiz_document_to_bson(&d))
         .collect();
+    let first_batch: Vec<BsonDocument> = all_bson.drain(0..initial_batch_count).collect();
+
+    let cursor_id = if !all_bson.is_empty() {
+        let new_id = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as i64)
+            .abs()
+            % 1_000_000_000
+            + 1;
+        CURSOR_CACHE.insert(
+            new_id,
+            CachedCursor {
+                ns: format!("{db_name}.{collection_name}"),
+                docs: all_bson,
+                created_at: std::time::Instant::now(),
+            },
+        );
+        new_id
+    } else {
+        0i64
+    };
 
     doc! {
         "cursor": doc! {
-            "id": 0i64, // 0 = complete cursor (no getMore needed)
+            "id": cursor_id,
             "ns": format!("{db_name}.{collection_name}"),
-            "firstBatch": filtered
+            "firstBatch": first_batch
         },
+        "ok": 1.0
+    }
+}
+
+fn handle_get_more(cmd: &BsonDocument) -> BsonDocument {
+    let cursor_id = match cmd.get("getMore") {
+        Some(Bson::Int64(i)) => *i,
+        Some(Bson::Int32(i)) => *i as i64,
+        _ => return doc! { "ok": 0.0, "errmsg": "Invalid cursor id in getMore" },
+    };
+
+    let batch_size = cmd.get_i32("batchSize").unwrap_or(101).max(1) as usize;
+
+    if let Some(mut entry) = CURSOR_CACHE.get_mut(&cursor_id) {
+        let ns = entry.ns.clone();
+        let remaining = &mut entry.docs;
+        let drain_count = batch_size.min(remaining.len());
+        let batch: Vec<BsonDocument> = remaining.drain(0..drain_count).collect();
+        let is_empty = remaining.is_empty();
+
+        let return_id = if is_empty {
+            drop(entry);
+            CURSOR_CACHE.remove(&cursor_id);
+            0i64
+        } else {
+            cursor_id
+        };
+
+        doc! {
+            "cursor": doc! {
+                "id": return_id,
+                "ns": ns,
+                "nextBatch": batch,
+            },
+            "ok": 1.0
+        }
+    } else {
+        doc! {
+            "cursor": doc! {
+                "id": 0i64,
+                "ns": cmd.get_str("collection").unwrap_or(""),
+                "nextBatch": Vec::<BsonDocument>::new(),
+            },
+            "ok": 0.0,
+            "errmsg": format!("Cursor {cursor_id} not found"),
+            "code": 43,
+            "codeName": "CursorNotFound"
+        }
+    }
+}
+
+fn handle_kill_cursors(cmd: &BsonDocument) -> BsonDocument {
+    let mut killed = Vec::new();
+    if let Ok(cursors_arr) = cmd.get_array("cursors") {
+        for c in cursors_arr {
+            let id = match c {
+                Bson::Int64(i) => *i,
+                Bson::Int32(i) => *i as i64,
+                _ => continue,
+            };
+            if CURSOR_CACHE.remove(&id).is_some() {
+                killed.push(Bson::Int64(id));
+            }
+        }
+    }
+    doc! {
+        "cursorsKilled": killed,
+        "cursorsNotFound": Vec::<Bson>::new(),
+        "cursorsAlive": Vec::<Bson>::new(),
+        "cursorsUnknown": Vec::<Bson>::new(),
         "ok": 1.0
     }
 }
@@ -515,9 +723,11 @@ fn handle_aggregate(
             .collect();
 
         match faizdb_query::parse_pipeline(&serde_json::Value::Array(json_arr)) {
-            Ok(stages) => faizdb_query::execute_pipeline_with_collections(all_docs, &stages, |from_col| {
-                db.get_or_create_collection(from_col).find_all(None)
-            }),
+            Ok(stages) => {
+                faizdb_query::execute_pipeline_with_collections(all_docs, &stages, |from_col| {
+                    db.get_or_create_collection(from_col).find_all(None)
+                })
+            }
             Err(e) => {
                 tracing::warn!("Aggregation pipeline parse error: {e}");
                 all_docs
@@ -548,7 +758,10 @@ fn handle_count(
     cmd: &BsonDocument,
 ) -> BsonDocument {
     let col = db.get_or_create_collection(collection_name);
-    let filter_doc = cmd.get_document("query").ok().or_else(|| cmd.get_document("filter").ok());
+    let filter_doc = cmd
+        .get_document("query")
+        .ok()
+        .or_else(|| cmd.get_document("filter").ok());
 
     let count = if let Some(filter) = filter_doc {
         if filter.is_empty() {
@@ -613,46 +826,50 @@ fn handle_delete(
 
     for del_doc in all_deletes {
         if let Ok(q) = del_doc.get_document("q") {
-                    let matching_ids: Vec<String> = col
-                        .find_all(None)
-                        .into_iter()
-                        .filter(|d| {
-                            if q.is_empty() {
-                                return true;
+            let matching_ids: Vec<String> = col
+                .find_all(None)
+                .into_iter()
+                .filter(|d| {
+                    if q.is_empty() {
+                        return true;
+                    }
+                    for (k, v) in q {
+                        if k == "_id" {
+                            let id_str = d.id.as_str();
+                            let matches_id = match v {
+                                bson::Bson::String(s) => s.as_str() == id_str,
+                                bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                                _ => false,
+                            };
+                            if !matches_id {
+                                return false;
                             }
-                            for (k, v) in q {
-                                if k == "_id" {
-                                    let id_str = d.id.as_str();
-                                    let matches_id = match v {
-                                        bson::Bson::String(s) => s.as_str() == id_str,
-                                        bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
-                                        _ => false,
-                                    };
-                                    if !matches_id {
-                                        return false;
-                                    }
-                                } else if let Some(val) = d.get_nested(k) {
-                                    let b_val = faiz_val_to_bson(val);
-                                    if &b_val != v {
-                                        return false;
-                                    }
-                                } else {
-                                    return false;
-                                }
+                        } else if let Some(val) = d.get_nested(k) {
+                            let b_val = faiz_val_to_bson(val);
+                            if &b_val != v {
+                                return false;
                             }
-                            true
-                        })
-                        .map(|d| d.id.as_str().to_string())
-                        .collect();
-
-                    for id in matching_ids {
-                        if col.delete_by_id(&id).is_ok() {
-                            db.change_stream_bus().publish(faizdb_core::stream::ChangeEvent::delete(collection_name, &id));
-                            deleted_count += 1;
+                        } else {
+                            return false;
                         }
                     }
+                    true
+                })
+                .map(|d| d.id.as_str().to_string())
+                .collect();
+
+            for id in matching_ids {
+                if col.delete_by_id(&id).is_ok() {
+                    db.change_stream_bus()
+                        .publish(faizdb_core::stream::ChangeEvent::delete(
+                            collection_name,
+                            &id,
+                        ));
+                    deleted_count += 1;
                 }
+            }
         }
+    }
 
     doc! {
         "n": deleted_count,
@@ -706,12 +923,14 @@ fn handle_update(
                                 updated_fields.insert(k.clone(), bson_val_to_faiz(v));
                             }
                             let updated_doc = col.find_by_id(&id).ok();
-                            db.change_stream_bus().publish(faizdb_core::stream::ChangeEvent::update(
-                                collection_name,
-                                &id,
-                                updated_fields,
-                                updated_doc,
-                            ));
+                            db.change_stream_bus().publish(
+                                faizdb_core::stream::ChangeEvent::update(
+                                    collection_name,
+                                    &id,
+                                    updated_fields,
+                                    updated_doc,
+                                ),
+                            );
                             modified_count += 1;
                         }
                     }
@@ -772,7 +991,9 @@ fn bson_val_to_faiz(b: &Bson) -> FaizValue {
         Bson::Int64(i) => FaizValue::Integer(*i),
         Bson::Binary(bin) => FaizValue::Binary(bin.bytes.clone()),
         Bson::ObjectId(oid) => FaizValue::String(oid.to_hex()),
-        Bson::DateTime(dt) => FaizValue::DateTime(chrono::DateTime::from_timestamp_millis(dt.timestamp_millis()).unwrap_or_default()),
+        Bson::DateTime(dt) => FaizValue::DateTime(
+            chrono::DateTime::from_timestamp_millis(dt.timestamp_millis()).unwrap_or_default(),
+        ),
         _ => FaizValue::String(b.to_string()),
     }
 }

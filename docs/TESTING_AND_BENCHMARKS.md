@@ -19,17 +19,17 @@ This guide details how to run unit tests, multi-protocol integration tests, high
 The following metrics represent verified test runs conducted against the optimized release build of FaizDB:
 
 ### A. Workspace Unit & Integration Tests (`cargo test --workspace`):
-* **Status:** ✅ **183 / 183 Tests Passed (100% Pass Rate across 23 Test Suites)**
+* **Status:** ✅ **196+ Tests Passed (100% Pass Rate across 26 Test Suites)**
 * **Compilation Status:** **0 Errors, 0 Warnings** (Strict Clean Build)
 * **Tested Monorepo Suites & Crates:**
   * `faizdb-core` (86 tests: LSM-Tree Compaction, MemTable, WAL, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
-  * `faizdb-server` (45 tests: Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, Audit Gap Remediation Suite, TLS / HTTPS Transport)
-  * `faizdb-vector` (15 tests: Multi-Layer HNSW, Cosine/L2/Manhattan, Scalar & Binary 32x Quantization)
-  * `faizdb-query` (20 tests: AST Parser, SQL & Mongo UPDATE, ORDER BY ASC/DESC, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
+  * `faizdb-server` (61 tests: Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, PostgreSQL Extended Query Protocol, MongoDB Stateful Cursors & O(1) Lookup, Audit Remediation Suite, Production Hardening & Operational Standards, TLS / HTTPS Transport)
+  * `faizdb-vector` (16 tests: Multi-Layer HNSW, Cosine/L2/Manhattan, Scalar & Binary 32x Quantization, GDPR Tombstone Deletion, In-Place Mutation)
+  * `faizdb-query` (22 tests: AST Parser, SQL & Mongo UPDATE, Multi-Table Hash INNER/LEFT JOIN, ORDER BY ASC/DESC, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
   * `faizdb-security` (14 tests: AES-256-GCM AEAD, Argon2id, Ed25519 JWT RBAC, Rustls / Ring TLS Self-Signed & PEM Server Config, Central UserStore)
-  * `faizdb-graph` (2 tests: Knowledge Graph, Multi-Hop BFS/DFS Traversal, Dijkstra Shortest Path)
+  * `faizdb-graph` (3 tests: Knowledge Graph, Multi-Hop BFS/DFS Traversal, Dijkstra Shortest Path, Incident Edge Pruning & Deduplication)
   * Documentation doctests (2 tests)
-* **Latest Verification Reference:** See [`LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md`](LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) for full protocol throughput and latency breakdown.
+* **Latest Verification Reference:** See [`LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md`](LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) and [`faizdb-audit-report-v6.md`](faizdb-audit-report-v6.md) for full protocol throughput and enterprise architecture breakdown.
 
 ---
 
@@ -45,7 +45,7 @@ To maintain complete scientific and engineering integrity, performance metrics a
 | **HNSW Vector ANN Search** | Top-5 Nearest Neighbors, 64–4096 dims, HTTP Gateway | **< 2.5 ms** | **p50 = 880 µs (0.88 ms), 1,414 QPS** |
 | **Knowledge Graph Traversal** | 3-Hop Multi-Edge BFS/DFS Traversal | **< 4.0 ms** | **p50 = 916 µs (0.91 ms)** |
 | **Physical Resident RAM (`VmRSS`)** | 4 Multi-Protocol Gateways active (Linux Kernel `/proc`) | **~32 MB** | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* |
-| **Stripped Executable Size** | Single binary on disk (`stat -c %s`) | ~38 MB | **7.55 MB** *(7,918,880 bytes, 97.5% .text)* |
+| **Stripped Executable Size** | Single binary on disk (`stat -c %s`) | ~38 MB | **7.70 MB** *(8,080,104 bytes, ultra-dense)* |
 
 ```text
 🏎️ FaizDB High-Throughput Benchmark (Release Binary Verified)
@@ -58,8 +58,8 @@ To maintain complete scientific and engineering integrity, performance metrics a
 ⚡ GRAPH  (GraphRAG 3-Hop):      Multi-hop traversal in 916 µs
 
 📊 Physical Footprint Summary:
-  Standalone Executable Size : 7.55 MB (7,918,880 bytes)
-  Machine Code (.text segment): 7,723,733 bytes (97.5%)
+  Standalone Executable Size : 7.70 MB (8,080,104 bytes)
+  Machine Code (.text segment): 7,886,000 bytes (97.6%)
   Baseline Idle Kernel RAM   : 23.05 MB VmRSS (23,608 kB)
   Peak Memory Under Load     : 69.91 MB VmRSS (71,588 kB)
 ```

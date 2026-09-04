@@ -1,6 +1,5 @@
-pub mod ws;
 pub mod cdc;
+pub mod ws;
 
-pub use ws::{ws_global_subscribe, ws_collection_watch};
-pub use cdc::{CdcEnvelope, CdcPayload, CdcSource, CdcOp};
-
+pub use cdc::{CdcEnvelope, CdcOp, CdcPayload, CdcSource};
+pub use ws::{ws_collection_watch, ws_global_subscribe};

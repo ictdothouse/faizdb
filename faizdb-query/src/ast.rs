@@ -1,7 +1,7 @@
 //! Abstract Syntax Tree (AST) for FaizQL query language.
 
-use serde::{Deserialize, Serialize};
 use faizdb_core::document::model::{Document, Value};
+use serde::{Deserialize, Serialize};
 
 /// Comparison operator
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -38,9 +38,17 @@ impl FilterExpr {
         match self {
             FilterExpr::AlwaysTrue => true,
             FilterExpr::Field { field, op, value } => {
+                let id_val;
                 let actual = match doc.get_nested(field) {
                     Some(v) => v,
-                    None => return false,
+                    None => {
+                        if field == "id" || field == "_id" {
+                            id_val = Value::String(doc.id.to_string());
+                            &id_val
+                        } else {
+                            return false;
+                        }
+                    }
                 };
                 Self::eval_op(actual, op, value)
             }
@@ -124,6 +132,22 @@ pub struct TraverseClause {
     pub relation: Option<String>,
 }
 
+/// Type of relational JOIN
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum JoinType {
+    Inner,
+    Left,
+}
+
+/// A relational JOIN clause between collections/tables
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JoinClause {
+    pub join_type: JoinType,
+    pub collection: String,
+    pub on_left: String,  // e.g. "orders.customer_id" or "customer_id"
+    pub on_right: String, // e.g. "customers.id" or "id"
+}
+
 /// Execution plan details for EXPLAIN queries
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplainPlan {
@@ -156,6 +180,8 @@ pub enum Statement {
         skip: Option<usize>,
         vector_search: Option<VectorSearchClause>,
         traverse: Option<TraverseClause>,
+        #[serde(default)]
+        joins: Vec<JoinClause>,
     },
     Insert {
         collection: String,

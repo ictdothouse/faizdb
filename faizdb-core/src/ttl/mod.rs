@@ -2,4 +2,4 @@
 
 pub mod manager;
 
-pub use manager::{TtlManager, TtlStats, current_time_ms};
+pub use manager::{current_time_ms, TtlManager, TtlStats};

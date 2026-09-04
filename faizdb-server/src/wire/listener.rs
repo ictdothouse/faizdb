@@ -6,13 +6,13 @@
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
-use faizdb_query::DatabaseContext;
+use super::handler::handle_op_msg;
 use super::header::{MsgHeader, OpCode, HEADER_LEN};
 use super::op_msg::OpMsg;
 use super::op_query::{OpQuery, OpReply};
-use super::handler::handle_op_msg;
+use faizdb_query::DatabaseContext;
 
 /// Run the MongoDB Wire Protocol server on the given address (e.g. "0.0.0.0:27017")
 pub async fn run_wire_server(
@@ -23,13 +23,30 @@ pub async fn run_wire_server(
     let listener = TcpListener::bind(addr).await?;
     info!("🍃 MongoDB Wire Protocol Server running on mongodb://{addr}");
 
+    let max_conns = std::env::var("FAIZDB_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10_000);
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(max_conns));
+
     loop {
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
+                let permit = match semaphore.clone().try_acquire_owned() {
+                    Ok(p) => p,
+                    Err(_) => {
+                        warn!("Rejecting MongoDB connection from {peer_addr}: max connections ({max_conns}) reached");
+                        continue;
+                    }
+                };
                 let db_clone = db.clone();
                 let user_store_clone = user_store.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(socket, db_clone, user_store_clone, peer_addr.to_string()).await {
+                    let _permit = permit;
+                    if let Err(e) =
+                        handle_connection(socket, db_clone, user_store_clone, peer_addr.to_string())
+                            .await
+                    {
                         error!("Connection error from {peer_addr}: {e}");
                     }
                 });
@@ -59,7 +76,10 @@ async fn handle_connection(
 
         let header = MsgHeader::decode(&header_buf)?;
         if header.message_length < HEADER_LEN as i32 || header.message_length > 48 * 1024 * 1024 {
-            tracing::warn!("Rejected invalid or oversized MongoDB message length {} from {client_addr}", header.message_length);
+            tracing::warn!(
+                "Rejected invalid or oversized MongoDB message length {} from {client_addr}",
+                header.message_length
+            );
             break;
         }
         let body_len = (header.message_length as usize).saturating_sub(HEADER_LEN);

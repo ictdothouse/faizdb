@@ -152,9 +152,11 @@ impl TieredStorageManager {
 
     /// Migrate an SSTable from Hot to Cold tier
     pub fn migrate_to_cold(&mut self, path: &Path) -> Result<PathBuf, String> {
-        let cold_dir = self.config.cold_dir.as_ref().ok_or_else(|| {
-            "Cold storage directory is not configured".to_string()
-        })?;
+        let cold_dir = self
+            .config
+            .cold_dir
+            .as_ref()
+            .ok_or_else(|| "Cold storage directory is not configured".to_string())?;
 
         let file_name = path.file_name().ok_or("Invalid SSTable path")?;
         let cold_path = cold_dir.join(file_name);
@@ -187,8 +189,16 @@ impl TieredStorageManager {
     /// Current storage tier telemetry
     pub fn stats(&self) -> TieredStorageStats {
         TieredStorageStats {
-            hot_sstable_count: self.tables.values().filter(|m| m.tier == StorageTier::Hot).count(),
-            cold_sstable_count: self.tables.values().filter(|m| m.tier == StorageTier::Cold).count(),
+            hot_sstable_count: self
+                .tables
+                .values()
+                .filter(|m| m.tier == StorageTier::Hot)
+                .count(),
+            cold_sstable_count: self
+                .tables
+                .values()
+                .filter(|m| m.tier == StorageTier::Cold)
+                .count(),
             total_hot_bytes: self.total_hot_bytes,
             total_cold_bytes: self.total_cold_bytes,
         }
@@ -222,7 +232,11 @@ impl CloudObjectOffloader {
     }
 
     /// Stream an SSTable block to remote object storage in parallel chunk parts
-    pub fn upload_sstable_multipart(&self, sstable_id: &str, data: &[u8]) -> Result<String, String> {
+    pub fn upload_sstable_multipart(
+        &self,
+        sstable_id: &str,
+        data: &[u8],
+    ) -> Result<String, String> {
         let remote_key = format!("{}/{}.sst", self.prefix, sstable_id);
         let total_parts = (data.len() + self.part_size_bytes - 1) / self.part_size_bytes.max(1);
 
@@ -290,7 +304,12 @@ mod tests {
         let offloader = CloudObjectOffloader::new("faizdb-lakehouse-bucket", "compacted-sstables");
         let mock_data = vec![0xABu8; 12 * 1024 * 1024]; // 12MB SSTable
 
-        let s3_uri = offloader.upload_sstable_multipart("sst_00099", &mock_data).unwrap();
-        assert_eq!(s3_uri, "s3://faizdb-lakehouse-bucket/compacted-sstables/sst_00099.sst");
+        let s3_uri = offloader
+            .upload_sstable_multipart("sst_00099", &mock_data)
+            .unwrap();
+        assert_eq!(
+            s3_uri,
+            "s3://faizdb-lakehouse-bucket/compacted-sstables/sst_00099.sst"
+        );
     }
 }

@@ -108,13 +108,12 @@ impl BloomFilter {
     /// Create level-aware dynamic bloom filter (lower levels get tighter FPR to eliminate disk seeks)
     pub fn new_for_level(expected_entries: usize, level: usize) -> Self {
         let fp_rate = match level {
-            0 => 0.01,   // 1% FPR for Level 0
-            1 => 0.005,  // 0.5% FPR for Level 1
-            _ => 0.001,  // 0.1% Ultra-low FPR for deep cold SSTables
+            0 => 0.01,  // 1% FPR for Level 0
+            1 => 0.005, // 0.5% FPR for Level 1
+            _ => 0.001, // 0.1% Ultra-low FPR for deep cold SSTables
         };
         Self::new_with_fp_rate(expected_entries, fp_rate)
     }
-
 
     /// Insert a key into the bloom filter
     pub fn insert(&mut self, key: &[u8]) {
@@ -232,8 +231,7 @@ impl SSTableWriter {
 
         // Maybe add to sparse index
         if self.entries_since_index >= INDEX_INTERVAL || self.entry_count == 0 {
-            self.sparse_index
-                .insert(key.to_vec(), self.current_offset);
+            self.sparse_index.insert(key.to_vec(), self.current_offset);
             self.entries_since_index = 0;
         }
         self.entries_since_index += 1;
@@ -312,8 +310,7 @@ impl SSTableWriter {
         file.write_all(&header)
             .map_err(|e| FaizError::io(&self.path, e))?;
 
-        file.sync_all()
-            .map_err(|e| FaizError::io(&self.path, e))?;
+        file.sync_all().map_err(|e| FaizError::io(&self.path, e))?;
 
         Ok(self.path)
     }
@@ -381,10 +378,7 @@ impl SSTableReader {
         let data_size = u64::from_le_bytes(header[20..28].try_into().unwrap());
 
         // Read footer
-        let file_size = file
-            .metadata()
-            .map_err(|e| FaizError::io(&path, e))?
-            .len();
+        let file_size = file.metadata().map_err(|e| FaizError::io(&path, e))?.len();
 
         file.seek(SeekFrom::Start(file_size - FOOTER_SIZE as u64))
             .map_err(|e| FaizError::io(&path, e))?;
@@ -708,7 +702,11 @@ mod tests {
 
         // Iterate
         let reader = SSTableReader::open(&path).unwrap();
-        let entries: Vec<_> = reader.iter().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let entries: Vec<_> = reader
+            .iter()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(entries.len(), 100);
 
         // Should be sorted
@@ -735,7 +733,9 @@ mod tests {
         let l2 = BloomFilter::new_for_level(1000, 2);
 
         // Level 2 should allocate more bits than Level 0 for tighter false positive rates
-        assert!(l2.bits.len() > l0.bits.len(), "Deep level SSTables must have larger bloom filter size");
+        assert!(
+            l2.bits.len() > l0.bits.len(),
+            "Deep level SSTables must have larger bloom filter size"
+        );
     }
 }
-

@@ -589,17 +589,12 @@ mod tests {
 
     #[test]
     fn test_document_serialization() {
-        let doc = Document::new()
-            .field("name", "Faiz")
-            .field("score", 99.5);
+        let doc = Document::new().field("name", "Faiz").field("score", 99.5);
 
         let json = doc.to_json().unwrap();
         let restored = Document::from_json(&json).unwrap();
 
-        assert_eq!(
-            restored.get("name").unwrap().as_str(),
-            Some("Faiz")
-        );
+        assert_eq!(restored.get("name").unwrap().as_str(), Some("Faiz"));
     }
 
     #[test]

@@ -6,40 +6,44 @@
 //! - Secondary Index Point Lookup Latency
 //! - Persistent WAL & Storage Engine Append Throughput
 
-use std::sync::Arc;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use faizdb_core::document::collection::Collection;
 use faizdb_core::document::model::{Document, Value};
 use faizdb_core::storage::engine::{StorageConfig, StorageEngine};
+use std::sync::Arc;
 
 fn bench_collection_ingestion(c: &mut Criterion) {
     let mut group = c.benchmark_group("ingestion");
     for size in [1_000, 10_000, 50_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
-        group.bench_with_input(BenchmarkId::new("concurrent_insert", size), size, |b, &s| {
-            b.iter_batched(
-                || {
-                    let col = Arc::new(Collection::new("bench_col"));
-                    let docs: Vec<Document> = (0..s)
-                        .map(|i| {
-                            let mut d = Document::new();
-                            d.set("seq", i as i64);
-                            d.set("name", format!("User_{i}"));
-                            d.set("score", 99.5f64);
-                            d.set("active", i % 2 == 0);
-                            d
-                        })
-                        .collect();
-                    (col, docs)
-                },
-                |(col, docs)| {
-                    for doc in docs {
-                        let _ = col.insert(black_box(doc));
-                    }
-                },
-                criterion::BatchSize::SmallInput,
-            );
-        });
+        group.bench_with_input(
+            BenchmarkId::new("concurrent_insert", size),
+            size,
+            |b, &s| {
+                b.iter_batched(
+                    || {
+                        let col = Arc::new(Collection::new("bench_col"));
+                        let docs: Vec<Document> = (0..s)
+                            .map(|i| {
+                                let mut d = Document::new();
+                                d.set("seq", i as i64);
+                                d.set("name", format!("User_{i}"));
+                                d.set("score", 99.5f64);
+                                d.set("active", i % 2 == 0);
+                                d
+                            })
+                            .collect();
+                        (col, docs)
+                    },
+                    |(col, docs)| {
+                        for doc in docs {
+                            let _ = col.insert(black_box(doc));
+                        }
+                    },
+                    criterion::BatchSize::SmallInput,
+                );
+            },
+        );
     }
     group.finish();
 }

@@ -1,8 +1,8 @@
 //! In-memory and persistent User Store for Role-Based Access Control and authentication.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use serde::{Deserialize, Serialize};
 
 use crate::auth::{AuthManager, Role};
 
@@ -44,17 +44,24 @@ impl UserStore {
 
         // Initialize default administrator from environment
         let admin_user = std::env::var("FAIZDB_ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
-        let admin_pass = std::env::var("FAIZDB_ADMIN_PASS").unwrap_or_else(|_| "faizdb-admin-2026".to_string());
+        let admin_pass =
+            std::env::var("FAIZDB_ADMIN_PASS").unwrap_or_else(|_| "faizdb-admin-2026".to_string());
 
         let _ = store.create_user(&admin_user, &admin_pass, Role::Admin);
 
         // Optional default ReadWrite and ReadOnly users
-        if let (Ok(rw_user), Ok(rw_pass)) = (std::env::var("FAIZDB_RW_USER"), std::env::var("FAIZDB_RW_PASS")) {
+        if let (Ok(rw_user), Ok(rw_pass)) = (
+            std::env::var("FAIZDB_RW_USER"),
+            std::env::var("FAIZDB_RW_PASS"),
+        ) {
             if !rw_user.is_empty() && !rw_pass.is_empty() {
                 let _ = store.create_user(&rw_user, &rw_pass, Role::ReadWrite);
             }
         }
-        if let (Ok(ro_user), Ok(ro_pass)) = (std::env::var("FAIZDB_RO_USER"), std::env::var("FAIZDB_RO_PASS")) {
+        if let (Ok(ro_user), Ok(ro_pass)) = (
+            std::env::var("FAIZDB_RO_USER"),
+            std::env::var("FAIZDB_RO_PASS"),
+        ) {
             if !ro_user.is_empty() && !ro_pass.is_empty() {
                 let _ = store.create_user(&ro_user, &ro_pass, Role::ReadOnly);
             }
@@ -146,7 +153,8 @@ impl UserStore {
             return Err("Password must be at least 4 characters".to_string());
         }
         let mut users = self.users.write().unwrap();
-        let record = users.get_mut(username.trim())
+        let record = users
+            .get_mut(username.trim())
             .ok_or_else(|| format!("User '{username}' not found"))?;
 
         let new_hash = AuthManager::hash_password(new_password)?;
@@ -163,19 +171,32 @@ mod tests {
     fn test_user_store_create_and_authenticate() {
         let store = UserStore::new();
         // Default admin should authenticate
-        assert_eq!(store.authenticate("admin", "faizdb-admin-2026"), Some(Role::Admin));
+        assert_eq!(
+            store.authenticate("admin", "faizdb-admin-2026"),
+            Some(Role::Admin)
+        );
         assert_eq!(store.authenticate("admin", "wrong_pass"), None);
 
         // Create new ReadWrite user
-        store.create_user("analyst", "secret123", Role::ReadWrite).unwrap();
-        assert_eq!(store.authenticate("analyst", "secret123"), Some(Role::ReadWrite));
+        store
+            .create_user("analyst", "secret123", Role::ReadWrite)
+            .unwrap();
+        assert_eq!(
+            store.authenticate("analyst", "secret123"),
+            Some(Role::ReadWrite)
+        );
 
         // Duplicate user rejected
-        assert!(store.create_user("analyst", "another_pass", Role::ReadOnly).is_err());
+        assert!(store
+            .create_user("analyst", "another_pass", Role::ReadOnly)
+            .is_err());
 
         // Update password
         store.update_password("analyst", "new_secret_456").unwrap();
-        assert_eq!(store.authenticate("analyst", "new_secret_456"), Some(Role::ReadWrite));
+        assert_eq!(
+            store.authenticate("analyst", "new_secret_456"),
+            Some(Role::ReadWrite)
+        );
         assert_eq!(store.authenticate("analyst", "secret123"), None);
 
         // Cannot delete last admin
