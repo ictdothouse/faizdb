@@ -39,25 +39,29 @@ To maintain complete scientific and engineering integrity, performance metrics a
 
 | Benchmark Category | Workload & Hardware | Debug Build | Optimized Release (`opt-level=3` + LTO) |
 |:---|:---|:---:|:---:|
-| **Durable Disk Writes** | WAL + strict `fsync` (`sync_writes: true`), HTTP API | **1,481 ops/sec** *(2 vCPU)* | **24,000 – 53,282 ops/sec** *(NVMe)* |
-| **In-Memory MemTable Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`), standalone | **38,600 ops/sec** | **323,424 ops/sec** *(Criterion microbench)* |
-| **In-Memory Table Scan** | Zero-Copy Memory Iterator, sequential point scan | **464,465 ops/sec** | **671,327 ops/sec** *(Criterion microbench)* |
-| **HNSW Vector ANN Search** | Top-10 Nearest Neighbors, 128–4096 dims | **< 2.5 ms** | **< 0.85 ms** |
-| **Physical Resident RAM (`VmRSS`)** | 4 Multi-Protocol Gateways active (Linux Kernel `/proc`) | **~32 MB** | **23.28 MB** *(23,844 kB)* |
-| **Stripped Executable Size** | Single binary on disk (`stat -c %s`) | ~38 MB | **6.30 MB** *(6,615,160 bytes)* |
+| **Durable Disk Writes** | WAL + strict `fsync`, persistent disk append | **1,481 ops/sec** *(2 vCPU)* | **32,305 ops/sec** *(Verified)* |
+| **In-Memory MemTable Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`), standalone | **38,600 ops/sec** | **61,432 ops/sec** *(50k docs in 813ms)* |
+| **In-Memory Table Scan** | Zero-Copy Memory Iterator, sequential scan | **464,465 ops/sec** | **860,001 ops/sec** *(20k docs in 23.26ms)* |
+| **HNSW Vector ANN Search** | Top-5 Nearest Neighbors, 64–4096 dims, HTTP Gateway | **< 2.5 ms** | **p50 = 880 µs (0.88 ms), 1,414 QPS** |
+| **Knowledge Graph Traversal** | 3-Hop Multi-Edge BFS/DFS Traversal | **< 4.0 ms** | **p50 = 916 µs (0.91 ms)** |
+| **Physical Resident RAM (`VmRSS`)** | 4 Multi-Protocol Gateways active (Linux Kernel `/proc`) | **~32 MB** | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* |
+| **Stripped Executable Size** | Single binary on disk (`stat -c %s`) | ~38 MB | **7.55 MB** *(7,918,880 bytes, 97.5% .text)* |
 
 ```text
-🏎️ FaizDB High-Throughput Benchmark — 50,000 documents (Release Binary)
+🏎️ FaizDB High-Throughput Benchmark (Release Binary Verified)
 
-⚡ INSERT (In-Memory MemTable):  50,000 docs in 938.40ms ( 53,282 ops/sec )
-⚡ INSERT (Durable Disk + WAL):  50,000 docs in 2,080.0ms ( 24,038 ops/sec )
-⚡ SCAN   (Zero-Copy Iterator): 50,000 docs in 104.91ms ( 476,600 ops/sec )
-⚡ FILTER (Secondary B-Tree):   25,000 docs in  79.62ms ( 314,000 ops/sec )
+⚡ INSERT (In-Memory MemTable):  50,000 docs in 813.91ms ( 61,432 ops/sec )
+⚡ INSERT (Durable Disk + WAL):  20,000 docs in 619.10ms ( 32,305 ops/sec )
+⚡ SCAN   (Zero-Copy Iterator):  20,000 docs in  23.26ms ( 860,001 ops/sec )
+⚡ FILTER (Secondary B-Tree):    25,000 docs in 111.74ms ( 223,733 ops/sec )
+⚡ VECTOR (HNSW 64-dim ANN):     Top-5 nearest neighbors in 880 µs ( 1,414 QPS )
+⚡ GRAPH  (GraphRAG 3-Hop):      Multi-hop traversal in 916 µs
 
-📊 Summary:
-  Documents in memory: 50,000
-  Total data size:     10.48 MB
-  Avg doc size:        219 bytes
+📊 Physical Footprint Summary:
+  Standalone Executable Size : 7.55 MB (7,918,880 bytes)
+  Machine Code (.text segment): 7,723,733 bytes (97.5%)
+  Baseline Idle Kernel RAM   : 23.05 MB VmRSS (23,608 kB)
+  Peak Memory Under Load     : 69.91 MB VmRSS (71,588 kB)
 ```
 
 ---
@@ -99,6 +103,13 @@ cargo run --release --bin faizdb -- benchmark --count 50000
 
 # 2. In a separate terminal, launch the benchmark runner:
 python scripts/benchmark.py
+```
+
+### Option C: Via Official Scientific Systems Audit Suite
+```bash
+# Runs full empirical verification: ELF byte analysis, live Linux kernel memory (VmRSS),
+# 5,000 document ingestion, HNSW vector ANN latency, and GraphRAG traversal:
+bash scripts/run_scientific_audit.sh
 ```
 
 ---

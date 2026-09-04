@@ -165,12 +165,13 @@ All metrics represent empirical measurements conducted across real TCP network s
 
 | Benchmark Category | Workload & Condition | Measurement |
 |:---|:---|:---:|
-| **In-Memory MemTable Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`) | **323,424 ops/sec** |
-| **In-Memory Sequential Table Scan** | Zero-Copy Memory Iterator | **671,327 ops/sec** |
-| **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`) | **24,000 – 53,282 ops/sec** |
-| **HNSW Vector ANN Top-10 Search** | 128 to 4,096 dimensions | **< 0.85 ms** |
-| **Physical Resident RAM (`VmRSS`)** | All 4 Gateways active | **23.28 MB** |
-| **Stripped Executable Binary Size**| Single self-contained binary on disk | **6.30 MB** |
+| **In-Memory MemTable Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`), standalone | **61,432 ops/sec** *(50k docs in 813.91ms)* |
+| **In-Memory Sequential Table Scan** | Zero-Copy Memory Iterator | **860,001 ops/sec** *(20k docs in 23.26ms)* |
+| **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`), persistent | **32,305 ops/sec** *(20k docs in 619.10ms)* |
+| **HNSW Vector ANN Search (64-dim)** | Top-5 Nearest Neighbors, HTTP Gateway | **< 0.88 ms** *(p50 = 880 µs, 1,414 QPS)* |
+| **Knowledge Graph Traversal** | 3-Hop Multi-Edge BFS/DFS Traversal | **< 0.91 ms** *(p50 = 916 µs)* |
+| **Physical Resident RAM (`VmRSS`)** | All 4 Gateways active (Linux `/proc/<pid>/status`) | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* |
+| **Stripped Executable Binary Size**| Single self-contained binary on disk (`stat -c %s`) | **7.55 MB** *(7,918,880 bytes, 97.5% .text)* |
 
 ---
 

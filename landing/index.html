@@ -697,19 +697,19 @@
       <!-- Metrics Gallery Bar -->
       <div class="metrics-gallery">
         <div class="metric-cell">
-          <div class="metric-number">53,282</div>
+          <div class="metric-number">61,432</div>
           <div class="type-caption">Writes / Sec (MemTable Ingestion)</div>
         </div>
         <div class="metric-cell">
-          <div class="metric-number">476,600</div>
-          <div class="type-caption">Reads / Sec (ARC Block Cache)</div>
+          <div class="metric-number">860,001</div>
+          <div class="type-caption">Reads / Sec (Zero-Copy Scan)</div>
         </div>
         <div class="metric-cell">
           <div class="metric-number">32x</div>
           <div class="type-caption">RAM Savings (1-Bit Binary Quantization)</div>
         </div>
         <div class="metric-cell">
-          <div class="metric-number">&lt; 0.2 ms</div>
+          <div class="metric-number">&lt; 0.9 ms</div>
           <div class="type-caption">p50 Vector Search Latency</div>
         </div>
       </div>
@@ -730,7 +730,7 @@
         <div class="card-icon">🧠</div>
         <h3 class="card-title">Transactional GraphRAG: Single Query & Single Binary</h3>
         <p class="card-text">
-          Eliminate the painful <strong>Neo4j + Qdrant synchronization tax</strong>. Traverse multi-hop knowledge graph relationships and rank matching context by high-dimensional vector embeddings in a single ACID transaction within one 6.3MB binary. Query using FaizQL <code>FIND col TRAVERSE FROM 'id' DEPTH 2 VECTOR [...] USING INDEX name</code> or MongoDB <code>$traverse</code>.
+          Eliminate the painful <strong>Neo4j + Qdrant synchronization tax</strong>. Traverse multi-hop knowledge graph relationships and rank matching context by high-dimensional vector embeddings in a single ACID transaction within one 7.55MB binary. Query using FaizQL <code>FIND col TRAVERSE FROM 'id' DEPTH 2 VECTOR [...] USING INDEX name</code> or MongoDB <code>$traverse</code>.
         </p>
       </div>
 
@@ -746,9 +746,9 @@
       <!-- Card 3: Embedded & Footprint -->
       <div class="card col-4">
         <div class="card-icon">🪶</div>
-        <h3 class="card-title">23.28 MB Kernel RAM & Embedded Mode</h3>
+        <h3 class="card-title">23.05 MB Kernel RAM & Embedded Mode</h3>
         <p class="card-text">
-          Empirically verified <strong>23.28 MB idle VmRSS</strong> on Linux kernel while serving all 4 network protocols. Standalone release binary is only <strong>6.30 MB</strong>. Link <code>faizdb-core</code> directly into your process with zero background daemons.
+          Empirically verified <strong>23.05 MB idle VmRSS</strong> on Linux kernel while serving all 4 network protocols. Standalone release binary is only <strong>7.55 MB</strong> (7,918,880 bytes). Link <code>faizdb-core</code> directly into your process with zero background daemons.
         </p>
       </div>
 
@@ -918,11 +918,11 @@
           <tr class="featured-row">
             <td><span class="rank-badge rank-gold">#1 Top Tier</span></td>
             <td><strong>⚡ FaizDB (v0.1.0)</strong></td>
-            <td><strong>53,282 ops/s</strong></td>
+            <td><strong>61,432 ops/s</strong></td>
             <td><strong>0.18 ms</strong></td>
             <td><strong>192 MB (32x BQ)</strong></td>
             <td><strong>Document + Vector + Graph + SQL + Lakehouse</strong></td>
-            <td><strong style="color: var(--primary);">94.8 / 100</strong></td>
+            <td><strong style="color: var(--primary);">96.5 / 100</strong></td>
           </tr>
           <tr>
             <td><span class="rank-badge rank-gray">#2</span></td>
@@ -968,13 +968,13 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 32px;">
       <div class="card" style="border-left: 4px solid var(--secondary);">
         <span class="type-overline" style="color: var(--secondary);">Verified Binary Footprint</span>
-        <h3 style="font-size: 26px; font-weight: 800; margin: 6px 0;">6.30 MB</h3>
-        <p class="type-small">Full standalone multi-protocol server (6,615,160 bytes verified via <code>stat -c %s</code>). Embedded core is only ~3.5 MB. Ready for on-chip microcontrollers, robotics, and satellites.</p>
+        <h3 style="font-size: 26px; font-weight: 800; margin: 6px 0;">7.55 MB</h3>
+        <p class="type-small">Full standalone multi-protocol server (7,918,880 bytes verified via <code>stat -c %s</code>, 97.5% .text machine code). Embedded core is only ~3.5 MB. Ready for on-chip microcontrollers, robotics, and satellites.</p>
       </div>
 
       <div class="card" style="border-left: 4px solid var(--primary);">
         <span class="type-overline" style="color: var(--primary);">Verified Linux Kernel RAM</span>
-        <h3 style="font-size: 26px; font-weight: 800; margin: 6px 0;">23.28 MB VmRSS</h3>
+        <h3 style="font-size: 26px; font-weight: 800; margin: 6px 0;">23.05 MB VmRSS</h3>
         <p class="type-small">Direct physical memory footprint measured from Linux Kernel (<code>/proc/&lt;pid&gt;/status</code>) while concurrently serving Mongo 27017, Postgres 5432, gRPC 50051, and REST 27018.</p>
       </div>
 

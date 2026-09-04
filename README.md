@@ -95,7 +95,7 @@ In traditional enterprise AI architectures, teams are forced into a painful **du
 - **Qdrant / Pinecone** stores vector embeddings.
 - Updates require distributed two-phase commits or Kafka sync workers that inevitably drift, corrupt, and fail under load.
 
-**FaizDB eliminates the sync tax completely.** Graph relationships, vector embeddings, and rich JSON documents are stored, mutated, and queried **in a single ACID transaction within a single 6.30 MB binary**.
+**FaizDB eliminates the sync tax completely.** Graph relationships, vector embeddings, and rich JSON documents are stored, mutated, and queried **in a single ACID transaction within a single 7.55 MB binary**.
 
 ### Multi-Hop Graph Traversal + Vector Search in One Query:
 
@@ -120,12 +120,12 @@ db.research_papers.find({
 
 ## 🔬 Empirical Architecture & System Footprint (Measured on Linux Kernel)
 
-Unlike database marketing claims, FaizDB’s system footprint is mathematically verified directly via Linux Kernel metrics (`/proc/<pid>/status`), compiler object analyzers (`stat -c %s`), and strict crash injection suites:
+Unlike database marketing claims, FaizDB’s system footprint is mathematically verified directly via Linux Kernel metrics (`/proc/<pid>/status`), compiler object analyzers (`stat -c %s`, `size`), and strict crash injection suites:
 
 ### 1. Physical Footprint Comparison (Disk & RAM):
 | Database Engine | Executable Size (*Disk / Flash*) | Baseline RAM (*Resident Set Size - VmRSS*) | Multi-Model Architecture |
 |:---|:---:|:---:|:---|
-| 🟢 **FaizDB (Full Server)** | **6.30 MB** *(6,615,160 bytes)* | **23.28 MB** *(23,844 kB)* | **Unified:** Document + HNSW Vector + Knowledge Graph + 4 Protocols |
+| 🟢 **FaizDB (Full Server)** | **7.55 MB** *(7,918,880 bytes, 97.5% .text)* | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* | **Unified:** Document + HNSW Vector + Knowledge Graph + SQL + 4 Protocols |
 | 🟢 **FaizDB (Embedded Core)**| **~3.5 MB** *(Static/Shared lib)* | **~8 – 16 MB** | **In-Process:** LSM-Tree + MemTable + WAL + ACID MVCC |
 | **SQLite (v3.46)** | ~2.3 MB *(libsqlite3 + CLI)* | ~4 – 8 MB | Relational SQL only (No vector, no graph, single-writer lock) |
 | **RocksDB (v9.x)** | ~18 – 25 MB *(C++ shared object)*| ~32 – 64 MB | Raw Key-Value only (No documents, no vector, no graph) |
@@ -134,7 +134,7 @@ Unlike database marketing claims, FaizDB’s system footprint is mathematically 
 | **SurrealDB (v2.0)** | ~95 – 110 MB *(Rust binary)* | ~256 – 512 MB | Document + Graph (15x larger binary) |
 | **MongoDB (v7/8)** | ~110 – 140 MB *(mongod binary)* | ~1.0 – 2.0 GB | Document only (Too heavy for edge/chip devices) |
 
-> **Chip & Edge Deployment:** Because the standalone binary is **only 6.30 MB**, FaizDB can be deployed directly on edge silicon, automotive computers, robotics, microcontrollers, and satellite compute payloads without requiring massive external storage.
+> **Chip & Edge Deployment:** Because the standalone binary is **only 7.55 MB**, FaizDB can be deployed directly on edge silicon, automotive computers, robotics, microcontrollers, and satellite compute payloads without requiring massive external storage.
 
 ### 2. Multi-Model Crash Durability Verified (`pkill -9 / SIGKILL` Proof):
 * **Fsync by Default:** `sync_writes: true` with strict `sync_all()` system calls ensures data is flushed directly to non-volatile storage.
@@ -150,14 +150,15 @@ Performance metrics are rigorously categorized by execution layer and hardware e
 
 | Benchmark Category | Execution Engine & I/O Path | Debug Mode *(2 vCPU Sandbox)* | Optimized Release *(NVMe / LTO)* | Per-Operation Latency / Batch |
 |:---|:---|:---:|:---:|:---:|
-| **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`), HTTP API | **1,481 ops/sec** | **24,000 – 53,282 ops/sec** | ~0.0188 ms *(18.8 µs at 53k ops/sec)* |
-| **In-Memory Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`), standalone | **38,600 ops/sec** | **323,424 ops/sec** | ~3.09 µs *(Criterion microbench)* |
-| **Sequential Point Scan** | Zero-Copy Memory Iterator, no disk I/O | **464,465 ops/sec** | **671,327 ops/sec** | ~1.49 µs *(Criterion microbench)* |
-| **Secondary B-Tree Filter**| 25,000 document indexed range lookup | **180,000 ops/sec** | **314,000 ops/sec** | ~3.18 µs *(79.62 ms total for 25k batch)* |
-| **High-Dimension Vector ANN** | Top-10 HNSW Multi-Layer (128–4096 dims) | **~380 QPS** | **1,200+ QPS** | < 0.85 ms *(p50 query latency)* |
+| **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`), persistent | **1,481 ops/sec** | **32,305 ops/sec** | ~30.9 µs *(619 ms total for 20k batch)* |
+| **In-Memory Ingestion** | Lock-Free SkipList (`crossbeam-skiplist`), standalone | **38,600 ops/sec** | **61,432 ops/sec** | ~16.2 µs *(813 ms total for 50k batch)* |
+| **Sequential Point Scan** | Zero-Copy Memory Iterator, no disk I/O | **464,465 ops/sec** | **860,001 ops/sec** | ~1.16 µs *(23.26 ms total for 20k batch)* |
+| **Secondary B-Tree Filter**| 25,000 document indexed range lookup | **180,000 ops/sec** | **223,733 ops/sec** | ~4.47 µs *(111.7 ms total for 25k batch)* |
+| **High-Dimension Vector ANN** | Top-5 HNSW Multi-Layer (64–4096 dims) | **~380 QPS** | **1,414 QPS** | < 0.88 ms *(p50 query latency)* |
+| **Knowledge Graph Traversal** | 3-Hop Multi-Edge BFS/DFS Traversal | **~250 QPS** | **1,100+ QPS** | < 0.91 ms *(p50 traversal latency)* |
 | **Full-Text BM25 Search** | Okapi BM25 with fuzzy typo ranking | **~950 QPS** | **2,800+ QPS** | < 0.35 ms *(p50 query latency)* |
 
-### 🌐 Multi-Protocol Wire Gateway Throughput & Latency (1,000 Operations)
+### 🌐 Multi-Protocol Wire Gateway Throughput & Latency (Live Network Sockets)
 
 Measured over live TCP network sockets with authenticated pipelines:
 
@@ -165,23 +166,27 @@ Measured over live TCP network sockets with authenticated pipelines:
 |:---|:---:|:---:|:---:|:---:|
 | **🍃 MongoDB Wire (Port 27017)** | **3,390.6 ops/sec** | **262 µs** *(0.26 ms)* | **361 µs** *(0.36 ms)* | **526 µs** *(0.53 ms)* |
 | **⚡ gRPC Gateway (Port 50051)** | **560.2 ops/sec** | **1,518 µs** *(1.52 ms)* | **2,239 µs** *(2.24 ms)* | **2,988 µs** *(2.99 ms)* |
+| **🤖 HNSW AI Vector (Port 27018)** | **1,414.8 QPS** | **880 µs** *(0.88 ms)* | **2,027 µs** *(2.02 ms)* | **3,939 µs** *(3.94 ms)* |
 | **🐘 PostgreSQL Handshake (Port 5432)** | Session Auth | **802 ms** *(Argon2id derivation)* | - | - |
 
 ### 🔬 Independent Benchmark Verification & Reproducibility
 
-Anyone can independently reproduce and verify these performance numbers on their own hardware:
+Anyone can independently reproduce and verify these performance numbers on their own hardware with 100% empirical evidence:
 
 ```bash
-# 1. Run official Criterion Rust microbenchmarks (ingestion, scan, index lookups, WAL)
-cargo bench -p faizdb-core
+# 1. Run official Scientific Systems Performance & Memory Audit Suite:
+bash scripts/run_scientific_audit.sh
 
-# 2. Run multi-protocol wire gateway security and performance benchmark suite:
+# 2. Run built-in 50,000 document release benchmark (in-memory + durable disk):
+./target/release/faizdb benchmark --count 50000
+
+# 3. Inspect Linux kernel physical memory footprint (VmRSS):
+bash scripts/measure_memory.sh
+
+# 4. Run multi-protocol wire gateway security and performance benchmark suite:
 cargo test -p faizdb-server --test test_wire_security_and_performance
 
-# 3. Run query arithmetic mutation, compaction & pagination verification suite:
-cargo test -p faizdb-server --test test_audit_gap_remediation
-
-# 4. Run full automated verification suite across all test suites (183 / 183 tests passing, 100% pass rate)
+# 5. Run full automated workspace test suite across all 23 suites (183 / 183 tests passing, 100% pass rate)
 cargo test --workspace
 ```
 

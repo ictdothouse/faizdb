@@ -119,22 +119,28 @@
         </thead>
         <tbody>
           <tr>
-            <td><strong>INSERT (LSM + WAL)</strong></td>
+            <td><strong>INSERT (In-Memory MemTable)</strong></td>
             <td>50,000 documents</td>
-            <td>938.40 ms</td>
-            <td><strong>53,282 ops/sec</strong></td>
+            <td>813.91 ms</td>
+            <td><strong>61,432 ops/sec</strong></td>
           </tr>
           <tr>
-            <td><strong>SCAN (Point Lookup)</strong></td>
-            <td>50,000 documents</td>
-            <td>104.91 ms</td>
-            <td><strong>476,600 ops/sec</strong></td>
+            <td><strong>INSERT (Durable Disk + WAL)</strong></td>
+            <td>20,000 documents</td>
+            <td>619.10 ms</td>
+            <td><strong>32,305 ops/sec</strong></td>
+          </tr>
+          <tr>
+            <td><strong>SCAN (Zero-Copy Iteration)</strong></td>
+            <td>20,000 documents</td>
+            <td>23.26 ms</td>
+            <td><strong>860,001 ops/sec</strong></td>
           </tr>
           <tr>
             <td><strong>FILTER (Secondary Index)</strong></td>
             <td>25,000 documents</td>
-            <td>79.62 ms</td>
-            <td><strong>314,000 ops/sec</strong></td>
+            <td>111.74 ms</td>
+            <td><strong>223,733 ops/sec</strong></td>
           </tr>
         </tbody>
       </table>
@@ -143,7 +149,7 @@
     <div class="content-card">
       <h2 class="type-subhead">Empirical System & Memory Footprint (Measured via Linux Kernel)</h2>
       <p class="type-body" style="margin-top: 6px; margin-bottom: 16px;">
-        Direct physical resource footprint verified via <code>/proc/&lt;pid&gt;/status</code> and compiler object metrics (<code>stat -c %s</code>):
+        Direct physical resource footprint verified via Linux Kernel <code>/proc/&lt;pid&gt;/status</code> (all 4 gateways active) and ELF compiler metrics (<code>stat -c %s</code>):
       </p>
       <table>
         <thead>
@@ -157,9 +163,9 @@
         <tbody>
           <tr style="background: rgba(16, 185, 129, 0.08);">
             <td><strong>⚡ FaizDB (Full Server)</strong></td>
-            <td><strong>6.30 MB</strong> (6,615,160 bytes)</td>
-            <td><strong>23.28 MB</strong> (23,844 kB)</td>
-            <td><strong>✅ Document + Vector + Graph + 4 Protocols</strong></td>
+            <td><strong>7.55 MB</strong> (7,918,880 bytes)</td>
+            <td><strong>23.05 MB</strong> (23,608 kB idle, 69.9 MB peak)</td>
+            <td><strong>✅ Document + Vector + Graph + SQL + 4 Gateways</strong></td>
           </tr>
           <tr>
             <td><strong>⚡ FaizDB (Embedded Core)</strong></td>
@@ -210,7 +216,7 @@
     <div class="content-card">
       <h2 class="type-subhead">Multi-Protocol Wire Gateways Throughput &amp; Latency Distribution</h2>
       <p class="type-body" style="margin-top: 6px; margin-bottom: 16px;">
-        Empirical measurement over live network TCP streams under 1,000 continuous operations:
+        Empirical measurement over live network TCP streams under continuous stress operations:
       </p>
       <table>
         <thead>
@@ -238,6 +244,20 @@
             <td><strong>2,988 µs</strong> (2.99 ms)</td>
           </tr>
           <tr>
+            <td><strong>🤖 HNSW Vector ANN (64-dim)</strong></td>
+            <td><strong>1,414.8 QPS</strong></td>
+            <td><strong>880 µs</strong> (0.88 ms)</td>
+            <td><strong>2,027 µs</strong> (2.02 ms)</td>
+            <td><strong>3,939 µs</strong> (3.94 ms)</td>
+          </tr>
+          <tr>
+            <td><strong>🕸️ GraphRAG (3-Hop Traversal)</strong></td>
+            <td>Sub-ms Traversal</td>
+            <td><strong>916 µs</strong> (0.91 ms)</td>
+            <td>-</td>
+            <td>-</td>
+          </tr>
+          <tr>
             <td><strong>🐘 PostgreSQL Handshake (Port 5432)</strong></td>
             <td>Session Auth</td>
             <td><strong>802 ms</strong> (Argon2id)</td>
@@ -250,13 +270,15 @@
 
     <div class="content-card">
       <h2 class="type-subhead">Run Automated Independent Verification</h2>
-      <p class="type-body" style="margin-top: 6px;">Anyone can reproduce and verify these performance numbers on their local machine:</p>
+      <p class="type-body" style="margin-top: 6px;">Anyone can reproduce and verify these performance numbers on their local machine with empirical proof:</p>
       <div class="code-block" style="line-height: 1.8;">
-        <div><span class="c-comment"># 1. Run official Criterion Rust microbenchmarks (ingestion, scan, index, WAL)</span></div>
-        <div><span class="c-cmd">cargo</span> bench -p faizdb-core</div>
-        <div style="margin-top: 8px;"><span class="c-comment"># 2. Run multi-protocol wire security and benchmark test suite</span></div>
-        <div><span class="c-cmd">cargo</span> test -p faizdb-server --test test_wire_security_and_performance</div>
-        <div style="margin-top: 8px;"><span class="c-comment"># 3. Run full automated workspace test suite across all 23 suites (183 / 183 passing, 100% pass rate)</span></div>
+        <div><span class="c-comment"># 1. Run official Scientific Systems Performance & Memory Audit Suite</span></div>
+        <div><span class="c-cmd">bash</span> scripts/run_scientific_audit.sh</div>
+        <div style="margin-top: 8px;"><span class="c-comment"># 2. Run built-in 50,000 document release benchmark (in-memory + durable)</span></div>
+        <div><span class="c-cmd">./target/release/faizdb</span> benchmark --count 50000</div>
+        <div style="margin-top: 8px;"><span class="c-comment"># 3. Measure kernel resident memory (VmRSS) directly from /proc/&lt;pid&gt;/status</span></div>
+        <div><span class="c-cmd">bash</span> scripts/measure_memory.sh</div>
+        <div style="margin-top: 8px;"><span class="c-comment"># 4. Run full automated workspace test suite across all 23 suites (183 / 183 passing)</span></div>
         <div><span class="c-cmd">cargo</span> test --workspace</div>
       </div>
     </div>
