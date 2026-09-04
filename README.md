@@ -27,9 +27,9 @@ Its distinguishing engineering advantage is **Automatic Polyglot Comprehension**
 
 * **1. What We Are (The Technology):** A pure Safe Rust microkernel compiling down to a single **7.70 MB machine executable** with zero C/C++ legacy runtime dependencies. It unites Document JSON, HNSW Vector embeddings, Knowledge Graph relations, and Relational SQL in one single process.
 * **2. What We Have (Native Components):**
-  - **Enjin Kueri Natif (FaizQL):** Our own built-in AST tokenizer, parser, and cost-based optimizer (`faizdb-query`) supporting multi-model queries in one syntax.
-  - **Enjin Storan Natif:** High-throughput MemTable SkipList, LSM-Tree SSTable, atomic WAL, and Multi-Document MVCC ACID transactions (`faizdb-core`).
-  - **Protokol Natif:** Zero-copy binary Protocol Buffers over gRPC (Port 50051) and REST JSON API (Port 8080).
+  - **Native Query Engine (FaizQL):** Our own built-in AST tokenizer, parser, and cost-based optimizer (`faizdb-query`) supporting multi-model queries in one unified syntax.
+  - **Native Storage Engine:** High-throughput MemTable SkipList, LSM-Tree SSTable, atomic WAL, and Multi-Document MVCC ACID transactions (`faizdb-core`).
+  - **Native Protocols:** Zero-copy binary Protocol Buffers over gRPC (Port 50051) and REST JSON API (Port 8080).
 * **3. Our Key Advantage — Automatic Comprehension of Other Databases:** Rather than forcing developers to migrate or rewrite application stacks:
   - **Understands PostgreSQL Wire (Port 5432) Automatically:** Connect with `psql`, Prisma, DBeaver, or SQLAlchemy directly; FaizDB parses the wire packets automatically into FaizQL AST.
   - **Understands MongoDB Wire (Port 27017) Automatically:** Connect with `mongosh`, PyMongo, Mongoose, or Compass out-of-the-box.
