@@ -29,8 +29,8 @@ This technical analysis details the strategic positioning, architectural benchma
 Modern development teams are plagued by **"Architecture Sprawl"**—where an engineering organization must deploy, synchronize, and maintain 3 to 5 disparate databases (e.g., MongoDB for document profiles, Qdrant for AI embeddings, Neo4j for relationship graphs, and Redis for caching).
 
 **FaizDB eliminates architecture sprawl via 4 Core Moats:**
-1. **4-Way Multi-Protocol Gateways (Mongo 27017, Postgres 5432, gRPC 50051, REST 27018):** Zero-friction migration. Teams reuse standard drivers (`pymongo`, `mongoose`, `psql`, DBeaver, or gRPC) with zero code rewrites.
-2. **Safe Rust Native LSM-Tree Storage with Fsync Durability:** Ultra-low verified memory footprint (23.28 MB `VmRSS` measured directly from Linux Kernel while serving all 4 network protocols simultaneously), zero Garbage Collection pauses, strict WAL persistence (`sync_writes: true`), and 53,282 durable writes/sec (323k+ ops/sec in-memory scan/filter). Standalone release binary is only 6.30 MB on disk.
+1. **5-Way Universal Gateways (Postgres 5432, MySQL 3306, Mongo 27017, gRPC 50051, REST 27018):** Zero-friction migration. Teams reuse standard drivers (`psql`, MySQL CLI, PHP `mysqli`/PDO, Laravel, WordPress, `pymongo`, `mongoose`, DBeaver, or gRPC) with zero code rewrites.
+2. **Safe Rust Native LSM-Tree Storage with Fsync Durability:** Ultra-low verified memory footprint (23.28 MB `VmRSS` measured directly from Linux Kernel while serving all network protocols simultaneously), zero Garbage Collection pauses, strict WAL persistence (`sync_writes: true`), and 53,282 durable writes/sec (323k+ ops/sec in-memory scan/filter). Standalone release binary is only 7.70 MB on disk.
 3. **Unified Multi-Model Execution & Crash Resilience:** Run vector similarity search, multi-hop graph traversal, and document mutations in a single atomic query. Indivisible durability verified against `pkill -9 / SIGKILL` power-loss simulations.
 4. **Auto-Sharded Raft & Multi-Region CRDTs:** 16,384 virtual hash partitions with persistent replicated log (CRC32 framing) and active-active cross-datacenter conflict-free replication.
 
@@ -41,7 +41,7 @@ Modern development teams are plagued by **"Architecture Sprawl"**—where an eng
 | Evaluation Dimension | **FaizDB** 🚀 | **SurrealDB** | **FerretDB** | **ArangoDB** | **Qdrant** | **CockroachDB** | **Neo4j** | **MongoDB (Atlas)** | **PostgreSQL (+Extensions)** |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Core Language** | **Safe Rust** | Rust | Go | C++ | Rust | Go | Java | C++ | C |
-| **Wire Protocol** | **4-Way: Mongo/PG/gRPC/REST** | SurrealQL | Mongo 27017 | AQL / HTTP | REST / gRPC | Postgres 26257 | Bolt / Cypher | Mongo Wire | Postgres 5432 |
+| **Wire Protocol** | **5-Way: PG/MySQL/Mongo/gRPC/REST** | SurrealQL | Mongo 27017 | AQL / HTTP | REST / gRPC | Postgres 26257 | Bolt / Cypher | Mongo Wire | Postgres 5432 |
 | **Executable Size** | **6.30 MB (Full Server)** | ~95 – 110 MB | ~45 MB | ~85 MB | ~75 – 85 MB | ~120 MB | ~150 MB (JVM) | ~110 – 140 MB | ~120 – 180 MB |
 | **Baseline RAM (Idle)**| **23.28 MB (Kernel VmRSS)** | ~256 – 512 MB | ~120 MB | ~300 MB | ~250 – 512 MB| ~512 MB | ~1.0 – 2.0 GB | ~1.0 – 2.0 GB | ~128 – 512 MB |
 | **Storage Engine** | **LSM-Tree (Fsync WAL)** | KV / RocksDB | External Postgres/SQLite | RocksDB | Custom Vector Store | Pebble (LSM in Go) | Native Graph Store | WiredTiger | Heap MVCC |
@@ -196,7 +196,7 @@ To maintain radical engineering transparency and empirical objectivity, this sec
 | **Testing & Chaos Verification** | **200+ Unit/Integration + Jepsen Chaos Verified** | Jepsen Tested | Enterprise Chaos Suites | **Deterministic Actor Simulation** | Cargo test suites |
 | **Pluggable Storage Backends** | ❌ Coupled (LSM-Tree + MemTable) | ❌ Coupled (ArcadeDB Engine) | ⚠️ RocksDB only | ⚠️ SQLite / Redwood B-Tree | **✅ Highly Pluggable (GStore trait)** |
 | **In-Browser WebAssembly** | ⚠️ Native Target Focus | ❌ Not Possible (JVM) | ❌ Not Practical (C++) | ❌ Not Possible | **✅ Native First-Class Wasm** |
-| **Wire Protocol Interop** | **Postgres (5432) + Mongo (27017)** | Mongo API + Redis / HTTP | HTTP REST / VelocyPack | Proprietary FDB C-API | ❌ None (In-Library Call) |
+| **Wire Protocol Interop** | **Postgres (5432) + MySQL (3306) + Mongo (27017)** | Mongo API + Redis / HTTP | HTTP REST / VelocyPack | Proprietary FDB C-API | ❌ None (In-Library Call) |
 
 ---
 
@@ -238,7 +238,7 @@ FaizDB was engineered to solve the most painful modern architectural bottlenecks
    * Combines high-dimensional HNSW vector search, 1-bit binary quantization (32x compression), and knowledge graph traversal in a **single atomic transaction**. In FoundationDB or GlueSQL, doing vector search requires external index services; in ArangoDB, vector search is an external plugin.
 3. **Automatic Multi-Protocol Comprehension (Zero Ecosystem Friction):**
    * ArcadeDB, ArangoDB, FoundationDB, and GlueSQL all force developers into their proprietary drivers or APIs.
-   * FaizDB automatically decodes **PostgreSQL Wire (Port 5432/5433)** and **MongoDB Wire (Port 27017)**. Prisma, DBeaver, SQLAlchemy, PyMongo, and Compass connect directly with zero code changes.
+   * FaizDB automatically decodes **PostgreSQL Wire (Port 5432/5433)**, **MySQL Wire (Port 3306)**, and **MongoDB Wire (Port 27017)**. Prisma, Laravel, WordPress, DBeaver, SQLAlchemy, PyMongo, and Compass connect directly with zero code changes.
 
 ---
 

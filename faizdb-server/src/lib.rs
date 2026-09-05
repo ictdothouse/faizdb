@@ -1,10 +1,11 @@
 //! # FaizDB Server — High-Performance Multi-Protocol Server
 //!
-//! Provides 4 concurrent entry gateways:
+//! Provides 5 concurrent entry gateways:
 //! 1. **MongoDB Wire Protocol** (Port 27017) — drop-in replacement for MongoDB apps & tools.
 //! 2. **PostgreSQL Wire Protocol** (Port 5432) — drop-in compatibility for psql, DBeaver, TablePlus, Grafana, SQL ORMs.
-//! 3. **gRPC & Protocol Buffers** (Port 50051) — ultra-low latency IPC for microservices & streaming AI vectors.
-//! 4. **REST / HTTP & WebSocket Change Streams** (Port 27018) — for web clients, microservices, and reactive subscriptions.
+//! 3. **MySQL / MariaDB Wire Protocol** (Port 3306) — drop-in compatibility for MySQL CLI, PHP mysqli/PDO, Laravel, WordPress.
+//! 4. **gRPC & Protocol Buffers** (Port 50051) — ultra-low latency IPC for microservices & streaming AI vectors.
+//! 5. **REST / HTTP & WebSocket Change Streams** (Port 27018) — for web clients, microservices, and reactive subscriptions.
 
 pub mod api;
 pub mod grpc;
@@ -14,14 +15,15 @@ pub mod wire;
 pub use api::{create_router, middleware::AppState, BackupScheduleConfig};
 pub use grpc::{run_grpc_server, run_grpc_server_with_shutdown};
 pub use wire::{
-    run_postgres_server, run_postgres_server_with_shutdown, run_wire_server,
-    run_wire_server_with_shutdown,
+    run_mysql_server, run_mysql_server_with_shutdown, run_postgres_server,
+    run_postgres_server_with_shutdown, run_wire_server, run_wire_server_with_shutdown,
 };
 
-/// Run the 4-way Multi-Protocol FaizDB server (MongoDB Wire + PostgreSQL Wire + gRPC + HTTP/WS)
+/// Run the 5-way Multi-Protocol FaizDB server (MongoDB + PostgreSQL + MySQL + gRPC + HTTP/WS)
 pub async fn run_multi_protocol_server(
     wire_addr: &str,
     pg_addr: &str,
+    mysql_addr: &str,
     grpc_addr: &str,
     http_addr: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -160,6 +162,28 @@ pub async fn run_multi_protocol_server(
         }
     });
 
+    let mysql_addr_str = mysql_addr.to_string();
+    let db_for_mysql = db.clone();
+    let user_store_for_mysql = user_store.clone();
+    let mut rx_mysql = shutdown_tx.subscribe();
+
+    // 4. Spawn MySQL / MariaDB Wire Protocol server (Port 3306) with graceful drain
+    let mysql_handle = tokio::spawn(async move {
+        let shutdown_fut = async move {
+            let _ = rx_mysql.recv().await;
+        };
+        if let Err(e) = run_mysql_server_with_shutdown(
+            &mysql_addr_str,
+            db_for_mysql,
+            user_store_for_mysql,
+            shutdown_fut,
+        )
+        .await
+        {
+            tracing::error!("MySQL Wire server error: {e}");
+        }
+    });
+
     let grpc_addr_str = grpc_addr.to_string();
     let db_for_grpc = db.clone();
     let auth_for_grpc = state.auth.clone();
@@ -281,7 +305,7 @@ pub async fn run_multi_protocol_server(
         }
     });
 
-    let _ = tokio::try_join!(mongo_handle, pg_handle, grpc_handle, http_handle)?;
+    let _ = tokio::try_join!(mongo_handle, pg_handle, mysql_handle, grpc_handle, http_handle)?;
 
     tracing::info!("💾 Finalizing and flushing storage engine data to disk on shutdown...");
     if let Err(e) = db.flush() {
@@ -342,8 +366,9 @@ pub async fn run_dual_server(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let host = wire_addr.split(':').next().unwrap_or("0.0.0.0");
     let pg_addr = format!("{host}:5432");
+    let mysql_addr = format!("{host}:3306");
     let grpc_addr = format!("{host}:50051");
-    run_multi_protocol_server(wire_addr, &pg_addr, &grpc_addr, http_addr).await
+    run_multi_protocol_server(wire_addr, &pg_addr, &mysql_addr, &grpc_addr, http_addr).await
 }
 
 /// Run only the HTTP & WebSocket server

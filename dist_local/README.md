@@ -638,6 +638,7 @@ Rather than claiming instant battle-tested maturity for decade-old banking mainf
 - [x] Native openCypher Graph Syntax Parser (`MATCH` & `CREATE` patterns)
 - [x] MongoDB Wire Protocol Parser (Drop-in support on Port 27017)
 - [x] PostgreSQL Wire Protocol Engine (Drop-in support on Port 5432/5433 for psql, DBeaver & SQL ORMs)
+- [x] MySQL / MariaDB Wire Protocol Engine (Drop-in support on Port 3306 for MySQL CLI, PHP mysqli/PDO, Laravel & WordPress)
 - [x] gRPC & Protocol Buffers Gateway (Port 50051 for High-Performance Microservices & Vector Streaming)
 - [x] Real-time Change Streams (WebSockets)
 - [x] Distributed Raft Consensus Engine & 16,384 Virtual Hash Slots Auto-Sharding

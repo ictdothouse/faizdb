@@ -38,7 +38,7 @@ enum Commands {
         data_dir: PathBuf,
     },
 
-    /// Start the 4-Way Multi-Protocol Server (MongoDB 27017 + PostgreSQL 5432 + gRPC 50051 + HTTP API 27018)
+    /// Start the 5-Way Multi-Protocol Server (MongoDB 27017 + PostgreSQL 5432 + MySQL 3306 + gRPC 50051 + HTTP API 27018)
     Serve {
         /// MongoDB Wire Protocol Port (Drop-in replacement for MongoDB apps)
         #[arg(short = 'w', long, default_value = "27017")]
@@ -46,6 +46,9 @@ enum Commands {
         /// PostgreSQL Wire Protocol Port (Drop-in compatibility for psql, DBeaver, TablePlus, Grafana)
         #[arg(short = 'g', long, default_value = "5432")]
         pg_port: u16,
+        /// MySQL / MariaDB Wire Protocol Port (Drop-in compatibility for MySQL CLI, PHP mysqli/PDO, Laravel, WordPress)
+        #[arg(short = 'm', long, default_value = "3306")]
+        mysql_port: u16,
         /// gRPC & Protocol Buffers Port (Ultra-low latency microservices & vector streaming)
         #[arg(short = 'r', long, default_value = "50051")]
         grpc_port: u16,
@@ -124,17 +127,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Serve {
             wire_port,
             pg_port,
+            mysql_port,
             grpc_port,
             http_port,
             host,
         }) => {
             let wire_addr = format!("{host}:{wire_port}");
             let pg_addr = format!("{host}:{pg_port}");
+            let mysql_addr = format!("{host}:{mysql_port}");
             let grpc_addr = format!("{host}:{grpc_port}");
             let http_addr = format!("{host}:{http_port}");
             println!("╔══════════════════════════════════════════════════════════════════╗");
             println!(
-                "║  🔥 FaizDB Server v{} Running 4-Way Multi-Protocol Gateway ║",
+                "║  🔥 FaizDB Server v{} Running 5-Way Universal Gateway       ║",
                 faizdb_core::VERSION
             );
             println!("╠══════════════════════════════════════════════════════════════════╣");
@@ -145,6 +150,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "║  🐘 PostgreSQL Wire Proto : postgresql://{:<23} ║",
                 pg_addr
+            );
+            println!(
+                "║  🐬 MySQL / MariaDB Wire   : mysql://{:<28} ║",
+                mysql_addr
             );
             println!("║  ⚡ gRPC / Protobuf       : grpc://{:<29} ║", grpc_addr);
             println!("║  🌐 HTTP / REST API       : http://{:<29} ║", http_addr);
@@ -159,6 +168,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pg_port
             );
             println!(
+                "║     MySQL : mysql -h 127.0.0.1 -P {} -u root faizdb          ║",
+                mysql_port
+            );
+            println!(
                 "║     gRPC  : localhost:{}                                     ║",
                 grpc_port
             );
@@ -167,7 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 http_port
             );
             println!("╚══════════════════════════════════════════════════════════════════╝");
-            faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &grpc_addr, &http_addr)
+            faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &mysql_addr, &grpc_addr, &http_addr)
                 .await?;
         }
         Some(Commands::Info) => print_info(),
