@@ -76,6 +76,10 @@ export const Header: React.FC<HeaderProps> = ({
       title: 'Zero-Trust Security Vault',
       desc: 'AES-256-GCM hardware encryption at rest, Argon2id auth, and JWT RBAC keys',
     },
+    robot: {
+      title: 'Robot & Edge Chip Control Center',
+      desc: 'Hardware RAM throttling, edge node telemetry, and robotics AI embeddings',
+    },
   };
 
   const current = titles[currentTab];

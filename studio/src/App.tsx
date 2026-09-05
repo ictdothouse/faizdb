@@ -13,6 +13,7 @@ import { BackupManager } from './components/BackupManager';
 import { VectorExplorer } from './components/VectorExplorer';
 import { GraphExplorer } from './components/GraphExplorer';
 import { SecurityVault } from './components/SecurityVault';
+import { EdgeRobotManager } from './components/EdgeRobotManager';
 import { Modal } from './components/ui/Modal';
 import { Button } from './components/ui/Button';
 import { api } from './api/client';
@@ -238,6 +239,7 @@ export const App: React.FC = () => {
           {currentTab === 'vector' && <VectorExplorer />}
           {currentTab === 'graph' && <GraphExplorer />}
           {currentTab === 'security' && <SecurityVault />}
+          {currentTab === 'robot' && <EdgeRobotManager />}
         </main>
       </div>
 

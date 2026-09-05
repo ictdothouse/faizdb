@@ -97,6 +97,7 @@ jobs:
           }
           if (Test-Path README.md) { Copy-Item README.md dist/ }
           if (Test-Path LICENSE) { Copy-Item LICENSE dist/ }
+          if (Test-Path scripts/start-faizdb-studio.bat) { Copy-Item scripts/start-faizdb-studio.bat dist/ }
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }}
           (Get-FileHash ${{ matrix.artifact_name }} -Algorithm SHA256).Hash > ${{ matrix.artifact_name }}.sha256
 

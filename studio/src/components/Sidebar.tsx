@@ -14,10 +14,11 @@ import {
   Plus,
   Layers,
   Database,
+  Bot,
 } from 'lucide-react';
 import { Badge } from './ui/Badge';
 
-export type NavTab = 'overview' | 'tables' | 'query' | 'stream' | 'cluster' | 'search' | 'cache' | 'backup' | 'vector' | 'graph' | 'security';
+export type NavTab = 'overview' | 'tables' | 'query' | 'stream' | 'cluster' | 'search' | 'cache' | 'backup' | 'vector' | 'graph' | 'security' | 'robot';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -42,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'tables', label: 'Table Explorer', icon: <Table2 className="w-4 h-4" /> },
     { id: 'query', label: 'FaizQL Console', icon: <Terminal className="w-4 h-4" />, badge: 'Multi' },
+    { id: 'robot', label: 'Robot & Edge Chip', icon: <Bot className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />, badge: 'IoT' },
     { id: 'stream', label: 'Live Streams', icon: <Radio className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />, badge: 'WS' },
     { id: 'cluster', label: 'Cluster & Shards', icon: <Globe className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />, badge: 'Raft' },
     { id: 'search', label: 'Full-Text Search', icon: <Search className="w-4 h-4 text-blue-600 dark:text-blue-400" />, badge: 'BM25' },
