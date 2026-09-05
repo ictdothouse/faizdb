@@ -592,6 +592,11 @@
         <span class="step-badge" id="badge-7">7</span>
         <span>EXPLAIN ANALYZE Diagnostics</span>
       </a>
+
+      <a href="#module-8" class="stepper-item" id="step-nav-8">
+        <span class="step-badge" id="badge-8">8</span>
+        <span>MySQL Wire & Laravel CMS</span>
+      </a>
     </aside>
 
     <!-- Main Content Area -->
@@ -601,18 +606,18 @@
         <div class="hero-tag">🎓 Hands-on Developer Guide</div>
         <h1>Master FaizDB in 15 Minutes</h1>
         <p class="lead">
-          Welcome to the official interactive tutorial for FaizDB. Explore how a single 8MB native binary delivers multi-dialect SQL & MongoDB syntax, sub-millisecond AI vector search, GraphRAG multi-hop traversal, and 128Hz robotics telemetry with zero GC pauses.
+          Welcome to the official interactive tutorial for FaizDB. Explore how a single 8MB native binary delivers 5-way wire protocols (MySQL, PostgreSQL, MongoDB, gRPC, REST), multi-dialect SQL & MongoDB syntax, sub-millisecond AI vector search, GraphRAG multi-hop traversal, and 128Hz robotics telemetry with zero GC pauses.
         </p>
       </section>
 
-      <!-- MODULE 1: 60-Second Onboarding -->
+      <!-- MODULE 1: Quick Launch -->
       <section class="module-card" id="module-1">
         <div class="module-header">
           <div class="module-title-area">
             <div class="module-icon">⚡</div>
             <div>
-              <h2 class="module-title">Module 1: 60-Second First Launch & 4-Way Gateway</h2>
-              <p class="module-sub">Start the multi-protocol server or interactive REPL shell in under a minute.</p>
+              <h2 class="module-title">Module 1: 60-Second First Launch & 5-Way Universal Gateway</h2>
+              <p class="module-sub">Start the 5-way multi-protocol server or interactive REPL shell in under a minute.</p>
             </div>
           </div>
         </div>
@@ -633,16 +638,16 @@
           <pre id="c1-win"><code># 1. Double click the official 1-click launcher inside your extracted folder:
 start-faizdb-studio.bat
 
-# It starts the 4-Way Gateway and immediately opens Studio at:
+# It starts the 5-Way Gateway and immediately opens Studio at:
 # http://localhost:27020</code></pre>
           <pre id="c1-cli" style="display:none;"><code># Start interactive shell directly:
 .\faizdb.exe shell
 
-# Or start 4-Way server (using port 5433 to avoid local PostgreSQL conflicts):
-.\faizdb.exe serve --pg-port 5433</code></pre>
+# Or start 5-Way server (using port 5433 to avoid local PostgreSQL conflicts):
+.\faizdb.exe serve --pg-port 5433 --mysql-port 3306</code></pre>
           <pre id="c1-unix" style="display:none;"><code># 1-Line Universal Install & Run:
 curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.sh | bash
-./faizdb serve --pg-port 5433</code></pre>
+./faizdb serve --pg-port 5433 --mysql-port 3306</code></pre>
         </div>
 
         <!-- Live Sandbox -->
@@ -651,7 +656,7 @@ curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/ins
             <span class="sandbox-title">🧪 Live Health Check Simulator</span>
             <button class="btn-run" onclick="runSandbox(1)">▶ Ping Engine Health (/v1/health)</button>
           </div>
-          <div class="sandbox-output" id="output-1">Click "Ping Engine Health" to simulate connecting to the 4-Way Gateway...</div>
+          <div class="sandbox-output" id="output-1">Click "Ping Engine Health" to simulate connecting to the 5-Way Gateway...</div>
         </div>
 
         <button class="btn-complete" id="chk-1" onclick="toggleComplete(1)">
@@ -997,6 +1002,70 @@ Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
           ✓ Mark Module 7 as Completed
         </button>
       </section>
+
+      <!-- MODULE 8: Enterprise CMS & Laravel / MySQL Wire Integration -->
+      <section class="module-card" id="module-8">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">🐬</div>
+            <div>
+              <h2 class="module-title">Module 8: Enterprise CMS & Laravel / MySQL Wire (Port 3306)</h2>
+              <p class="module-sub">Plug existing MySQL, Laravel, and WordPress applications directly into FaizDB without code rewrites.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> Your team maintains applications built for MySQL or MariaDB (Laravel Eloquent, WordPress, PHP PDO, or Python mysqlclient). Rather than rewriting database drivers, connect directly to FaizDB's native MySQL Wire Protocol on Port 3306!
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c8-laravel')">Laravel (.env)</button>
+              <button class="code-tab" onclick="switchTab(this, 'c8-cli')">MySQL CLI</button>
+              <button class="code-tab" onclick="switchTab(this, 'c8-wp')">WordPress (wp-config.php)</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c8-laravel"><code># In your Laravel project .env - standard MySQL configuration:
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=faizdb
+DB_USERNAME=root
+DB_PASSWORD=
+
+# Run migrations instantly on FaizDB:
+# php artisan migrate</code></pre>
+          <pre id="c8-cli" style="display:none;"><code># Connect using standard official MySQL CLI terminal client:
+mysql -h 127.0.0.1 -P 3306 -u root faizdb
+
+# Verify FaizDB Universal Engine handshake:
+SELECT @@version, @@version_comment;
+SHOW TABLES;
+INSERT INTO articles (title, content) VALUES ('Hello FaizDB', 'Pure Safe Rust Engine');
+SELECT * FROM articles;</code></pre>
+          <pre id="c8-wp" style="display:none;"><code>// Inside WordPress wp-config.php:
+define( 'DB_NAME', 'faizdb' );
+define( 'DB_USER', 'root' );
+define( 'DB_PASSWORD', '' );
+define( 'DB_HOST', '127.0.0.1:3306' );
+define( 'DB_CHARSET', 'utf8mb4' );</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 MySQL Wire Protocol Handshake Simulator</span>
+            <button class="btn-run" onclick="runSandbox(8)">▶ Simulate MySQL Client Handshake (Port 3306)</button>
+          </div>
+          <div class="sandbox-output" id="output-8">Click "Simulate MySQL Client Handshake" to test binary wire negotiation...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-8" onclick="toggleComplete(8)">
+          ✓ Mark Module 8 as Completed
+        </button>
+      </section>
     </main>
   </div>
 
@@ -1045,7 +1114,7 @@ Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
     }
 
     // Progress Tracking
-    const totalModules = 7;
+    const totalModules = 8;
     let completedSet = new Set(JSON.parse(localStorage.getItem('faizdb_tutorial_progress') || '[]'));
 
     function updateProgressUI() {
@@ -1093,10 +1162,11 @@ Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
       setTimeout(() => {
         if (step === 1) {
           out.innerText = `🟢 HTTP/REST 27018 : Status 200 OK (Engine: FaizDB v0.1.0, Latency: 0.18ms)\n` +
+            `🐬 MySQL Wire 3306  : Listening (Ready for MySQL CLI / PHP mysqli / Laravel / WordPress)\n` +
+            `🐘 Postgres 5433   : Listening (Ready for psql / DBeaver / Grafana / SQL ORMs)\n` +
             `🍃 Mongo Wire 27017 : Listening (Ready for PyMongo / Mongoose / Compass)\n` +
-            `🐘 Postgres 5433   : Listening (Ready for psql / DBeaver / Grafana)\n` +
             `⚡ gRPC 50051       : Ready (Sub-millisecond protobuf streaming)\n` +
-            `✨ All gateways healthy and responsive!`;
+            `✨ All 5 universal gateways healthy and responsive!`;
         } else if (step === 2) {
           out.innerText = `[SQL Execution Result]\n` +
             `Query: SELECT name, price, stock FROM inventory WHERE category = 'Hardware'\n` +
@@ -1140,7 +1210,26 @@ Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
             `       Network I/O: 1,420 bytes (actual) | Cache Hits: 98 | Cache Misses: 2\n` +
             `  -> Distributed Index Scan using idx_users_id on users (cost=0.10..0.85 rows=100) (actual time=0.012..0.045 rows=100 loops=1)\n` +
             `Planning Time: 0.042 ms | Execution Time: 0.380 ms | Straggler Shards Detected: 0`;
+        } else if (step === 8) {
+          out.innerText = `[MySQL HandshakeV10 & Query Simulation]\n` +
+            `TCP Handshake: Connected to 127.0.0.1:3306\n` +
+            `<-- Server Greeting: HandshakeV10 (Version: '8.0.35-FaizDB-Universal', ConnID: 42, Auth: mysql_native_password)\n` +
+            `--> Client Response: HandshakeResponse41 (User: 'root', DB: 'faizdb', Charset: utf8mb4)\n` +
+            `<-- OK_Packet (0x00): Authentication Successful (0 warnings)\n` +
+            `--> COM_QUERY: 'SELECT @@version_comment, @@version'\n` +
+            `--------------------------------------------------------------------------------\n` +
+            `| @@version_comment                                    | @@version             |\n` +
+            `--------------------------------------------------------------------------------\n` +
+            `| FaizDB Universal Multi-Model Engine (Safe Rust)       | 8.0.35-FaizDB         |\n` +
+            `--------------------------------------------------------------------------------\n` +
+            `Handshake & Query resolved in 0.12ms. Compatible with Laravel, WordPress & MySQL CLI.`;
         }
+        // Auto mark complete
+        if (!completedSet.has(step)) {
+          toggleComplete(step);
+        }
+      }, 350);
+    }
         // Auto mark complete
         if (!completedSet.has(step)) {
           toggleComplete(step);

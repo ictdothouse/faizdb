@@ -48,8 +48,9 @@ docker compose up -d
 ```
 
 * **Exposed Endpoints:**
-  - **MongoDB Wire Protocol**: `mongodb://localhost:27017`
+  - **MySQL Wire Protocol**: `mysql -h localhost -P 3306 -u root faizdb`
   - **PostgreSQL Wire Protocol**: `psql -h localhost -p 5432 -U postgres -d faizdb`
+  - **MongoDB Wire Protocol**: `mongodb://localhost:27017`
   - **gRPC / Protocol Buffers**: `localhost:50051`
   - **HTTP REST & WebSocket API**: `http://localhost:27018`
   - **FaizDB Web Studio**: `http://localhost:27020`
@@ -217,12 +218,13 @@ cargo build --target aarch64-apple-ios --release -p faizdb-core
 
 ---
 
-## 🔒 4-Way Multi-Protocol Port Configuration Summary
+## 🔒 5-Way Universal Protocol Port Configuration Summary
 
 | Port | Protocol | Usage |
 |:---:|:---:|:---|
+| **3306** | **🐬 MySQL / MariaDB Wire Protocol** | Drop-in connection for MySQL CLI, PHP `mysqli`/PDO, Laravel, WordPress |
+| **5432 / 5433** | **🐘 PostgreSQL Wire Protocol** | Drop-in connection for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs |
 | **27017** | **🍃 MongoDB Wire Protocol** | Drop-in connection for PyMongo, Mongoose, Prisma, PHP |
-| **5432** | **🐘 PostgreSQL Wire Protocol** | Drop-in connection for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs |
 | **50051** | **⚡ gRPC & Protocol Buffers** | Ultra low-latency microservices and high-throughput Vector ANN streaming |
 | **27018** | **🌐 HTTP REST & WebSockets** | FaizQL queries, Change Streams, Health check, Backups, Geo-Replication |
 | **27020** | **🎛️ HTTP (FaizDB Studio)** | Visual Management Dashboard & Query Explorer |

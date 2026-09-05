@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **5-Way Universal Protocol Gateway & Native MySQL / MariaDB Wire Ingress (Port 3306)**: Complete async MySQL HandshakeV10 protocol engine (`faizdb-server/src/wire/mysql/`), supporting MySQL CLI, Laravel Eloquent (`DB_CONNECTION=mysql`), WordPress (`wp-config.php`), PHP PDO/mysqli, ColumnDef41 packet encoding, EOF/OK packets, and automated test suite (`tests/test_mysql_wire_protocol.rs`).
 - `SECURITY.md` — responsible disclosure policy
 - `CONTRIBUTING.md` — full contributor guide
 - `.github/workflows/ci.yml` — GitHub Actions CI (fmt, clippy -D warnings, tests, cargo-audit, MSRV)

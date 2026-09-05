@@ -61,18 +61,18 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 ```
                          ┌───────────────────────────────────────────────────────────┐
                          │                      FaizDB Engine                        │
-                         │             4-Way Multi-Protocol Gateways                 │
+                         │             5-Way Multi-Protocol Gateways                 │
                          └─────────────────────────────┬─────────────────────────────┘
                                                        │
-          ┌──────────────────────────────┬─────────────┴──────────────┬──────────────────────────────┐
-          ▼                              ▼                            ▼                              ▼
-┌───────────────────┐          ┌───────────────────┐        ┌───────────────────┐          ┌───────────────────┐
-│ MongoDB Wire Proto│          │ Postgres Wire Prot│        │  gRPC / Protobuf  │          │ HTTP REST / WS Bus│
-│   (Port 27017)    │          │    (Port 5432)    │        │   (Port 50051)    │          │   (Port 27018)    │
-│  Mongoose/PyMongo │          │  psql / DBeaver   │        │ Ultra-Fast Micro. │          │  Web / Studio /IoT│
-└─────────┬─────────┘          └─────────┬─────────┘        └─────────┬─────────┘          └─────────┬─────────┘
-          │                              │                            │                              │
-          └──────────────────────────────┴─────────────┬──────────────┴──────────────────────────────┘
+          ┌──────────────┬──────────────┬──────────────┴──────────────┬──────────────┐
+          ▼              ▼              ▼                             ▼              ▼
+┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+│ MySQL Wire Proto  │ │ Postgres Wire Prot│ │ MongoDB Wire Proto│ │  gRPC / Protobuf  │ │ HTTP REST / WS Bus│
+│    (Port 3306)    │ │    (Port 5432)    │ │   (Port 27017)    │ │   (Port 50051)    │ │   (Port 27018)    │
+│ Laravel/WordPress │ │  psql / DBeaver   │ │  Mongoose/PyMongo │ │ Ultra-Fast Micro. │ │  Web / Studio /IoT│
+└─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘
+          │              │              │                             │              │
+          └──────────────┴──────────────┴──────────────┬──────────────┴──────────────┘
                                                        │
                                                        ▼
                                      ┌───────────────────────────────────┐
@@ -104,8 +104,8 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 | Capability | Legacy MongoDB | PostgreSQL + Plugins | Redis | 🚀 **FaizDB (Unified)** |
 |:---|:---:|:---:|:---:|:---:|
 | **Language & Engine Core** | C++ (Memory leak risks, GC jitter) | C (Manual memory management) | C (No strict type safety) | **100% Safe Rust (Zero memory leaks, 0 GC pauses, Borrow-Checker verified)** |
-| **Multi-Protocol Gateways** | MongoDB only | PostgreSQL only | Redis RESP only | **4-Way Native: MongoDB (27017), Postgres (5432), gRPC (50051), REST/WS (27018)** |
-| **Wire Protocol Security** | Mongo SCRAM-SHA | Postgres MD5/SCRAM | Redis AUTH | **Centralized Zero-Trust across all 4 Gateways (Argon2id + Ed25519 JWT RBAC: Admin/RO/RW)** |
+| **Multi-Protocol Gateways** | MongoDB only | PostgreSQL only | Redis RESP only | **5-Way Native: MySQL (3306), Postgres (5432), MongoDB (27017), gRPC (50051), REST/WS (27018)** |
+| **Wire Protocol Security** | Mongo SCRAM-SHA | Postgres MD5/SCRAM | Redis AUTH | **Centralized Zero-Trust across all 5 Gateways (Argon2id + Ed25519 JWT RBAC: Admin/RO/RW)** |
 | **Document Memory & Payload** | 16 MB hard ceiling (C++ buffer bloat) | 1 GB (TOAST out-of-line disk overhead) | N/A | **Zero-Copy Byte Slices (Safe 16MB default, scalable for AI Context)** |
 | **AI Vector Search (ANN)** | Add-on / Atlas Cloud only | Requires `pgvector` extension | Requires RedisSearch | **Native HNSW (Cosine, L2, Dot) < 1ms with 32x Binary Quantization** |
 | **Graph, openCypher & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Transactional GraphRAG: Native openCypher MATCH parser + TRAVERSE + VECTOR ranking + In-Memory Semantic Caching in 1 ACID binary** |
@@ -338,7 +338,7 @@ docker compose up -d
 
 ## 🚀 Quick Start Guide
 
-### 1. Launch 4-Way Multi-Protocol Server Daemon
+### 1. Launch 5-Way Multi-Protocol Server Daemon
 
 ```bash
 # Clone the repository
@@ -348,23 +348,25 @@ cd faizdb
 # Compile workspace in release mode
 cargo build --release
 
-# Launch 4-Way Multi-Protocol Gateway
+# Launch 5-Way Multi-Protocol Gateway
 ./target/release/faizdb serve
 ```
 
 Console Banner:
 ```text
 ╔══════════════════════════════════════════════════════════════════╗
-║  🔥 FaizDB Server v0.1.0 Running 4-Way Multi-Protocol Gateway ║
+║  🔥 FaizDB Server v0.1.0 Running 5-Way Multi-Protocol Gateway ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  🍃 MongoDB Wire Protocol : mongodb://0.0.0.0:27017             ║
+║  🐬 MySQL Wire Protocol   : mysql://0.0.0.0:3306                 ║
 ║  🐘 PostgreSQL Wire Proto : postgresql://0.0.0.0:5432            ║
+║  🍃 MongoDB Wire Protocol : mongodb://0.0.0.0:27017             ║
 ║  ⚡ gRPC / Protobuf       : grpc://0.0.0.0:50051                 ║
 ║  🌐 HTTP / REST API       : http://0.0.0.0:27018                 ║
 ║                                                                  ║
 ║  👉 Connection Strings:                                          ║
-║     Mongo : mongodb://127.0.0.1:27017                            ║
+║     MySQL : mysql -h 127.0.0.1 -P 3306 -u admin -p faizdb        ║
 ║     PSQL  : psql -h 127.0.0.1 -p 5432 -U postgres -d faizdb      ║
+║     Mongo : mongodb://127.0.0.1:27017                            ║
 ║     gRPC  : localhost:50051                                      ║
 ║     REST  : http://127.0.0.1:27018                               ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -374,7 +376,27 @@ Console Banner:
 
 ### 2. Connect via Your Preferred Protocol & Driver
 
-#### A. 🐘 PostgreSQL Wire (`psql`, DBeaver, TablePlus, Grafana):
+#### A. 🐬 MySQL / MariaDB Wire (MySQL CLI, Laravel, WordPress, PHP PDO):
+```bash
+# Direct MySQL CLI connection
+mysql -h 127.0.0.1 -P 3306 -u admin -p faizdb
+
+# Laravel Eloquent .env configuration:
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=faizdb
+DB_USERNAME=admin
+DB_PASSWORD=faizdb-admin-2026
+
+# WordPress wp-config.php configuration:
+define('DB_NAME', 'faizdb');
+define('DB_USER', 'admin');
+define('DB_PASSWORD', 'faizdb-admin-2026');
+define('DB_HOST', '127.0.0.1:3306');
+```
+
+#### B. 🐘 PostgreSQL Wire (`psql`, DBeaver, TablePlus, Grafana):
 ```bash
 # Secured by Argon2id Password Authentication
 PGPASSWORD="faizdb-admin-2026" psql -h 127.0.0.1 -p 5432 -U admin -d faizdb
@@ -384,7 +406,7 @@ SELECT * FROM users WHERE active = true;
 INSERT INTO users (name, role, score) VALUES ('Ahmad Faiz', 'Architect', 9950);
 ```
 
-#### B. ⚡ gRPC & Protocol Buffers (Python, TypeScript, Go):
+#### C. ⚡ gRPC & Protocol Buffers (Python, TypeScript, Go):
 ```python
 from faizdb import FaizDbGrpcClient
 
@@ -396,7 +418,7 @@ for h in hits:
     print(f"ID: {h['id']}, Score: {h['score']:.4f}")
 ```
 
-#### C. 🍃 MongoDB Wire (`pymongo`, `mongoose`, Prisma, PHP):
+#### D. 🍃 MongoDB Wire (`pymongo`, `mongoose`, Prisma, PHP):
 ```python
 from pymongo import MongoClient
 
@@ -413,7 +435,7 @@ results = col.aggregate([
 ])
 ```
 
-#### D. 🌐 HTTP / REST API, WebSockets & User Management:
+#### E. 🌐 HTTP / REST API, WebSockets & User Management:
 ```bash
 # Query endpoint:
 curl -X POST http://127.0.0.1:27018/v1/query \

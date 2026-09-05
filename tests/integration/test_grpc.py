@@ -32,7 +32,7 @@ def main():
 
     except ConnectionRefusedError:
         print("ℹ️ Note: FaizDB server is not currently running on port 50051.")
-        print("Run 'faizdb serve' to start the 4-Way Multi-Protocol Server and test live.")
+        print("Run 'faizdb serve' to start the 5-Way Multi-Protocol Server and test live.")
     except Exception as e:
         print(f"Connection test output: {e}")
 

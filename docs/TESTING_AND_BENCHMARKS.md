@@ -121,22 +121,25 @@ bash scripts/run_scientific_audit.sh
 FaizDB provides automated integration test suites located in `tests/`:
 
 ```bash
-# 1. PostgreSQL Wire Protocol Test (Port 5432)
+# 1. MySQL Wire Protocol Test (Port 3306)
+cargo test --package faizdb-server --test test_mysql_wire_protocol
+
+# 2. PostgreSQL Wire Protocol Test (Port 5432)
 python tests/integration/test_postgres_wire.py
 
-# 2. gRPC & Protocol Buffers Test (Port 50051)
+# 3. gRPC & Protocol Buffers Test (Port 50051)
 python tests/integration/test_grpc.py
 
-# 3. MongoDB Wire Protocol Test (Port 27017)
+# 4. MongoDB Wire Protocol Test (Port 27017)
 python tests/integration/test_mongo_wire.py
 
-# 4. Multi-Region Active-Active CRDTs Test
+# 5. Multi-Region Active-Active CRDTs Test
 python tests/test_geo_replication.py
 
-# 5. Okapi BM25 Full-Text Search Test
+# 6. Okapi BM25 Full-Text Search Test
 python tests/test_fulltext_search.py
 
-# 6. Aggregation & Analytics Pipeline Test
+# 7. Aggregation & Analytics Pipeline Test
 python tests/test_aggregation_pipeline.py
 ```
 

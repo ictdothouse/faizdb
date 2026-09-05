@@ -4,8 +4,9 @@ FaizDB features a unified, multi-protocol engine running across 4 standard ports
 
 | Protocol | Default Port | Primary Target & Compatibility |
 | :--- | :---: | :--- |
+| 🐬 **MySQL / MariaDB Wire Protocol** | `3306` | Drop-in compatibility for MySQL CLI, PHP `mysqli`/PDO, Laravel, WordPress. |
+| 🐘 **PostgreSQL Wire Protocol** | `5432 / 5433` | Drop-in compatibility for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs. |
 | 🍃 **MongoDB Wire Protocol** | `27017` | Drop-in replacement for Mongoose, PyMongo, Prisma, BSON apps. |
-| 🐘 **PostgreSQL Wire Protocol** | `5432` | Drop-in compatibility for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs. |
 | ⚡ **gRPC & Protocol Buffers** | `50051` | Ultra low-latency binary microservices, AI vector search, and streaming events. |
 | 🌐 **HTTP REST & WebSocket Bus**| `27018` | Browser management studio, IoT streams, and OpenAPI endpoints. |
 
@@ -321,17 +322,23 @@ Fast bulk import supporting either JSON documents array or CSV string with autom
 
 ---
 
-## 🔌 11. Native Wire Protocols (PostgreSQL & MongoDB)
+## 🔌 11. Native Wire Protocols (MySQL, PostgreSQL & MongoDB)
 
-FaizDB operates native wire protocol listeners alongside HTTP REST:
+FaizDB operates 3 native wire protocol listeners alongside HTTP REST and gRPC:
 
-### 1. 🐘 PostgreSQL Wire Protocol (`Port 5432`):
+### 1. 🐬 MySQL / MariaDB Wire Protocol (`Port 3306`):
+* **Handshake Negotiation**: Native `HandshakeV10` protocol greeting returning server version `8.0.35-FaizDB-Universal`.
+* **Authentication**: Supports `HandshakeResponse41` with `mysql_native_password` authentication and database selection.
+* **Driver Support**: Direct drop-in compatibility for MySQL CLI, PHP `mysqli`, PDO, Laravel Eloquent (`DB_CONNECTION=mysql`), and WordPress (`wp-config.php`).
+* **Connection String**: `mysql -h 127.0.0.1 -P 3306 -u root faizdb` or `mysql://root@127.0.0.1:3306/faizdb`
+
+### 2. 🐘 PostgreSQL Wire Protocol (`Port 5432 / 5433`):
 * **Authentication Challenge**: Employs PostgreSQL `AuthenticationCleartextPassword` ('R', code 3).
 * **Verification**: Checks credentials against `UserStore` with Argon2id hashing.
 * **Rejection**: Invalid credentials or missing passwords trigger PostgreSQL `FATAL 28P01` error response and connection termination.
 * **Connection String**: `postgresql://admin:password@localhost:5432/faizdb`
 
-### 2. 🍃 MongoDB Wire Protocol (`Port 27017`):
+### 3. 🍃 MongoDB Wire Protocol (`Port 27017`):
 * **Driver Support**: Compatible with PyMongo, Mongoose, MongoDB Shell (`mongosh`), and Prisma.
 * **OP_MSG Support**: Handles document insert, find, update, and multi-stage `aggregate` pipelines including `$lookup` cross-collection joins.
 * **Connection String**: `mongodb://localhost:27017/faizdb`

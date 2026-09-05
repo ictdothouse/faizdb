@@ -29,18 +29,17 @@ FaizDB is an AI-native, multi-model database engine written in memory-safe Rust.
                               │    (Argon2id Hash + Ed25519 JWT + RBAC: Admin/RO/RW)   │
                               └────────────────────────────┬────────────────────────────┘
                                                            │
-              ┌────────────────────────────┬───────────────┴───────────────┬────────────────────────────┐
-              ▼                            ▼                               ▼                            ▼
-   ┌──────────────────────┐     ┌──────────────────────┐       ┌──────────────────────┐      ┌──────────────────────┐
-   │    Postgres Wire     │     │     MongoDB Wire     │       │     gRPC Gateway     │      │     REST & WSS       │
-   │     (Port 5432)      │     │     (Port 27017)     │       │     (Port 50051)     │      │     (Port 27018)     │
-   ├──────────────────────┤     ├──────────────────────┤       ├──────────────────────┤      ├──────────────────────┤
-   │ • AuthCleartext ('R')│     │ • authenticate cmd   │       │ • Bearer JWT Metadata│      │ • Bearer JWT Auth    │
-   │ • Argon2id Hash Auth │     │ • SASL PLAIN Flow    │       │ • HTTP Basic Auth    │      │ • HTTPS / TLS 1.3    │
-   │ • Code 0 Ok / 28P01  │     │ • Code 13 Unauth     │       │ • Status::Unauth     │      │ • /v1/collections    │
-   │ • Zero unauth access │     │ • Code 18 AuthFail   │       │ • Status::Denied     │      │ • Pagination Query   │
-   │ • Streaming Query    │     │ • RBAC ReadOnly Guard│       │ • Proto Buffers RPC  │      │ • CDC Kafka Streams  │
-   └──────────────────────┘     └──────────────────────┘       └──────────────────────┘      └──────────────────────┘
+         ┌───────────────┬───────────────────┼───────────────────┬───────────────┐
+         ▼               ▼                   ▼                   ▼               ▼
+  ┌─────────────┐ ┌─────────────┐     ┌─────────────┐     ┌─────────────┐ ┌─────────────┐
+  │ MySQL Wire  │ │Postgres Wire│     │ MongoDB Wire│     │gRPC Gateway │ │ REST & WSS  │
+  │ (Port 3306) │ │ (Port 5432) │     │(Port 27017) │     │(Port 50051) │ │(Port 27018) │
+  ├─────────────┤ ├─────────────┤     ├─────────────┤     ├─────────────┤ ├─────────────┤
+  │• Handshake10│ │• Cleartext  │     │• SASL PLAIN │     │• Bearer JWT │ │• Bearer JWT │
+  │• Argon2id   │ │• Argon2id   │     │• Argon2id   │     │• HTTP Basic │ │• TLS 1.3    │
+  │• OK/ERR Pkts│ │• Code 0 /28P│     │• Code 13/18 │     │• ProtoBuf   │ │• REST API   │
+  │• Laravel/WP │ │• Streaming  │     │• RBAC Guard │     │• Vector RPC │ │• CDC Stream │
+  └─────────────┘ └─────────────┘     └─────────────┘     └─────────────┘ └─────────────┘
                                                            │
                                                            ▼
                               ┌─────────────────────────────────────────────────────────┐
@@ -71,6 +70,7 @@ All inbound connection gateways in FaizDB converge on a centralized, cryptograph
 
 | Protocol Gateway | Port | Authentication Handshake | Authorization & RBAC Enforcement | Anonymous Access Policy |
 |---|:---:|---|---|---|
+| **MySQL Wire** | `3306` | HandshakeV10 initialization $\rightarrow$ HandshakeResponse41 $\rightarrow$ Argon2id hash verification $\rightarrow$ OK_Packet / ERR_Packet. | Bound to authenticated user account with RBAC controls. | Invalid credentials trigger `ER_ACCESS_DENIED_ERROR (1045)` and socket is closed. |
 | **MongoDB Wire** | `27017` | `authenticate` command and SASL `PLAIN` (`\0user\0pass`) verified against Argon2id. | • `ReadOnly`: Permitted to execute `find`, `count`, `listCollections`. Blocked from `insert`, `drop` (`code: 13, Unauthorized`).<br>• `ReadWrite` & `Admin`: Full mutation permissions. | Rejects all operational commands with `code: 13, Unauthorized`. Allows discovery handshakes (`isMaster`, `hello`, `ping`). |
 | **PostgreSQL Wire**| `5432` | Protocol v3 Startup Packet $\rightarrow$ Server challenge `AuthenticationCleartextPassword` ('R', code 3) $\rightarrow$ Argon2id hash verification $\rightarrow$ `AuthenticationOk` ('R', code 0). | Bound to authenticated user account. | Missing or invalid credentials trigger `FATAL 28P01` (Invalid Password) and connection is immediately terminated. |
 | **gRPC Gateway** | `50051` | Incoming RPC Metadata: `authorization: Bearer <jwt_token>` (Ed25519) or `authorization: Basic <base64(user:pass)>`. | • `ReadOnly`: Blocked from mutating RPCs (`insert_documents`, `DELETE` queries) with `tonic::Code::PermissionDenied`.<br>• Permitted for query execution and `vector_search`. | Unauthenticated calls return `tonic::Code::Unauthenticated`. Public `health_check` endpoint is exempt for load balancer liveness. |

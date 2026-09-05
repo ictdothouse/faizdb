@@ -2,7 +2,7 @@
 
 This document details **20 real-world production use cases** where **FaizDB** replaces multi-database sprawl, eliminates distributed sync taxes, and delivers superior throughput, sub-millisecond latencies, and mathematical durability across modern technology stacks.
 
-> 💡 **Standalone-First Architecture Note:** FaizDB is an independent, autonomous database kernel with its own native query language (**FaizQL**), native high-performance gRPC engine (port 50051), and embedded in-process library mode (`faizdb-core`). The PostgreSQL wire (port 5432) and MongoDB wire (port 27017) protocols are **completely optional ingress bridges** provided for ecosystem convenience (allowing tools like DBeaver, Prisma, TablePlus, and PyMongo to connect without code changes). FaizDB does not require or emulate external databases to operate; it runs 100% standalone.
+> 💡 **Standalone-First Architecture Note:** FaizDB is an independent, autonomous database kernel with its own native query language (**FaizQL**), native high-performance gRPC engine (port 50051), and embedded in-process library mode (`faizdb-core`). The MySQL wire (port 3306), PostgreSQL wire (port 5432/5433), and MongoDB wire (port 27017) protocols are **completely optional ingress bridges** provided for ecosystem convenience (allowing tools like MySQL CLI, Laravel, WordPress, DBeaver, Prisma, TablePlus, and PyMongo to connect without code changes). FaizDB does not require or emulate external databases to operate; it runs 100% standalone.
 
 ---
 
@@ -10,7 +10,7 @@ This document details **20 real-world production use cases** where **FaizDB** re
 
 ### 🤖 Frontier AI, Autonomous Agents & Model Systems
 1. [Autonomous AI Agent 3-Tier Memory Architecture (Redis + Pinecone + Neo4j in One)](#1-autonomous-ai-agent-3-tier-memory-architecture)
-2. [Semantic Caching: Sashing 70%+ Frontier LLM (OpenAI/Claude/Gemini/DeepSeek) API Bills](#2-semantic-caching-slashing-70-llm-api-bills)
+2. [Semantic Caching: Slashing 70%+ Frontier LLM (OpenAI / Claude / Gemini / DeepSeek) API Bills](#2-semantic-caching-slashing-70-llm-api-bills)
 3. [Tri-Hybrid GraphRAG: Eliminating Foundation Model Hallucinations](#3-tri-hybrid-graphrag-eliminating-foundation-model-hallucinations)
 4. [High-Throughput PyTorch / TensorFlow DataLoader Streaming (Preventing GPU Starvation)](#4-high-throughput-pytorch--tensorflow-dataloader-streaming)
 5. [Autonomous Multi-Agent Swarm Collaboration Event Bus (< 0.5ms Push Latency)](#5-autonomous-multi-agent-swarm-collaboration-event-bus)
@@ -23,7 +23,7 @@ This document details **20 real-world production use cases** where **FaizDB** re
 10. [High-Volume Live Event Ticketing & Dynamic Auction Bidding Engines](#10-high-volume-live-event-ticketing--dynamic-auction-bidding-engines)
 
 ### 🛍️ Enterprise, Fintech & Dual-Protocol Modernization
-11. [Dual-Stack Modernization: Native Drop-In PostgreSQL & MongoDB Wire Co-Existence](#11-dual-stack-modernization-native-drop-in-postgresql--mongodb-wire-co-existence)
+11. [Universal Multi-Stack Modernization: Native Drop-In MySQL, PostgreSQL & MongoDB Wire Co-Existence](#11-universal-multi-stack-modernization-native-drop-in-mysql-postgresql--mongodb-wire-co-existence)
 12. [High-Concurrency E-Commerce & Flash Sales (Zero Overselling ACID Guarantee)](#12-high-concurrency-e-commerce--flash-sales-zero-overselling-acid-guarantee)
 13. [Fintech, Core Banking & Immutable Ledgers with Point-In-Time Recovery (PITR)](#13-fintech-core-banking--immutable-ledgers-with-point-in-time-recovery-pitr)
 14. [Real-Time Financial Fraud Detection & Anti-Money Laundering (AML) Graph Rings](#14-real-time-financial-fraud-detection--anti-money-laundering-aml-graph-rings)
@@ -70,12 +70,12 @@ This document details **20 real-world production use cases** where **FaizDB** re
 ---
 
 ### 2. Semantic Caching: Slashing 70%+ LLM API Bills
-* **The Problem:** Repeated calls to OpenAI GPT-4o, Anthropic Claude 3.5, Google Gemini 1.5, and DeepSeek for semantically identical questions cost enterprises tens of thousands of dollars per month with 1.5–3.0s latency.
+* **The Problem:** Repeated calls to frontier LLM APIs — including OpenAI (GPT-5, o3, o1), Anthropic (Claude 3.7 Sonnet, Claude 4), Google (Gemini 2.5 Flash/Pro), and DeepSeek (DeepSeek-R1, DeepSeek-V3) — for semantically identical questions cost enterprises tens of thousands of dollars per month with 1.5–3.0s latency.
 * **FaizDB Solution:**
   1. Incoming prompt text is vectorized into embeddings.
   2. The built-in `SemanticCache` performs sub-millisecond vector similarity matching (`cosine_similarity`).
   3. If similarity exceeds the configurable threshold ($\ge 0.90$), FaizDB immediately serves the in-memory cached response with automated TTL expiration, eliminating redundant database lookups and expensive LLM API invocations.
-  4. Delivers instant answers to users (&lt; 1ms) while saving **70% to 85%** of monthly LLM API expenditures.
+  4. Delivers instant answers to users (< 1ms) while saving **70% to 85%** of monthly LLM API expenditures.
 
 ---
 
@@ -139,12 +139,13 @@ This document details **20 real-world production use cases** where **FaizDB** re
 
 ## 🛍️ Enterprise, Fintech & Dual-Protocol Modernization
 
-### 11. Dual-Stack Modernization: Native Drop-In PostgreSQL & MongoDB Wire Co-Existence
-* **The Problem:** Organizations maintain fragmented infrastructure where backend/BI teams use PostgreSQL while web/mobile teams use MongoDB, forcing DevOps to maintain two separate database servers.
+### 11. Universal Multi-Stack Modernization: Native Drop-In MySQL, PostgreSQL & MongoDB Wire Co-Existence
+* **The Problem:** Organizations maintain fragmented infrastructure where legacy CMS/web teams use MySQL (WordPress, Laravel), backend/BI teams use PostgreSQL, and mobile teams use MongoDB, forcing DevOps to deploy and maintain three separate database server fleets.
 * **Collection-Level Paradigm Isolation:**
-  * **Relational Collections (Port 5432):** Governed by strict relational schemas, foreign keys, and typed constraints for financial ledgers and BI reporting tools (DBeaver, Prisma SQL, SQLAlchemy). Includes **Virtual System Catalog Reflection** (`pg_catalog.pg_database`, `pg_catalog.pg_namespace`, `pg_catalog.pg_type`, `information_schema.columns`) allowing modern ORMs and GUI clients to introspect tables automatically without configuration.
+  * **MySQL Wire Protocol (Port 3306):** Native drop-in compatibility for MySQL CLI, PHP `mysqli`, PDO, Laravel Eloquent (`DB_CONNECTION=mysql`), and WordPress (`wp-config.php`). Eliminates MySQL table-level locking and grants CMS platforms sub-millisecond LSM throughput and AI vector capabilities without rewriting PHP code.
+  * **Relational Collections (Port 5432 / 5433):** Governed by strict relational schemas, foreign keys, and typed constraints for financial ledgers and BI reporting tools (DBeaver, Prisma SQL, SQLAlchemy). Includes **Virtual System Catalog Reflection** (`pg_catalog.pg_database`, `pg_catalog.pg_namespace`, `pg_catalog.pg_type`, `information_schema.columns`) allowing modern ORMs and GUI clients to introspect tables automatically without configuration.
   * **Document Collections (Port 27017):** Governed by flexible schema BSON/JSON semantics for rapid prototyping, dynamic user profiles, and event logs (PyMongo, Mongoose).
-  * Rather than mixing paradigms on the same table, both engineering teams interact with their respective collections within a **single unified storage engine** with zero ETL pipelines and zero dual-server licensing costs.
+  * Rather than mixing paradigms on the same table, all engineering teams interact with their respective collections within a **single unified Safe Rust storage engine** with zero ETL pipelines, zero lock contention, and zero multi-server licensing costs.
 
 ---
 

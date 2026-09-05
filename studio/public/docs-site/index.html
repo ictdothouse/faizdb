@@ -525,8 +525,8 @@
         <div class="grid-2">
           <div class="feature-card">
             <div class="feature-icon">🌐</div>
-            <div class="feature-title">4-Way Multi-Protocol Gateway</div>
-            <div class="feature-desc">Native MongoDB Wire (27017), PostgreSQL Wire (5432), ultra-fast gRPC (50051), and REST/WS (27018) on one unified engine.</div>
+            <div class="feature-title">5-Way Universal Protocol Gateway</div>
+            <div class="feature-desc">Native MySQL Wire (3306), PostgreSQL Wire (5432/5433), MongoDB Wire (27017), ultra-fast gRPC (50051), and REST/WS (27018) on one unified engine.</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🚀</div>
@@ -577,7 +577,7 @@
               <td>MongoDB Wire only</td>
               <td>Postgres Wire only</td>
               <td>Redis RESP only</td>
-              <td><strong>4-Way Native: Mongo (27017) with $lookup, Postgres (5432) with Argon2id Auth, gRPC (50051), REST (27018)</strong></td>
+              <td><strong>5-Way Universal Native: MySQL (3306) for Laravel/WordPress, Mongo (27017) with $lookup, Postgres (5432) with Argon2id Auth, gRPC (50051), REST (27018)</strong></td>
             </tr>
             <tr>
               <td><strong>Document Memory & Payload</strong></td>
@@ -652,7 +652,7 @@
       <section id="embedded-mode">
         <h2>🪶 Embedded & Edge IoT Mode (Zero-Dependency SQLite-Style In-Process DB)</h2>
         <p class="lead">
-          FaizDB is engineered with a modular monorepo architecture. In addition to running as a 4-way multi-protocol server daemon, it can be embedded directly into your Rust, C/C++, Desktop, IoT, or Mobile applications — operating <strong>100% in-process with zero background daemons, zero network ports, and zero external runtime dependencies</strong>.
+          FaizDB is engineered with a modular monorepo architecture. In addition to running as a 5-way multi-protocol server daemon, it can be embedded directly into your Rust, C/C++, Desktop, IoT, or Mobile applications — operating <strong>100% in-process with zero background daemons, zero network ports, and zero external runtime dependencies</strong>.
         </p>
 
         <div class="grid-2">
@@ -2108,7 +2108,7 @@ cargo build --target aarch64-apple-ios --release -p faizdb-core</code></pre>
           <div class="feature-title">🚀 Version 0.1.0 — Initial Release</div>
           <ul style="margin-left: 1.25rem; font-size: 0.875rem; color: var(--text-muted); line-height: 1.7; margin-top: 0.5rem;">
             <li>Hybrid LSM-Tree storage engine with sequential WAL and MVCC ACID snapshot isolation.</li>
-            <li>4-Way Gateway: MongoDB Wire (27017), PostgreSQL Wire (5432), gRPC (50051), REST/WS (27018).</li>
+            <li>5-Way Universal Gateway: MySQL Wire (3306), PostgreSQL Wire (5432/5433), MongoDB Wire (27017), gRPC (50051), REST/WS (27018).</li>
             <li>Native HNSW Vector Index (Cosine, L2, Dot) and directional Knowledge Graph engine.</li>
             <li>EdDSA (Ed25519) asymmetric JWT authentication and Argon2id password hashing.</li>
             <li>Streaming k-Way BinaryHeap SSTable Compaction with bounded $O(k)$ memory usage.</li>

@@ -24,12 +24,12 @@ WORKDIR /app
 # Copy compiled binary from builder
 COPY --from=builder /usr/src/faizdb/target/release/faizdb /usr/local/bin/faizdb
 
-# Expose MongoDB (27017), PostgreSQL (5432), gRPC (50051), and HTTP/REST (27018)
-EXPOSE 27017 5432 50051 27018
+# Expose MySQL (3306), MongoDB (27017), PostgreSQL (5432), gRPC (50051), and HTTP/REST (27018)
+EXPOSE 3306 27017 5432 50051 27018
 
 # Data directory volume
 VOLUME ["/data"]
 
-# Default entrypoint starts the FaizDB 4-way multi-protocol server
+# Default entrypoint starts the FaizDB 5-way multi-protocol server
 ENTRYPOINT ["faizdb"]
-CMD ["serve", "--wire-port", "27017", "--pg-port", "5432", "--grpc-port", "50051", "--http-port", "27018", "--host", "0.0.0.0"]
+CMD ["serve", "--mysql-port", "3306", "--wire-port", "27017", "--pg-port", "5432", "--grpc-port", "50051", "--http-port", "27018", "--host", "0.0.0.0"]

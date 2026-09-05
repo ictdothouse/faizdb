@@ -60,7 +60,7 @@ Modern development teams are plagued by **"Architecture Sprawl"**—where an eng
 * **Tech Stack:** 100% Rust, multi-model (Document, Graph, Vector, Full-Text, Time-Series), WebSockets.
 * **Strengths:** Modern syntax, schema-full & schema-less modes, distributed backend support (TiKV).
 * **Where FaizDB Wins:**
-  - **Zero Migration Burden:** SurrealDB forces developers to learn SurrealQL. FaizDB provides native 4-Way Wire Protocols (Port 27017 Mongo + Port 5432 Postgres + Port 50051 gRPC).
+  - **Zero Migration Burden:** SurrealDB forces developers to learn SurrealQL. FaizDB provides native 5-Way Wire Protocols (MySQL Port 3306 + Mongo Port 27017 + Postgres Port 5432 + gRPC Port 50051 + REST/WS Port 27018).
   - **Embedded Standalone Engine:** FaizDB operates as a self-contained single binary with zero external dependencies (no TiKV cluster setup required).
 
 ### 3.2 FerretDB
@@ -139,8 +139,8 @@ graph TD
     Q1 -- "Yes" --> Cockroach["Choose CockroachDB / PostgreSQL"]
     Q1 -- "No" --> Q2{"Need JSON Docs + AI Vector + GraphRAG?"}
     
-    Q2 -- "Yes" --> Q3{"Want drop-in drivers (Mongo/Postgres/gRPC)?"}
-    Q3 -- "Yes" --> FaizDBChoice["🚀 CHOOSE FAIZDB<br/>(4-Way Gateways, Safe Rust LSM, Active-Active CRDTs)"]
+    Q2 -- "Yes" --> Q3{"Want drop-in drivers (MySQL/PG/Mongo/gRPC)?"}
+    Q3 -- "Yes" --> FaizDBChoice["🚀 CHOOSE FAIZDB<br/>(5-Way Gateways, Safe Rust LSM, Active-Active CRDTs)"]
     Q3 -- "No" --> Q4{"Willing to learn SurrealQL / AQL?"}
     Q4 -- "Yes" --> Surreal["Choose SurrealDB / ArangoDB"]
     Q4 -- "No" --> FaizDBChoice
@@ -156,7 +156,7 @@ graph TD
 | Project Scenario | Recommended Database | Alternative | Why? |
 | :--- | :---: | :---: | :--- |
 | **Modern AI & GraphRAG Applications** | 🚀 **FaizDB** | SurrealDB | Combines 4096d HNSW Vector, Knowledge Graph, and JSON Documents in a single Rust binary without managing 3 separate databases. |
-| **Zero-Friction Migration from Mongo/Postgres** | 🚀 **FaizDB** | FerretDB | Drop-in wire protocol ports (27017 & 5432) backed by a native high-speed Rust LSM-Tree engine. |
+| **Zero-Friction Migration from MySQL/Mongo/PG** | 🚀 **FaizDB** | FerretDB | Drop-in wire protocol ports (3306, 27017 & 5432) backed by a native high-speed Rust LSM-Tree engine. Works out-of-the-box with Laravel, WordPress, and standard drivers. |
 | **Ultra-High-Speed Microservices** | 🚀 **FaizDB** | Redis / gRPC | Sub-millisecond binary Protocol Buffers (Port 50051) and real-time Change Streams. |
 | **Global Multi-Region Datacenter Mesh** | 🚀 **FaizDB** | CockroachDB | Active-Active CRDTs provide sub-millisecond local writes with zero distributed lock penalties. |
 | **Traditional Core Banking Systems** | **CockroachDB** | PostgreSQL | Strict multi-table relational schema integrity with distributed serializable transactions. |
@@ -250,7 +250,7 @@ FaizDB balances battle-tested, verified implementations with a clear pipeline of
 * **Jepsen Chaos Resilience:** Automated test suites (`tests/test_jepsen_distributed_chaos.rs`) rigorously verify torn-write WAL recovery, Raft majority split-brain isolation, CRDT clock skew convergence, and LSM anti-stall guards.
 * **Native openCypher Query Engine:** Production-ready `MATCH (n)-[:REL]->(m)` parser, edge creation, multi-hop BFS/DFS graph traversals, and hybrid Cypher-GraphRAG with HNSW vector ranking.
 * **Autonomous Edge Silicon Support:** Native compilation for x86_64 and ARM64/aarch64 with single-binary 7.70 MB footprint and 23 MB idle memory consumption for IoT and robotics.
-* **Multi-Wire Interoperability:** Zero-shim binary wire decoding for PostgreSQL (port 5432/5433) and MongoDB (port 27017).
+* **Multi-Wire Interoperability:** Zero-shim binary wire decoding for MySQL (port 3306), PostgreSQL (port 5432/5433), and MongoDB (port 27017).
 
 #### 🚀 Next Horizons (Continuous Evolution)
 * **Client-Side WebAssembly (WASM):** Expanding headless WASM toolchains to allow running the FaizDB engine directly inside browser web workers and cloudflare edge workers.
