@@ -55,10 +55,16 @@ This document details **20 real-world production use cases** where **FaizDB** re
   * Entity relationships are traversed in native Knowledge Graph edges with bounded BFS.
   * All mutations occur within a **single ACID transaction**:
   ```sql
-  -- Atomic Agent Memory Query in FaizQL
+  -- Atomic Agent Memory Query in FaizQL:
   FIND agent_memories 
   TRAVERSE FROM "agent_alpha" DEPTH 2 VIA "interacted_with"
   VECTOR [0.045, 0.812, 0.334, ...] TOP 5;
+  ```
+  ```cypher
+  -- Or via native openCypher syntax:
+  MATCH (a:Agent {id: "agent_alpha"})-[:interacted_with*1..2]->(b:Memory)
+  VECTOR NEAR [0.045, 0.812, 0.334] TOP 5
+  RETURN b;
   ```
 
 ---
@@ -67,8 +73,8 @@ This document details **20 real-world production use cases** where **FaizDB** re
 * **The Problem:** Repeated calls to OpenAI GPT-4o, Anthropic Claude 3.5, Google Gemini 1.5, and DeepSeek for semantically identical questions cost enterprises tens of thousands of dollars per month with 1.5–3.0s latency.
 * **FaizDB Solution:**
   1. Incoming prompt text is vectorized into embeddings.
-  2. FaizDB conducts sub-millisecond HNSW vector search (`p50: 880 µs`).
-  3. If cosine similarity $\ge 0.95$, FaizDB immediately serves the in-memory cached response with an automated 24-hour TTL.
+  2. The built-in `SemanticCache` performs sub-millisecond vector similarity matching (`cosine_similarity`).
+  3. If similarity exceeds the configurable threshold ($\ge 0.90$), FaizDB immediately serves the in-memory cached response with automated TTL expiration, eliminating redundant database lookups and expensive LLM API invocations.
   4. Delivers instant answers to users (&lt; 1ms) while saving **70% to 85%** of monthly LLM API expenditures.
 
 ---
@@ -77,8 +83,8 @@ This document details **20 real-world production use cases** where **FaizDB** re
 * **The Problem:** Vector-only RAG misses relational context and specific identifiers (e.g., invoice numbers, SKU codes, familial relations), resulting in LLM hallucinations.
 * **FaizDB Solution:** Executes **Tri-Hybrid Retrieval**:
   1. **Okapi BM25 Keyword Search:** Exact phrase and token lookups.
-  2. **HNSW Dense Vector Search:** Conceptual semantic similarity.
-  3. **Multi-Hop Knowledge Graph Traversal:** 3-hop entity relationship extraction.
+  2. **HNSW Dense Vector Search:** Conceptual semantic similarity with 32x binary quantization.
+  3. **Multi-Hop Knowledge Graph Traversal:** Deterministic BFS traversal via `extract_rag_context` that compiles extracted entity relationships into concise, markdown-formatted prompt injection context without token waste.
   The combined payload provides the foundation model with 100% factual grounding.
 
 ---
@@ -136,7 +142,7 @@ This document details **20 real-world production use cases** where **FaizDB** re
 ### 11. Dual-Stack Modernization: Native Drop-In PostgreSQL & MongoDB Wire Co-Existence
 * **The Problem:** Organizations maintain fragmented infrastructure where backend/BI teams use PostgreSQL while web/mobile teams use MongoDB, forcing DevOps to maintain two separate database servers.
 * **Collection-Level Paradigm Isolation:**
-  * **Relational Collections (Port 5432):** Governed by strict relational schemas, foreign keys, and typed constraints for financial ledgers and BI reporting tools (DBeaver, Prisma SQL, SQLAlchemy).
+  * **Relational Collections (Port 5432):** Governed by strict relational schemas, foreign keys, and typed constraints for financial ledgers and BI reporting tools (DBeaver, Prisma SQL, SQLAlchemy). Includes **Virtual System Catalog Reflection** (`pg_catalog.pg_database`, `pg_catalog.pg_namespace`, `pg_catalog.pg_type`, `information_schema.columns`) allowing modern ORMs and GUI clients to introspect tables automatically without configuration.
   * **Document Collections (Port 27017):** Governed by flexible schema BSON/JSON semantics for rapid prototyping, dynamic user profiles, and event logs (PyMongo, Mongoose).
   * Rather than mixing paradigms on the same table, both engineering teams interact with their respective collections within a **single unified storage engine** with zero ETL pipelines and zero dual-server licensing costs.
 
@@ -170,14 +176,14 @@ This document details **20 real-world production use cases** where **FaizDB** re
 ---
 
 ### 16. Satellite Avionics & Air-Gapped Orbital Payloads (SpaceX / Starlink / Defense)
-* **The Problem:** Orbital satellites and defense avionics operate in radiation-harsh, zero-connectivity environments where sudden power cuts are common.
-* **FaizDB Solution:** Operates 100% air-gapped with zero external C dependencies. Write-Ahead Log (WAL) with CRC32 framing recovers 100% of committed telemetry data upon reboot, mathematically proven via automated `pkill -9` crash recovery tests.
+* **The Problem:** Orbital satellites and defense avionics operate in radiation-harsh, zero-connectivity environments where sudden power cuts are common, risking partial or torn disk writes.
+* **FaizDB Solution:** Operates 100% air-gapped with zero external C dependencies. Write-Ahead Log (WAL) with CRC32 framing and payload bounds validation guarantees that corrupted partial tail writes are safely intercepted, truncated at the last valid LSN boundary, and 100% of committed pre-crash telemetry data is restored without crashing, proven via automated Jepsen chaos fault tests.
 
 ---
 
 ### 17. Industrial IoT Sensor Streams & Acoustic Predictive Maintenance
-* **The Problem:** Modern industrial factories produce millions of time-series telemetry events per second from pumps, turbines, and generators.
-* **FaizDB Solution:** High-throughput LSM-Tree writes tens of thousands of sensor readings per second. HNSW vector search compares acoustic frequency patterns against known mechanical failure signatures to predict bearing wear weeks before physical breakdown.
+* **The Problem:** Modern industrial factories produce millions of time-series telemetry events per second from pumps, turbines, and generators. Ingestion surges can overwhelm storage compaction, creating hundreds of unmerged SSTables and causing catastrophic write stalls.
+* **FaizDB Solution:** High-throughput LSM-Tree writes tens of thousands of sensor readings per second protected by **Dynamic Anti-Stall Write Backpressure** (`l0_compaction_trigger: 4`, `l0_slowdown_writes_trigger: 8`, `l0_stop_writes_trigger: 16`). Compaction merges SSTables in background via atomic CAS, keeping Level-0 bounded and eliminating ingestion freezes. HNSW vector search compares acoustic frequency patterns against known mechanical failure signatures to predict bearing wear weeks before physical breakdown.
 
 ---
 

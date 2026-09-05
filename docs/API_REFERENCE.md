@@ -372,3 +372,54 @@ MATCH (a:docs)-[:REFERENCES]->(b:docs) WHERE a.id = 'doc1' VECTOR NEAR [0.95, 0.
 ### 4. In-Memory AI Semantic Cache
 Built-in `SemanticCache` performs sub-millisecond cosine similarity matching on prompt embeddings ($\ge 0.90$ threshold) with configurable TTL, preventing redundant LLM GraphRAG traversals and database scans.
 
+---
+
+## ⚙️ 13. LSM-Tree Anti-Stall Engine & Storage Tuning
+
+FaizDB provides self-tuning write backpressure to prevent Level-0 SSTable file bloat and eliminate write stalls under high-throughput burst workloads:
+
+### StorageConfig Parameters
+
+| Parameter | Type | Default | Description |
+|:---|:---:|:---:|:---|
+| `l0_compaction_trigger` | `usize` | `4` | Number of Level-0 SSTables that triggers asynchronous background compaction. |
+| `l0_slowdown_writes_trigger` | `usize` | `8` | Soft threshold: Injects microsecond write backpressure (`yield_now`) to throttle incoming writes and allow compaction to catch up. |
+| `l0_stop_writes_trigger` | `usize` | `16` | Hard threshold: Enforces synchronous foreground compaction before accepting further writes, preventing unbounded file descriptor accumulation. |
+| `memtable_size` | `usize` | `64 MB` | In-memory skiplist threshold before auto-flushing to an immutable Level-0 SSTable. |
+| `sync_writes` | `bool` | `false` | When `true`, every write enforces a strict synchronous `fsync` to the WAL. |
+| `enable_wal` | `bool` | `true` | Enables atomic write-ahead logging with CRC32 framing and LSN ordering. |
+| `block_cache_size` | `usize` | `64 MB` | Adaptive Replacement Cache (ARC) capacity for frequent SSTable block hits. |
+
+### Diagnostic Metrics (`StorageStats`)
+
+```rust
+let stats = engine.stats();
+println!("Active SSTables: {}", stats.sstable_count);
+println!("Write Stalls: {}", stats.write_stalls);
+println!("Compactions Completed: {}", stats.compactions_completed);
+```
+
+---
+
+## 🐘 14. PostgreSQL Virtual System Catalog Reflection
+
+To provide seamless, zero-config compatibility with modern ORMs and database management tools (Prisma, Drizzle, SQLAlchemy, DBeaver, TablePlus), FaizDB's PostgreSQL wire protocol (Port 5432) synthesizes virtual catalog responses for standard metadata inspection queries:
+
+| Catalog View / Table | Handled Columns | Supported Tools & ORMs |
+|:---|:---|:---|
+| `pg_catalog.pg_database` | `datname`, `encoding`, `datcollate`, `datctype` | DBeaver, TablePlus, Navicat |
+| `pg_catalog.pg_namespace` | `nspname`, `nspowner`, `nspacl` | Prisma, Drizzle, pgAdmin |
+| `pg_catalog.pg_type` | `typname`, `typnamespace`, `typlen`, `typtype` | SQLAlchemy, Diesel, sqlx |
+| `information_schema.columns` | `table_schema`, `table_name`, `column_name`, `data_type` | ORM Schema Migrators & Introspectors |
+
+---
+
+## 🛡️ 15. Torn-Write Crash Recovery & WAL Integrity Assurance
+
+FaizDB guarantees mathematical crash durability against abrupt power failures, kernel panics, and torn disk writes:
+
+* **CRC32 Frame Validation:** Every WAL record is protected by a 32-bit CRC checksum header (`magic: 0xFDB00001`).
+* **Payload Bounds Verification:** Deserialization performs explicit length validation (`pos + key_len + 4 <= payload_len`), preventing buffer overflow or slice panics on corrupted file tails.
+* **Safe Tail Truncation:** If a partial or corrupted write is encountered at the end of the log during startup replay, FaizDB safely logs a diagnostic warning, truncates the torn tail at the last valid LSN boundary, and recovers 100% of committed pre-crash transactions without crashing.
+
+

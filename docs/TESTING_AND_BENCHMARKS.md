@@ -19,17 +19,17 @@ This guide details how to run unit tests, multi-protocol integration tests, high
 The following metrics represent verified test runs conducted against the optimized release build of FaizDB:
 
 ### A. Workspace Unit & Integration Tests (`cargo test --workspace`):
-* **Status:** ✅ **196+ Tests Passed (100% Pass Rate across 26 Test Suites)**
-* **Compilation Status:** **0 Errors, 0 Warnings** (Strict Clean Build)
+* **Status:** ✅ **200+ Tests Passed (100% Pass Rate across all Workspace Crates)**
+* **Compilation Status:** **0 Errors, 0 Warnings** (Strict Clean Build under `cargo clippy -- -D warnings`)
 * **Tested Monorepo Suites & Crates:**
-  * `faizdb-core` (86 tests: LSM-Tree Compaction, MemTable, WAL, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
-  * `faizdb-server` (61 tests: Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, PostgreSQL Extended Query Protocol, MongoDB Stateful Cursors & O(1) Lookup, Audit Remediation Suite, Production Hardening & Operational Standards, TLS / HTTPS Transport)
+  * `faizdb-core` (86 tests: Dynamic LSM-Tree Anti-Stall Compaction, MemTable, WAL with Torn-Write Recovery, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
+  * `faizdb-server` (66+ tests: Jepsen Distributed Chaos Suite, Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, PostgreSQL Virtual Catalog & Extended Query Protocol, MongoDB Stateful Cursors & O(1) Lookup, Audit Remediation Suite, Production Hardening & Operational Standards, TLS / HTTPS Transport)
   * `faizdb-vector` (16 tests: Multi-Layer HNSW, Cosine/L2/Manhattan, Scalar & Binary 32x Quantization, GDPR Tombstone Deletion, In-Place Mutation)
-  * `faizdb-query` (22 tests: AST Parser, SQL & Mongo UPDATE, Multi-Table Hash INNER/LEFT JOIN, ORDER BY ASC/DESC, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
+  * `faizdb-query` (35 tests: openCypher Parser, Hybrid Cypher-GraphRAG + Vector Executor, AST Parser, SQL & Mongo UPDATE, Multi-Table Hash INNER/LEFT JOIN, ORDER BY ASC/DESC, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
   * `faizdb-security` (14 tests: AES-256-GCM AEAD, Argon2id, Ed25519 JWT RBAC, Rustls / Ring TLS Self-Signed & PEM Server Config, Central UserStore)
-  * `faizdb-graph` (3 tests: Knowledge Graph, Multi-Hop BFS/DFS Traversal, Dijkstra Shortest Path, Incident Edge Pruning & Deduplication)
+  * `faizdb-graph` (7 tests: Knowledge Graph, Multi-Hop BFS/DFS Traversal, Dijkstra Shortest Path, Incident Edge Pruning & Deduplication, Deterministic `extract_rag_context` Markdown Extraction, In-Memory `SemanticCache` Cosine Similarity & TTL Expiry)
   * Documentation doctests (2 tests)
-* **Latest Verification Reference:** See [`LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md`](LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) and [`faizdb-audit-report-v6.md`](faizdb-audit-report-v6.md) for full protocol throughput and enterprise architecture breakdown.
+* **Latest Verification Reference:** See [`LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md`](LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) and [`PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md`](PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) for full protocol throughput and enterprise architecture breakdown.
 
 ---
 
@@ -75,12 +75,14 @@ Execute the following commands from the workspace root:
 cargo test --workspace
 
 # Run dedicated integration test suites:
-cargo test -p faizdb-server --test test_auth_flow      # EdDSA JWT & Argon2id Auth Flow
-cargo test -p faizdb-server --test test_document_crud   # High-Volume Document CRUD & WAL Crash Safety
-cargo test -p faizdb-server --test test_vector_search   # HNSW Vector Indexing & Distance Metrics
+cargo test -p faizdb-server --test test_auth_flow             # EdDSA JWT & Argon2id Auth Flow
+cargo test -p faizdb-server --test test_document_crud          # High-Volume Document CRUD & WAL Crash Safety
+cargo test -p faizdb-server --test test_vector_search          # HNSW Vector Indexing & Distance Metrics
+cargo test -p faizdb-server --test test_jepsen_distributed_chaos # Jepsen Distributed Chaos, Split-Brain & Torn-Write Recovery
 
 # Run tests for a specific module (e.g., CRDTs & Geo-Replication):
 cargo test -p faizdb-core -- cluster::crdt
+cargo test -p faizdb-query -- parser::tests::test_parse_cypher # openCypher Graph Syntax Tests
 ```
 
 ---

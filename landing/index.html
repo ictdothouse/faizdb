@@ -758,16 +758,16 @@
         <div class="card-icon">🌐</div>
         <h3 class="card-title">4-Way Multi-Protocol Wire Gateways with Zero-Trust RBAC</h3>
         <p class="card-text">
-          Connect existing tools with zero code rewrites. FaizDB speaks native <strong>MongoDB Wire (Port 27017)</strong> at 3,390 ops/s (p50: 262µs), <strong>PostgreSQL Wire (Port 5432)</strong> with Argon2id authentication, <strong>gRPC (Port 50051)</strong> with Bearer JWT / Basic Auth, and <strong>REST CRUD (Port 27018)</strong> with streaming pagination (<code>?limit=N&amp;offset=N</code>).
+          Connect existing tools with zero code rewrites. FaizDB speaks native <strong>MongoDB Wire (Port 27017)</strong> at 3,390 ops/s (p50: 262µs), <strong>PostgreSQL Wire (Port 5432)</strong> with virtual catalog reflection (<code>pg_catalog.*</code>, <code>information_schema.*</code>) for drop-in ORM introspection (Prisma, Drizzle, SQLAlchemy, DBeaver), <strong>gRPC (Port 50051)</strong> with Bearer JWT / Basic Auth, and <strong>REST CRUD (Port 27018)</strong> with streaming pagination (<code>?limit=N&amp;offset=N</code>).
         </p>
       </div>
 
       <!-- Card 5: ARC Cache & LSM -->
       <div class="card col-6">
         <div class="card-icon">🌲</div>
-        <h3 class="card-title">LSM-Tree with Self-Tuning ARC Cache</h3>
+        <h3 class="card-title">LSM-Tree Anti-Stall Engine & Torn-Write WAL</h3>
         <p class="card-text">
-          Self-tuning <strong>Adaptive Replacement Cache (ARC)</strong> balances Recency (LRU) and Frequency (LFU) automatically without manual tuning. Delivers 476,000+ reads/sec with write-ahead log (WAL) durability and streaming SSTable compaction.
+          Self-tuning <strong>Adaptive Replacement Cache (ARC)</strong> balances Recency and Frequency. Multi-tiered write backpressure (soft yield at 8 L0 SSTables, hard stall guard at 16 L0 SSTables) eliminates compaction freezes under bursty ingest, paired with torn-write resilient WAL crash recovery.
         </p>
       </div>
 
