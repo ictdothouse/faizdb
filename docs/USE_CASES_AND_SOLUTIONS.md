@@ -2,7 +2,7 @@
 
 This document details **20 real-world production use cases** where **FaizDB** replaces multi-database sprawl, eliminates distributed sync taxes, and delivers superior throughput, sub-millisecond latencies, and mathematical durability across modern technology stacks.
 
-> 💡 **Standalone-First Architecture Note:** FaizDB is an independent, autonomous database kernel with its own native query language (**FaizQL**), native high-performance gRPC engine (port 50051), and embedded in-process library mode (`faizdb-core`). The MySQL wire (port 3306), PostgreSQL wire (port 5432/5433), and MongoDB wire (port 27017) protocols are **completely optional ingress bridges** provided for ecosystem convenience (allowing tools like MySQL CLI, Laravel, WordPress, DBeaver, Prisma, TablePlus, and PyMongo to connect without code changes). FaizDB does not require or emulate external databases to operate; it runs 100% standalone.
+> 💡 **Standalone-First Architecture Note:** FaizDB is an independent, autonomous database kernel with its own native query language (**FaizQL**), native high-performance gRPC engine (port 50051), and embedded in-process library mode (`faizdb-core`). The MySQL wire (port 3306), PostgreSQL wire (port 5432/5433), and MongoDB wire (port 27017) protocols are **completely optional ingress bridges** provided for ecosystem convenience (allowing tools like MySQL CLI, Laravel Eloquent, DBeaver, Prisma, TablePlus, and PyMongo to connect without code changes). FaizDB does not require or emulate external databases to operate; it runs 100% standalone.
 
 ---
 
@@ -140,9 +140,9 @@ This document details **20 real-world production use cases** where **FaizDB** re
 ## 🛍️ Enterprise, Fintech & Dual-Protocol Modernization
 
 ### 11. Universal Multi-Stack Modernization: Native Drop-In MySQL, PostgreSQL & MongoDB Wire Co-Existence
-* **The Problem:** Organizations maintain fragmented infrastructure where legacy CMS/web teams use MySQL (WordPress, Laravel), backend/BI teams use PostgreSQL, and mobile teams use MongoDB, forcing DevOps to deploy and maintain three separate database server fleets.
+* **The Problem:** Organizations maintain fragmented infrastructure where web application teams use MySQL (Laravel Eloquent, PHP PDO), backend/BI teams use PostgreSQL, and mobile teams use MongoDB, forcing DevOps to deploy and maintain three separate database server fleets.
 * **Collection-Level Paradigm Isolation:**
-  * **MySQL Wire Protocol (Port 3306):** Native drop-in compatibility for MySQL CLI, PHP `mysqli`, PDO, Laravel Eloquent (`DB_CONNECTION=mysql`), and WordPress (`wp-config.php`). Eliminates MySQL table-level locking and grants CMS platforms sub-millisecond LSM throughput and AI vector capabilities without rewriting PHP code.
+  * **MySQL Wire Protocol (Port 3306):** Native drop-in compatibility for MySQL CLI, PHP `mysqli`, PDO, and Laravel Eloquent (`DB_CONNECTION=mysql`). Eliminates MySQL table-level locking and grants PHP applications sub-millisecond LSM throughput and AI vector capabilities without rewriting PHP code.
   * **Relational Collections (Port 5432 / 5433):** Governed by strict relational schemas, foreign keys, and typed constraints for financial ledgers and BI reporting tools (DBeaver, Prisma SQL, SQLAlchemy). Includes **Virtual System Catalog Reflection** (`pg_catalog.pg_database`, `pg_catalog.pg_namespace`, `pg_catalog.pg_type`, `information_schema.columns`) allowing modern ORMs and GUI clients to introspect tables automatically without configuration.
   * **Document Collections (Port 27017):** Governed by flexible schema BSON/JSON semantics for rapid prototyping, dynamic user profiles, and event logs (PyMongo, Mongoose).
   * Rather than mixing paradigms on the same table, all engineering teams interact with their respective collections within a **single unified Safe Rust storage engine** with zero ETL pipelines, zero lock contention, and zero multi-server licensing costs.

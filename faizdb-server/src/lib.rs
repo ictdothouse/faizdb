@@ -3,7 +3,7 @@
 //! Provides 5 concurrent entry gateways:
 //! 1. **MongoDB Wire Protocol** (Port 27017) — drop-in replacement for MongoDB apps & tools.
 //! 2. **PostgreSQL Wire Protocol** (Port 5432) — drop-in compatibility for psql, DBeaver, TablePlus, Grafana, SQL ORMs.
-//! 3. **MySQL / MariaDB Wire Protocol** (Port 3306) — drop-in compatibility for MySQL CLI, PHP mysqli/PDO, Laravel, WordPress.
+//! 3. **MySQL / MariaDB Wire Protocol** (Port 3306) — drop-in compatibility for MySQL CLI, PHP mysqli/PDO, Laravel Eloquent.
 //! 4. **gRPC & Protocol Buffers** (Port 50051) — ultra-low latency IPC for microservices & streaming AI vectors.
 //! 5. **REST / HTTP & WebSocket Change Streams** (Port 27018) — for web clients, microservices, and reactive subscriptions.
 
@@ -63,7 +63,7 @@ pub async fn run_multi_protocol_server(
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
 
-    // Create unified shutdown broadcast channel across all 4 entry gateways
+    // Create unified shutdown broadcast channel across all 5 entry gateways
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
 
     // Spawn centralized OS signal handler (CTRL+C / SIGTERM)

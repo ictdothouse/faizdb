@@ -1009,14 +1009,14 @@ Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
           <div class="module-title-area">
             <div class="module-icon">🐬</div>
             <div>
-              <h2 class="module-title">Module 8: Enterprise CMS & Laravel / MySQL Wire (Port 3306)</h2>
-              <p class="module-sub">Plug existing MySQL, Laravel, and WordPress applications directly into FaizDB without code rewrites.</p>
+              <h2 class="module-title">Module 8: Enterprise Web Frameworks & Laravel / MySQL Wire (Port 3306)</h2>
+              <p class="module-sub">Plug existing MySQL, Laravel Eloquent, and PHP applications directly into FaizDB without code rewrites.</p>
             </div>
           </div>
         </div>
 
         <div class="scenario-box">
-          <strong>Scenario:</strong> Your team maintains applications built for MySQL or MariaDB (Laravel Eloquent, WordPress, PHP PDO, or Python mysqlclient). Rather than rewriting database drivers, connect directly to FaizDB's native MySQL Wire Protocol on Port 3306!
+          <strong>Scenario:</strong> Your team maintains applications built for MySQL or MariaDB (Laravel Eloquent, PHP PDO, or Python mysqlclient). Rather than rewriting database drivers, connect directly to FaizDB's native MySQL Wire Protocol on Port 3306!
         </div>
 
         <div class="code-container">
@@ -1024,7 +1024,6 @@ Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
             <div class="code-tabs">
               <button class="code-tab active" onclick="switchTab(this, 'c8-laravel')">Laravel (.env)</button>
               <button class="code-tab" onclick="switchTab(this, 'c8-cli')">MySQL CLI</button>
-              <button class="code-tab" onclick="switchTab(this, 'c8-wp')">WordPress (wp-config.php)</button>
             </div>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
           </div>
@@ -1046,12 +1045,6 @@ SELECT @@version, @@version_comment;
 SHOW TABLES;
 INSERT INTO articles (title, content) VALUES ('Hello FaizDB', 'Pure Safe Rust Engine');
 SELECT * FROM articles;</code></pre>
-          <pre id="c8-wp" style="display:none;"><code>// Inside WordPress wp-config.php:
-define( 'DB_NAME', 'faizdb' );
-define( 'DB_USER', 'root' );
-define( 'DB_PASSWORD', '' );
-define( 'DB_HOST', '127.0.0.1:3306' );
-define( 'DB_CHARSET', 'utf8mb4' );</code></pre>
         </div>
 
         <div class="sandbox-box">
@@ -1162,7 +1155,7 @@ define( 'DB_CHARSET', 'utf8mb4' );</code></pre>
       setTimeout(() => {
         if (step === 1) {
           out.innerText = `🟢 HTTP/REST 27018 : Status 200 OK (Engine: FaizDB v0.1.0, Latency: 0.18ms)\n` +
-            `🐬 MySQL Wire 3306  : Listening (Ready for MySQL CLI / PHP mysqli / Laravel / WordPress)\n` +
+            `🐬 MySQL Wire 3306  : Listening (Ready for MySQL CLI / PHP mysqli / Laravel)\n` +
             `🐘 Postgres 5433   : Listening (Ready for psql / DBeaver / Grafana / SQL ORMs)\n` +
             `🍃 Mongo Wire 27017 : Listening (Ready for PyMongo / Mongoose / Compass)\n` +
             `⚡ gRPC 50051       : Ready (Sub-millisecond protobuf streaming)\n` +
@@ -1222,7 +1215,7 @@ define( 'DB_CHARSET', 'utf8mb4' );</code></pre>
             `--------------------------------------------------------------------------------\n` +
             `| FaizDB Universal Multi-Model Engine (Safe Rust)       | 8.0.35-FaizDB         |\n` +
             `--------------------------------------------------------------------------------\n` +
-            `Handshake & Query resolved in 0.12ms. Compatible with Laravel, WordPress & MySQL CLI.`;
+            `Handshake & Query resolved in 0.12ms. Compatible with Laravel Eloquent & MySQL CLI.`;
         }
         // Auto mark complete
         if (!completedSet.has(step)) {

@@ -46,7 +46,7 @@ enum Commands {
         /// PostgreSQL Wire Protocol Port (Drop-in compatibility for psql, DBeaver, TablePlus, Grafana)
         #[arg(short = 'g', long, default_value = "5432")]
         pg_port: u16,
-        /// MySQL / MariaDB Wire Protocol Port (Drop-in compatibility for MySQL CLI, PHP mysqli/PDO, Laravel, WordPress)
+        /// MySQL / MariaDB Wire Protocol Port (Drop-in compatibility for MySQL CLI, PHP mysqli/PDO, Laravel Eloquent)
         #[arg(short = 'm', long, default_value = "3306")]
         mysql_port: u16,
         /// gRPC & Protocol Buffers Port (Ultra-low latency microservices & vector streaming)

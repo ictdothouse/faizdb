@@ -1,10 +1,10 @@
 # 📚 FaizDB Universal API & Protocols Reference
 
-FaizDB features a unified, multi-protocol engine running across 4 standard ports:
+FaizDB features a unified, multi-protocol engine running across 5 standard ports:
 
 | Protocol | Default Port | Primary Target & Compatibility |
 | :--- | :---: | :--- |
-| 🐬 **MySQL / MariaDB Wire Protocol** | `3306` | Drop-in compatibility for MySQL CLI, PHP `mysqli`/PDO, Laravel, WordPress. |
+| 🐬 **MySQL / MariaDB Wire Protocol** | `3306` | Drop-in compatibility for MySQL CLI, PHP `mysqli`/PDO, Laravel Eloquent. |
 | 🐘 **PostgreSQL Wire Protocol** | `5432 / 5433` | Drop-in compatibility for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs. |
 | 🍃 **MongoDB Wire Protocol** | `27017` | Drop-in replacement for Mongoose, PyMongo, Prisma, BSON apps. |
 | ⚡ **gRPC & Protocol Buffers** | `50051` | Ultra low-latency binary microservices, AI vector search, and streaming events. |
@@ -329,7 +329,7 @@ FaizDB operates 3 native wire protocol listeners alongside HTTP REST and gRPC:
 ### 1. 🐬 MySQL / MariaDB Wire Protocol (`Port 3306`):
 * **Handshake Negotiation**: Native `HandshakeV10` protocol greeting returning server version `8.0.35-FaizDB-Universal`.
 * **Authentication**: Supports `HandshakeResponse41` with `mysql_native_password` authentication and database selection.
-* **Driver Support**: Direct drop-in compatibility for MySQL CLI, PHP `mysqli`, PDO, Laravel Eloquent (`DB_CONNECTION=mysql`), and WordPress (`wp-config.php`).
+* **Driver Support**: Direct drop-in compatibility for MySQL CLI, PHP `mysqli`, PDO, and Laravel Eloquent (`DB_CONNECTION=mysql`).
 * **Connection String**: `mysql -h 127.0.0.1 -P 3306 -u root faizdb` or `mysql://root@127.0.0.1:3306/faizdb`
 
 ### 2. 🐘 PostgreSQL Wire Protocol (`Port 5432 / 5433`):

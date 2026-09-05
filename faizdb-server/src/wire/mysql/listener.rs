@@ -1,7 +1,7 @@
 //! MySQL Wire Protocol TCP Server (Port 3306).
 //!
 //! Accepts client TCP connections from MySQL/MariaDB clients (MySQL CLI, PHP mysqli/PDO,
-//! Laravel, WordPress, Python mysqlclient, Go go-sql-driver/mysql, etc.), handles the HandshakeV10
+//! Laravel Eloquent, Python mysqlclient, Go go-sql-driver/mysql, etc.), handles the HandshakeV10
 //! negotiation, parses queries, and routes them to the FaizDB execution engine.
 
 use std::sync::atomic::{AtomicU32, Ordering};

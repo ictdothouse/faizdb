@@ -187,7 +187,7 @@ Laporan audit kelima telah dijalankan secara bebas oleh gabungan *Principal Data
 ### A. Ringkasan Skor & Metrik Rasmi:
 * **Skor Keseluruhan Arkitek:** **96.3 / 100 (Gred A+ — Disahkan Untuk Produksi Perusahaan)**
 * **Saiz Binari Fizikal (Release LTO + Strip):** **7.70 MB (8,080,104 bait)** — 97.6% kod mesin `.text` (7,886,000 bait).
-* **Jejak Memori Residen Linux Kernel (`VmRSS`):** **23.05 MB (23,608 kB)** semasa melahu dengan semua 4 gateway aktif; **69.91 MB** di bawah beban kerja penuh.
+* **Jejak Memori Residen Linux Kernel (`VmRSS`):** **23.05 MB (23,608 kB)** semasa melahu dengan semua 5 gateway aktif; **69.91 MB** di bawah beban kerja penuh.
 * **Throughput Ingest MemTable:** **61,432 ops/saat** (50,000 dokumen dalam 813.91 ms).
 * **Throughput Storan Cakera Kekal (WAL + fsync):** **32,305 ops/saat** (20,000 dokumen dalam 619.10 ms).
 * **Throughput Imbasan Berurutan (Zero-Copy):** **860,001 dokumen/saat** (20,000 dokumen dalam 23.26 ms).

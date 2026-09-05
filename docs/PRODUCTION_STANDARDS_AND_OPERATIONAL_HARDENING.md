@@ -29,7 +29,7 @@ FaizDB is engineered around concrete, real-world systems principles:
 
 2. **Automatic Protocol Comprehension:**
    - While operating completely standalone, FaizDB understands standard external wire protocols natively without intermediate proxies:
-     * **MySQL / MariaDB Wire Ingress (Port 3306):** Ingests MySQL HandshakeV10 and Command packets, executes SQL bootstrap queries (`SELECT @@version`, `SHOW TABLES`), and handles CRUD operations for standard MySQL CLI, Laravel Eloquent (`DB_CONNECTION=mysql`), WordPress (`wp-config.php`), and PHP PDO/mysqli drivers.
+     * **MySQL / MariaDB Wire Ingress (Port 3306):** Ingests MySQL HandshakeV10 and Command packets, executes SQL bootstrap queries (`SELECT @@version`, `SHOW TABLES`), and handles CRUD operations for standard MySQL CLI, Laravel Eloquent (`DB_CONNECTION=mysql`), and PHP PDO/mysqli drivers.
      * **PostgreSQL Wire Ingress (Port 5432 / 5433):** Ingests PostgreSQL frontend packets, executes simple and extended queries (`$1`, `$2`), and synthesizes virtual system catalogs (`pg_catalog.*`, `information_schema.*`) for seamless ORM compatibility (Prisma, Drizzle, SQLAlchemy, DBeaver).
      * **MongoDB Wire Ingress (Port 27017):** Ingests MongoDB OP_MSG wire packets, handling document CRUD, aggregation pipelines, and cursor pagination for standard client drivers (PyMongo, Mongoose).
      * **Open-Format CDC Streaming:** Automatically streams mutation envelopes directly to downstream analytical platforms (Kafka, Snowflake, ClickHouse, Apache Spark) in standard JSONL and ANSI SQL.
@@ -39,7 +39,7 @@ FaizDB is engineered around concrete, real-world systems principles:
    - **Eventual Consistency (AP Mode — Multi-Region Active-Active Mesh):** Optimized for non-monetary collaborative documents (Notion/Figma style), presence indicators, and IoT telemetry using Conflict-Free Replicated Data Types (CRDTs: PN-Counters, LWW-Registers, OR-Sets) with sub-millisecond local writes and zero distributed lock overhead.
 
 4. **Collection-Level Paradigm Isolation:**
-   - **Relational Collections (Port 3306 & Port 5432):** Strict schemas, foreign keys, and typed constraints for web CMS frameworks (Laravel, WordPress), financial ledgers, and BI reporting tools.
+   - **Relational Collections (Port 3306 & Port 5432):** Strict schemas, foreign keys, and typed constraints for web frameworks (Laravel Eloquent), financial ledgers, and BI reporting tools.
    - **Document Collections (Port 27017):** Flexible BSON/JSON schemas for rapid application prototyping and polymorphic event storage.
 
 5. **Multiplayer Gaming Architecture Demarcation:**

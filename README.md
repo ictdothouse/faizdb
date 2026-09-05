@@ -32,7 +32,7 @@ Its distinguishing engineering advantage is **Automatic Polyglot Comprehension**
   - **Native Protocols:** Zero-copy binary Protocol Buffers over gRPC (Port 50051) and REST JSON API (Port 8080).
 * **3. Our Key Advantage — Automatic Comprehension of Other Databases:** Rather than forcing developers to migrate or rewrite application stacks:
   - **Understands PostgreSQL Wire (Port 5432/5433) Automatically:** Connect with `psql`, Prisma, DBeaver, or SQLAlchemy directly; FaizDB parses the wire packets automatically into FaizQL AST.
-  - **Understands MySQL / MariaDB Wire (Port 3306) Automatically:** Connect with MySQL CLI, PHP `mysqli`, PDO, Laravel, or WordPress directly with zero code rewrites.
+  - **Understands MySQL / MariaDB Wire (Port 3306) Automatically:** Connect with MySQL CLI, PHP `mysqli`, PDO, or Laravel Eloquent directly with zero code rewrites.
   - **Understands MongoDB Wire (Port 27017) Automatically:** Connect with `mongosh`, PyMongo, Mongoose, or Compass out-of-the-box.
   - **Automatic Open-Format Streaming:** Built-in Change Data Capture (CDC) to stream data to Apache Kafka, BigQuery, Snowflake, and ClickHouse via JSONL and standard SQL.
 
@@ -69,7 +69,7 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
 │ MySQL Wire Proto  │ │ Postgres Wire Prot│ │ MongoDB Wire Proto│ │  gRPC / Protobuf  │ │ HTTP REST / WS Bus│
 │    (Port 3306)    │ │    (Port 5432)    │ │   (Port 27017)    │ │   (Port 50051)    │ │   (Port 27018)    │
-│ Laravel/WordPress │ │  psql / DBeaver   │ │  Mongoose/PyMongo │ │ Ultra-Fast Micro. │ │  Web / Studio /IoT│
+│ Laravel / PHP PDO │ │  psql / DBeaver   │ │  Mongoose/PyMongo │ │ Ultra-Fast Micro. │ │  Web / Studio /IoT│
 └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘
           │              │              │                             │              │
           └──────────────┴──────────────┴──────────────┬──────────────┴──────────────┘
@@ -217,7 +217,7 @@ Unlike database marketing claims, FaizDB’s system footprint is mathematically 
 ### 1. Physical Footprint Comparison (Disk & RAM):
 | Database Engine | Executable Size (*Disk / Flash*) | Baseline RAM (*Resident Set Size - VmRSS*) | Multi-Model Architecture |
 |:---|:---:|:---:|:---|
-| 🟢 **FaizDB (Full Server)** | **7.70 MB** *(8,080,104 bytes, 97.6% .text)* | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* | **Unified:** Document + HNSW Vector + Knowledge Graph + SQL + 4 Protocols |
+| 🟢 **FaizDB (Full Server)** | **7.70 MB** *(8,080,104 bytes, 97.6% .text)* | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* | **Unified:** Document + HNSW Vector + Knowledge Graph + SQL + 5 Protocols |
 | 🟢 **FaizDB (Embedded Core)**| **~3.5 MB** *(Static/Shared lib)* | **~8 – 16 MB** | **In-Process:** LSM-Tree + MemTable + WAL + ACID MVCC |
 | **SQLite (v3.46)** | ~2.3 MB *(libsqlite3 + CLI)* | ~4 – 8 MB | Relational SQL only (No vector, no graph, single-writer lock) |
 | **RocksDB (v9.x)** | ~18 – 25 MB *(C++ shared object)*| ~32 – 64 MB | Raw Key-Value only (No documents, no vector, no graph) |
@@ -376,7 +376,7 @@ Console Banner:
 
 ### 2. Connect via Your Preferred Protocol & Driver
 
-#### A. 🐬 MySQL / MariaDB Wire (MySQL CLI, Laravel, WordPress, PHP PDO):
+#### A. 🐬 MySQL / MariaDB Wire (MySQL CLI, Laravel Eloquent, PHP PDO):
 ```bash
 # Direct MySQL CLI connection
 mysql -h 127.0.0.1 -P 3306 -u admin -p faizdb
@@ -388,12 +388,6 @@ DB_PORT=3306
 DB_DATABASE=faizdb
 DB_USERNAME=admin
 DB_PASSWORD=faizdb-admin-2026
-
-# WordPress wp-config.php configuration:
-define('DB_NAME', 'faizdb');
-define('DB_USER', 'admin');
-define('DB_PASSWORD', 'faizdb-admin-2026');
-define('DB_HOST', '127.0.0.1:3306');
 ```
 
 #### B. 🐘 PostgreSQL Wire (`psql`, DBeaver, TablePlus, Grafana):
@@ -661,7 +655,7 @@ Rather than claiming instant battle-tested maturity for decade-old banking mainf
 - [x] Native openCypher Graph Syntax Parser (`MATCH` & `CREATE` patterns)
 - [x] MongoDB Wire Protocol Parser (Drop-in support on Port 27017)
 - [x] PostgreSQL Wire Protocol Engine (Drop-in support on Port 5432/5433 for psql, DBeaver & SQL ORMs)
-- [x] MySQL / MariaDB Wire Protocol Engine (Drop-in support on Port 3306 for MySQL CLI, PHP mysqli/PDO, Laravel & WordPress)
+- [x] MySQL / MariaDB Wire Protocol Engine (Drop-in support on Port 3306 for MySQL CLI, PHP mysqli/PDO, Laravel Eloquent)
 - [x] gRPC & Protocol Buffers Gateway (Port 50051 for High-Performance Microservices & Vector Streaming)
 - [x] Real-time Change Streams (WebSockets)
 - [x] Distributed Raft Consensus Engine & 16,384 Virtual Hash Slots Auto-Sharding

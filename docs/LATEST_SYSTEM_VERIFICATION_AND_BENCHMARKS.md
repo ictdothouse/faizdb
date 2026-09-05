@@ -170,7 +170,7 @@ All metrics represent empirical measurements conducted across real TCP network s
 | **Durable Disk Writes** | WAL + Strict `fsync` (`sync_writes: true`), persistent | **32,305 ops/sec** *(20k docs in 619.10ms)* |
 | **HNSW Vector ANN Search (64-dim)** | Top-5 Nearest Neighbors, HTTP Gateway | **< 0.88 ms** *(p50 = 880 µs, 1,414 QPS)* |
 | **Knowledge Graph Traversal** | 3-Hop Multi-Edge BFS/DFS Traversal | **< 0.91 ms** *(p50 = 916 µs)* |
-| **Physical Resident RAM (`VmRSS`)** | All 4 Gateways active (Linux `/proc/<pid>/status`) | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* |
+| **Physical Resident RAM (`VmRSS`)** | All 5 Gateways active (Linux `/proc/<pid>/status`) | **23.05 MB** *(23,608 kB idle, 69.9 MB peak)* |
 | **Stripped Executable Binary Size**| Single self-contained binary on disk (`stat -c %s`) | **7.70 MB** *(8,080,104 bytes, 97.6% .text)* |
 
 ---

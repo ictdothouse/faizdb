@@ -1,6 +1,6 @@
 //! Comprehensive & Intensive Security and Performance Test Suite for FaizDB
 //!
-//! Tests all 4 gateways:
+//! Tests multi-protocol gateways:
 //! 1. MongoDB Wire Protocol (Port 27017): Handshake discovery, unauthenticated rejection (code 13),
 //!    authentication failure (code 18), authenticate & SASL PLAIN success, RBAC ReadOnly enforcement.
 //! 2. PostgreSQL Wire Protocol (Port 5432): Cleartext challenge, credential failure (28P01), success (code 0).

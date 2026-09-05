@@ -29,7 +29,7 @@ This technical analysis details the strategic positioning, architectural benchma
 Modern development teams are plagued by **"Architecture Sprawl"**—where an engineering organization must deploy, synchronize, and maintain 3 to 5 disparate databases (e.g., MongoDB for document profiles, Qdrant for AI embeddings, Neo4j for relationship graphs, and Redis for caching).
 
 **FaizDB eliminates architecture sprawl via 4 Core Moats:**
-1. **5-Way Universal Gateways (Postgres 5432, MySQL 3306, Mongo 27017, gRPC 50051, REST 27018):** Zero-friction migration. Teams reuse standard drivers (`psql`, MySQL CLI, PHP `mysqli`/PDO, Laravel, WordPress, `pymongo`, `mongoose`, DBeaver, or gRPC) with zero code rewrites.
+1. **5-Way Universal Gateways (Postgres 5432, MySQL 3306, Mongo 27017, gRPC 50051, REST 27018):** Zero-friction migration. Teams reuse standard drivers (`psql`, MySQL CLI, PHP `mysqli`/PDO, Laravel Eloquent, `pymongo`, `mongoose`, DBeaver, or gRPC) with zero code rewrites.
 2. **Safe Rust Native LSM-Tree Storage with Fsync Durability:** Ultra-low verified memory footprint (23.28 MB `VmRSS` measured directly from Linux Kernel while serving all network protocols simultaneously), zero Garbage Collection pauses, strict WAL persistence (`sync_writes: true`), and 53,282 durable writes/sec (323k+ ops/sec in-memory scan/filter). Standalone release binary is only 7.70 MB on disk.
 3. **Unified Multi-Model Execution & Crash Resilience:** Run vector similarity search, multi-hop graph traversal, and document mutations in a single atomic query. Indivisible durability verified against `pkill -9 / SIGKILL` power-loss simulations.
 4. **Auto-Sharded Raft & Multi-Region CRDTs:** 16,384 virtual hash partitions with persistent replicated log (CRC32 framing) and active-active cross-datacenter conflict-free replication.
@@ -112,7 +112,7 @@ Modern development teams are plagued by **"Architecture Sprawl"**—where an eng
 * **Tech Stack:** Go/C++, distributed SQL engine with Multi-Raft consensus, serializable transactions, and global active-active replication.
 * **Strengths:** Extreme ACID reliability for financial transactions and automatic horizontal scaling.
 * **Where FaizDB Wins:**
-  - **Lightweight Footprint:** CockroachDB requires high memory and CPU allocations for its Go runtime (typically 1–2 GB+ minimum). FaizDB starts in milliseconds with just 23.28 MB resident RAM (`VmRSS` measured via Linux `/proc` with all 4 multi-protocol gateways active).
+  - **Lightweight Footprint:** CockroachDB requires high memory and CPU allocations for its Go runtime (typically 1–2 GB+ minimum). FaizDB starts in milliseconds with just 23.28 MB resident RAM (`VmRSS` measured via Linux `/proc` with all 5 multi-protocol gateways active).
   - **Multi-Model & AI-Native:** CockroachDB is strictly relational SQL without native Vector HNSW or Knowledge Graph capabilities.
 
 ---
@@ -156,7 +156,7 @@ graph TD
 | Project Scenario | Recommended Database | Alternative | Why? |
 | :--- | :---: | :---: | :--- |
 | **Modern AI & GraphRAG Applications** | 🚀 **FaizDB** | SurrealDB | Combines 4096d HNSW Vector, Knowledge Graph, and JSON Documents in a single Rust binary without managing 3 separate databases. |
-| **Zero-Friction Migration from MySQL/Mongo/PG** | 🚀 **FaizDB** | FerretDB | Drop-in wire protocol ports (3306, 27017 & 5432) backed by a native high-speed Rust LSM-Tree engine. Works out-of-the-box with Laravel, WordPress, and standard drivers. |
+| **Zero-Friction Migration from MySQL/Mongo/PG** | 🚀 **FaizDB** | FerretDB | Drop-in wire protocol ports (3306, 27017 & 5432) backed by a native high-speed Rust LSM-Tree engine. Works out-of-the-box with Laravel Eloquent, PHP PDO, and standard drivers. |
 | **Ultra-High-Speed Microservices** | 🚀 **FaizDB** | Redis / gRPC | Sub-millisecond binary Protocol Buffers (Port 50051) and real-time Change Streams. |
 | **Global Multi-Region Datacenter Mesh** | 🚀 **FaizDB** | CockroachDB | Active-Active CRDTs provide sub-millisecond local writes with zero distributed lock penalties. |
 | **Traditional Core Banking Systems** | **CockroachDB** | PostgreSQL | Strict multi-table relational schema integrity with distributed serializable transactions. |
@@ -238,7 +238,7 @@ FaizDB was engineered to solve the most painful modern architectural bottlenecks
    * Combines high-dimensional HNSW vector search, 1-bit binary quantization (32x compression), and knowledge graph traversal in a **single atomic transaction**. In FoundationDB or GlueSQL, doing vector search requires external index services; in ArangoDB, vector search is an external plugin.
 3. **Automatic Multi-Protocol Comprehension (Zero Ecosystem Friction):**
    * ArcadeDB, ArangoDB, FoundationDB, and GlueSQL all force developers into their proprietary drivers or APIs.
-   * FaizDB automatically decodes **PostgreSQL Wire (Port 5432/5433)**, **MySQL Wire (Port 3306)**, and **MongoDB Wire (Port 27017)**. Prisma, Laravel, WordPress, DBeaver, SQLAlchemy, PyMongo, and Compass connect directly with zero code changes.
+   * FaizDB automatically decodes **PostgreSQL Wire (Port 5432/5433)**, **MySQL Wire (Port 3306)**, and **MongoDB Wire (Port 27017)**. Prisma, Laravel Eloquent, DBeaver, SQLAlchemy, PyMongo, and Compass connect directly with zero code changes.
 
 ---
 

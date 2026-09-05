@@ -28,7 +28,7 @@ trap cleanup EXIT
 echo "Waiting for engine initialization..."
 for i in {1..20}; do
     if curl -s http://127.0.0.1:27018/v1/health | grep -q "online"; then
-        echo "Engine healthy and listening on all 4 protocol gateways."
+        echo "Engine healthy and listening on all 5 protocol gateways."
         break
     fi
     sleep 0.5
