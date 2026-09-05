@@ -241,7 +241,7 @@
             </div>
             <h2 class="type-subhead">2. Semantic Caching (Slash 70%+ LLM Bills)</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Caches prompt embeddings in sub-millisecond in-memory vector space via built-in <code>SemanticCache</code>. When incoming prompts have cosine similarity $\ge 0.90$, FaizDB immediately serves the response from memory with auto-TTL, slashing expensive OpenAI, Anthropic, Google, and DeepSeek token costs by over 70%–85%.
+              Caches prompt embeddings in sub-millisecond in-memory vector space via built-in <code>SemanticCache</code>. When incoming prompts have cosine similarity $\ge 0.90$, FaizDB immediately serves the response from memory with auto-TTL, slashing expensive OpenAI, Anthropic, Google, Meta, DeepSeek, and other LLM token costs by over 70%–85%.
             </p>
             <div class="code-snippet">
               <span class="code-comment">// Query built-in SemanticCache before hitting LLM API</span><br/>
@@ -250,7 +250,7 @@
             </div>
           </div>
           <div class="card-meta">
-            <span class="meta-pill">OpenAI / Anthropic / Google / DeepSeek</span>
+            <span class="meta-pill">OpenAI / Anthropic / Google / Meta / DeepSeek &amp; Others</span>
             <span class="meta-pill">Cosine &gt;= 0.90</span>
             <span class="meta-pill">Auto TTL 24h</span>
             <span class="meta-pill">&lt; 1ms Median</span>
