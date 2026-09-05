@@ -970,17 +970,65 @@ db.users.dropIndex("email");</code></pre>
 
       <!-- Section: EXPLAIN Query Planner -->
       <section id="explain-planner">
-        <h2>📊 Cost-Based EXPLAIN Query Planner & Optimizer</h2>
-        <p>Inspect query execution strategies and microsecond latency diagnostics:</p>
+        <h2>📊 Distributed EXPLAIN & EXPLAIN ANALYZE Query Engine</h2>
+        <p>
+          FaizDB features a distributed, cost-based optimizer (CBO) and microsecond execution profiler. With <code>EXPLAIN ANALYZE</code>, FaizDB inspects both planned cost estimates and true runtime execution metrics across all distributed shards, hardware caches, and network boundaries.
+        </p>
 
-        <div class="code-block">
-          <div class="code-header">
-            <span>sql explain</span>
-            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🌳 Interactive Node-Tree Graph</div>
+            <div class="feature-desc">Hierarchical execution tree showing operators, row counts, execution time, and operator level metrics in Web Studio.</div>
           </div>
-          <pre><code>EXPLAIN SELECT * FROM users WHERE email = 'faiz@ict.house';</code></pre>
+          <div class="feature-card">
+            <div class="feature-title">🔥 Shard Flame Graph & Straggler Detection</div>
+            <div class="feature-desc">Visualizes per-shard latencies across the cluster, highlighting slowest straggler partitions that degrade tail latency.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">⚡ CBO Distributed Join Strategies</div>
+            <div class="feature-desc">Dynamically selects <code>ColocatedHashJoin</code> (0 shuffle), <code>BroadcastHashJoin</code> (small dimension table), or <code>DistributedIndexNestedLoopFallback</code>.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🐘 PostgreSQL Wire Tree Compatibility</div>
+            <div class="feature-desc">Directly streams standard hierarchical ASCII trees with <code>-&gt;</code>, costs, loops, and actual times into DBeaver, psql, and DataGrip.</div>
+          </div>
         </div>
 
+        <h3>Query Profiling Syntax</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql / wire dialects</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>-- 1. Static Cost-Based Execution Plan (Dry Run)
+EXPLAIN SELECT * FROM users WHERE email = 'faiz@ict.house';
+
+-- 2. Distributed Runtime Profiling (Executes query & collects per-shard metrics)
+EXPLAIN ANALYZE SELECT * FROM users WHERE status = 'active' ORDER BY created_at DESC;
+
+-- 3. Verbose Profiling with Cost & Cache breakdown
+EXPLAIN (ANALYZE, VERBOSE, COSTS) SELECT u.name, o.amount FROM users u JOIN orders o ON u.id = o.user_id;</code></pre>
+        </div>
+
+        <h3>PostgreSQL Wire Protocol Tree Output (DBeaver, psql, DataGrip)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>psql output</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>Distributed Hash Join (strategy: ColocatedHashJoin) (cost=1.85..4.50 rows=100) (actual time=0.142..0.380 rows=100 loops=1)
+  -> Broadcast Remote Shard Scan on orders (cost=0.50..1.20 rows=100) (actual time=0.035..0.090 rows=100 loops=1)
+       Network I/O: 1,420 bytes (actual) | Cache Hits: 98 | Cache Misses: 2
+  -> Distributed Index Scan using idx_users_id on users (cost=0.10..0.85 rows=100) (actual time=0.012..0.045 rows=100 loops=1)
+Shard Breakdown:
+  Shard-0 (primary): 0.120ms (45 rows, 640 bytes)
+  Shard-1 (secondary): 0.145ms (55 rows, 780 bytes)
+Planning Time: 0.042 ms
+Execution Time: 0.380 ms
+Peak Memory: 48 KB | Circuit Breaker Status: OK (&lt; 10MB network threshold)</code></pre>
+        </div>
+
+        <h3>JSON API Diagnostic Response</h3>
         <div class="code-block">
           <div class="code-header">
             <span>json response</span>
@@ -988,14 +1036,23 @@ db.users.dropIndex("email");</code></pre>
           </div>
           <pre><code>{
   "Explain": {
-    "plan_type": "IndexScan(idx_email)",
-    "collection": "users",
-    "index_used": "idx_email",
-    "execution_time_us": 74,
-    "documents_examined": 1,
-    "documents_returned": 1,
-    "is_unique": true,
-    "estimated_cost_score": 1.05
+    "plan_type": "DistributedHashJoin(ColocatedHashJoin)",
+    "collection": "orders",
+    "execution_time_us": 380,
+    "documents_examined": 100,
+    "documents_returned": 100,
+    "estimated_cost_score": 4.5,
+    "join_strategy": "ColocatedHashJoin",
+    "estimated_network_io_bytes": 1500,
+    "actual_network_io_bytes": 1420,
+    "cache_hits": 98,
+    "cache_misses": 2,
+    "circuit_breaker_triggered": false,
+    "shard_metrics": [
+      { "shard_id": "shard-0", "latency_us": 120, "rows_scanned": 45, "network_bytes": 640, "is_straggler": false },
+      { "shard_id": "shard-1", "latency_us": 145, "rows_scanned": 55, "network_bytes": 780, "is_straggler": false }
+    ],
+    "formatted_pg_tree": "Distributed Hash Join (strategy: ColocatedHashJoin)..."
   }
 }</code></pre>
         </div>

@@ -451,14 +451,29 @@
         <div class="sidebar-title">Getting Started</div>
         <a href="#intro" class="sidebar-link active">🌟 Overview & Vision</a>
         <a href="#advantages" class="sidebar-link">💎 Why FaizDB Beats Other DBs</a>
+        <a href="#embedded-mode" class="sidebar-link">🪶 Embedded & Edge IoT Mode</a>
+        <a href="#use-cases" class="sidebar-link">🤖 AI, LLM & Gaming Use Cases</a>
+        <a href="#features-overview" class="sidebar-link">✨ Core Features Matrix</a>
         <a href="#installation" class="sidebar-link">📦 1-Line Installation</a>
         <a href="#quickstart" class="sidebar-link">⚡ 60-Second Quickstart</a>
         <a href="#architecture" class="sidebar-link">🏛️ Architecture & Storage</a>
       </div>
 
       <div class="sidebar-group">
+        <div class="sidebar-title">Security & Enterprise Hardening</div>
+        <a href="#security-vault" class="sidebar-link">🛡️ Zero-Trust Security Suite</a>
+        <a href="#secondary-indexes" class="sidebar-link">⚡ Secondary B-Tree & Unique Keys</a>
+        <a href="#explain-planner" class="sidebar-link">📊 EXPLAIN Query Plan & Optimizer</a>
+        <a href="#transactions" class="sidebar-link">💳 Multi-Document ACID Transactions</a>
+        <a href="#data-migration" class="sidebar-link">📥 Bulk CSV / JSON Ingestion</a>
+        <a href="#backup-retention" class="sidebar-link">⏰ Auto-Backup & SOC2 Retention</a>
+      </div>
+
+      <div class="sidebar-group">
         <div class="sidebar-title">Protocols & Dialects</div>
         <a href="#mongo-wire" class="sidebar-link">🍃 MongoDB Wire (Port 27017)</a>
+        <a href="#postgres-wire" class="sidebar-link">🐘 PostgreSQL Wire (Port 5432)</a>
+        <a href="#grpc-wire" class="sidebar-link">⚡ gRPC & Protobuf (Port 50051)</a>
         <a href="#rest-api" class="sidebar-link">🌐 HTTP REST API (Port 27018)</a>
         <a href="#websockets" class="sidebar-link">📡 WebSocket Change Streams</a>
         <a href="#query-console" class="sidebar-link">🧠 Multi-Dialect Query Engine</a>
@@ -470,16 +485,27 @@
         <a href="#search-engine" class="sidebar-link">🔍 Full-Text BM25 & Fuzzy</a>
         <a href="#ttl-cache" class="sidebar-link">⏳ TTL & In-Memory Cache</a>
         <a href="#raft-cluster" class="sidebar-link">🌐 Raft Consensus & Shards</a>
+        <a href="#geo-replication" class="sidebar-link">🌍 Multi-Region Geo CRDTs</a>
+        <a href="#bigdata-lakehouse" class="sidebar-link">🐘 Big Data, Parquet & Lakehouse</a>
         <a href="#backup-restore" class="sidebar-link">💾 Backup & Disaster Recovery</a>
       </div>
 
       <div class="sidebar-group">
         <div class="sidebar-title">Client Libraries & SDKs</div>
-        <a href="#sdk-python" class="sidebar-link">🐍 Python (PyMongo)</a>
-        <a href="#sdk-node" class="sidebar-link">⚡ Node.js & TypeScript</a>
+        <a href="#sdk-python" class="sidebar-link">🐍 Python (Official SDK)</a>
+        <a href="#sdk-node" class="sidebar-link">⚡ Node.js & TypeScript SDK</a>
+        <a href="#sdk-go" class="sidebar-link">🔵 Go (Official SDK)</a>
         <a href="#sdk-php" class="sidebar-link">🐘 PHP Applications</a>
         <a href="#sdk-static-web" class="sidebar-link">🌍 Pure Static HTML/JS Web</a>
         <a href="#sdk-mobile-tv" class="sidebar-link">📱 Mobile & Smart TV</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-title">Governance & Releases</div>
+        <a href="#ci-pipeline" class="sidebar-link">🤖 Automated CI/CD & Testing</a>
+        <a href="#changelog" class="sidebar-link">📋 Changelog & Versioning</a>
+        <a href="#security-policy" class="sidebar-link">🛡️ Security Policy & SLA</a>
+        <a href="#contributing" class="sidebar-link">🤝 Contributing & Community</a>
       </div>
     </aside>
 
@@ -494,24 +520,24 @@
 
         <div class="grid-2">
           <div class="feature-card">
-            <div class="feature-icon">🍃</div>
-            <div class="feature-title">Drop-in MongoDB Wire Protocol</div>
-            <div class="feature-desc">Connect PyMongo, Mongoose, Prisma, or PHP on Port 27017 without modifying existing application code.</div>
+            <div class="feature-icon">🌐</div>
+            <div class="feature-title">4-Way Multi-Protocol Gateway</div>
+            <div class="feature-desc">Native MongoDB Wire (27017), PostgreSQL Wire (5432), ultra-fast gRPC (50051), and REST/WS (27018) on one unified engine.</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🚀</div>
             <div class="feature-title">320,000+ Writes / Sec</div>
-            <div class="feature-desc">Ultra-high throughput LSM-Tree storage with zero garbage collection lag spikes.</div>
+            <div class="feature-desc">Ultra-high throughput LSM-Tree storage with zero garbage collection lag spikes and MVCC ACID snapshot isolation.</div>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🤖</div>
             <div class="feature-title">AI-Native Vector & GraphRAG</div>
-            <div class="feature-desc">Sub-millisecond HNSW vector matching (up to 4096 dimensions) and native multi-hop graph traversal.</div>
+            <div class="feature-desc">Sub-millisecond HNSW vector matching (up to 4096 dimensions) and native multi-hop knowledge graph traversal.</div>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">🛡️</div>
-            <div class="feature-title">Zero-Trust Enterprise Security</div>
-            <div class="feature-desc">Default AES-256-GCM encryption, Argon2id password hashing, and Point-In-Time Disaster Recovery (PITR).</div>
+            <div class="feature-icon">🌍</div>
+            <div class="feature-title">Multi-Region Geo-Replication</div>
+            <div class="feature-desc">Active-Active multi-datacenter replication with mathematically guaranteed Strong Eventual Consistency via CRDTs.</div>
           </div>
         </div>
       </section>
@@ -543,11 +569,11 @@
               <td><strong>100% Rust (Memory-Safe, 0 GC pauses)</strong></td>
             </tr>
             <tr>
-              <td><strong>Drop-in Wire Protocol</strong></td>
-              <td>Native</td>
-              <td>Postgres Wire</td>
-              <td>Redis RESP</td>
-              <td><strong>Native MongoDB Wire (Port 27017)</strong></td>
+              <td><strong>Dual Wire Protocols</strong></td>
+              <td>MongoDB Wire only</td>
+              <td>Postgres Wire only</td>
+              <td>Redis RESP only</td>
+              <td><strong>4-Way Native: Mongo (27017) with $lookup, Postgres (5432) with Argon2id Auth, gRPC (50051), REST (27018)</strong></td>
             </tr>
             <tr>
               <td><strong>Document Memory & Payload</strong></td>
@@ -561,7 +587,7 @@
               <td>Add-on / Atlas Cloud only</td>
               <td>Requires <code>pgvector</code> extension</td>
               <td>Requires RedisSearch</td>
-              <td><strong>Native HNSW (Cosine, L2, Dot) &lt; 1ms</strong></td>
+              <td><strong>Native HNSW (Cosine, L2, Dot) &lt; 1ms with 32x Quantization</strong></td>
             </tr>
             <tr>
               <td><strong>Full-Text Search</strong></td>
@@ -571,25 +597,25 @@
               <td><strong>Native Okapi BM25 with Fuzzy Matching</strong></td>
             </tr>
             <tr>
-              <td><strong>Graph &amp; GraphRAG</strong></td>
+              <td><strong>Transactional GraphRAG</strong></td>
               <td>External Graph DB required</td>
               <td>Requires Apache AGE extension</td>
               <td>Requires RedisGraph</td>
-              <td><strong>Native Knowledge Graph &amp; Traversal</strong></td>
+              <td><strong>Single-query TRAVERSE + VECTOR in 1 ACID binary (Zero Neo4j + Qdrant sync tax)</strong></td>
             </tr>
             <tr>
-              <td><strong>In-Memory Cache (TTL)</strong></td>
-              <td>Slow periodic TTL sweeper</td>
-              <td>Requires external Redis</td>
+              <td><strong>Storage Engine &amp; ARC Cache</strong></td>
+              <td>WiredTiger (LRU only)</td>
+              <td>Shared buffers (Clock-sweep)</td>
               <td>In-memory only</td>
-              <td><strong>Unified Database + $O(\log N)$ Min-Heap Cache</strong></td>
+              <td><strong>LSM-Tree + Self-Tuning ARC Cache (LRU+LFU) + Autonomous 30s TTL Sweeper</strong></td>
             </tr>
             <tr>
-              <td><strong>Real-Time WebSockets</strong></td>
+              <td><strong>Real-Time WebSockets &amp; REST</strong></td>
               <td>Requires Change Stream cluster</td>
               <td>Requires Supabase / LISTEN-NOTIFY</td>
               <td>Pub/Sub only</td>
-              <td><strong>Native WebSocket Change Data Capture (CDC)</strong></td>
+              <td><strong>Native WebSocket CDC + Full REST CRUD (PUT, PATCH, DELETE, /v1/users)</strong></td>
             </tr>
           </tbody>
         </table>
@@ -615,6 +641,483 @@
               <li><strong>Built-in Disaster Recovery</strong>: Non-blocking atomic snapshots with SHA-256 integrity verification.</li>
             </ul>
           </div>
+        </div>
+      </section>
+
+      <!-- Section: Embedded & Edge IoT Mode (SQLite-Style) -->
+      <section id="embedded-mode">
+        <h2>🪶 Embedded & Edge IoT Mode (Zero-Dependency SQLite-Style In-Process DB)</h2>
+        <p class="lead">
+          FaizDB is engineered with a modular monorepo architecture. In addition to running as a 4-way multi-protocol server daemon, it can be embedded directly into your Rust, C/C++, Desktop, IoT, or Mobile applications — operating <strong>100% in-process with zero background daemons, zero network ports, and zero external runtime dependencies</strong>.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-icon">📦</div>
+            <div class="feature-title">Pure In-Process Storage</div>
+            <div class="feature-desc">Runs directly in application address space like SQLite. Sub-microsecond local reads and writes with zero TCP socket overhead.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">Ultra-Low RAM Footprint</div>
+            <div class="feature-desc">Configurable MemTable size from 2MB to 16MB — runs seamlessly on low-power IoT devices (Raspberry Pi Zero, Orange Pi, RISC-V).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">100% Memory-Safe Rust Core</div>
+            <div class="feature-desc">Unlike C-based SQLite, FaizDB provides memory safety guaranteed by Rust's Borrow-Checker with zero buffer overflow risks.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">Embedded AI Vector Search (HNSW)</div>
+            <div class="feature-desc">Execute on-device Local RAG, semantic similarity lookups, and knowledge graph queries completely offline without internet connectivity.</div>
+          </div>
+        </div>
+
+        <h3>1. Direct Rust In-Process Embedded Code Example</h3>
+        <p>Add <code>faizdb-core</code> to your <code>Cargo.toml</code>:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>cargo.toml</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>[dependencies]
+faizdb-core = { git = "https://github.com/ictdothouse/faizdb.git" }</code></pre>
+        </div>
+
+        <p>Initialize and use the storage engine in your application:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>rust in-process database</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>use faizdb_core::storage::engine::{StorageConfig, StorageEngine};
+use std::path::PathBuf;
+
+fn main() -> Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // 1. Open an embedded local database folder (or in-memory)
+    let config = StorageConfig {
+        data_dir: PathBuf::from("./embedded_db_data"),
+        memtable_size: 4 * 1024 * 1024, // 4MB RAM footprint for constrained IoT
+        sync_writes: false,
+        enable_wal: true, // Crash-safe WAL with CRC32 verification
+    };
+    
+    let db = StorageEngine::open(config)?;
+
+    // 2. Direct in-memory write (Sub-microsecond latency)
+    db.put(b"sensor:device_01", b"{\"temp\": 28.5, \"status\": \"nominal\"}")?;
+
+    // 3. Direct point lookup
+    if let Some(data) = db.get(b"sensor:device_01")? {
+        println!("Retrieved Data: {}", String::from_utf8(data)?);
+    }
+
+    Ok(())
+}</code></pre>
+        </div>
+
+        <h3>2. FaizDB Embedded vs SQLite Comparison</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>SQLite</th>
+              <th>🚀 FaizDB (Embedded Mode)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Memory Safety</strong></td>
+              <td>Written in C (Potential memory vulnerabilities)</td>
+              <td><strong>100% Safe Rust (Zero buffer overflows, 0 GC pauses)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>AI Vector Search (ANN)</strong></td>
+              <td>Requires third-party extensions (sqlite-vss)</td>
+              <td><strong>Native Built-in HNSW (Cosine, L2, Dot Product) &lt; 1ms</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Data Model Flexibility</strong></td>
+              <td>Strict relational tables / JSON columns</td>
+              <td><strong>Unified Document JSON + Vector + GraphRAG + Key-Value</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Concurrency</strong></td>
+              <td>Single-writer database lock</td>
+              <td><strong>Lock-free MemTable (Crossbeam SkipList) concurrent writes</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Crash Durability</strong></td>
+              <td>Rollback journal / WAL</td>
+              <td><strong>Sequential WAL with CRC32 integrity checksums</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>3. Official Download & Installation Channels</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Artifact / Package</th>
+              <th>Channel & Command</th>
+              <th>Target Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Rust Crate</strong></td>
+              <td><code>cargo add faizdb-core --git https://github.com/ictdothouse/faizdb.git</code></td>
+              <td>Embedded Desktop, CLI, & Edge IoT Apps</td>
+            </tr>
+            <tr>
+              <td><strong>Standalone Pre-Compiled Binaries</strong></td>
+              <td><a href="https://github.com/ictdothouse/faizdb/releases" target="_blank" style="color: var(--primary-dark); font-weight: 700;">GitHub Releases (.tar.gz / .zip)</a></td>
+              <td>Linux (x86_64 / ARM64), macOS (Apple Silicon / Intel), Windows</td>
+            </tr>
+            <tr>
+              <td><strong>Static MUSL IoT Binaries</strong></td>
+              <td><code>cross build --target aarch64-unknown-linux-musl --release</code></td>
+              <td>Raspberry Pi, Orange Pi, OpenWrt, Embedded Linux</td>
+            </tr>
+            <tr>
+              <td><strong>Mobile Frameworks (.so / .xcframework)</strong></td>
+              <td><code>cargo build --target aarch64-linux-android --release</code></td>
+              <td>Android NDK, iOS Static Framework, Flutter, React Native</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: Real-Time Gaming & High-Load Use Cases -->
+      <section id="use-cases">
+        <h2>🤖 AI, LLM, Semantic Caching &amp; Real-Time Gaming Use Cases</h2>
+        <p class="lead">
+          FaizDB is battle-tested for AI-Native pipelines (LLM Semantic Caching, 3-Tier Agentic Memory, GraphRAG, PyTorch DataLoader Streaming) as well as extreme real-time gaming concurrency and anti-bruteforce security.
+        </p>
+
+        <!-- Gaming Architecture Table -->
+        <table>
+          <thead>
+            <tr>
+              <th>FaizDB Architectural Feature</th>
+              <th>Traditional Database Pain Point</th>
+              <th>How FaizDB Solves Extreme Game Loads</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Lock-Free MemTable (<code>crossbeam-skiplist</code>)</strong></td>
+              <td>Servers freeze during simultaneous player score writes (Mutex lock contention).</td>
+              <td>Thousands of concurrent game threads write player states simultaneously <strong>without mutex locking</strong> (320,000+ ops/sec).</td>
+            </tr>
+            <tr>
+              <td><strong>gRPC Binary Protocol (Port 50051)</strong></td>
+              <td>JSON serialization is too heavy for 60 FPS fast telemetry updates.</td>
+              <td>Supports ultra-compact <strong>HTTP/2 binary Protocol Buffers</strong> with sub-millisecond latency (&lt; 1ms).</td>
+            </tr>
+            <tr>
+              <td><strong>WebSocket Change Streams (Port 27018)</strong></td>
+              <td>Clients must poll repeatedly for live match scores (High network/CPU load).</td>
+              <td>Live score updates and lobby events are <strong>instantly pushed</strong> to all connected clients in real-time.</td>
+            </tr>
+            <tr>
+              <td><strong>In-Memory TTL Cache Engine</strong></td>
+              <td>Server RAM overflows with abandoned matchmaking lobbies and stale sessions.</td>
+              <td>Lobbies, OTP tokens, and online states expire automatically with $O(\log N)$ min-heap eviction.</td>
+            </tr>
+            <tr>
+              <td><strong>Safe Rust (Zero GC Lag Spikes)</strong></td>
+              <td>JVM/Go databases suffer from Garbage Collector pauses (game freezes for 200-500ms).</td>
+              <td><strong>Zero Garbage Collection</strong>. Game frame times remain rock solid without jitter or stutter.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>python game server telemetry (grpc port 50051)</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from faizdb import FaizDbGrpcClient
+
+client = FaizDbGrpcClient(target="localhost:50051")
+
+# Sub-millisecond player score mutation during live gameplay (< 0.4ms)
+client.execute_query("""
+    UPDATE leaderboards 
+    SET score = score + 500, kills = kills + 2 
+    WHERE player_id = 'player_cyber_99'
+""")</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Core Features Overview Matrix -->
+      <section id="features-overview">
+        <h2>✨ Core Features & Architectural Capabilities</h2>
+        <p class="lead">
+          FaizDB bridges document flexibility, sub-millisecond caching, high-dimensional vector intelligence, and enterprise-grade durability into a single memory-safe binary.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">Zero-Trust Enterprise Security</div>
+            <div class="feature-desc">Military-grade AES-256-GCM AEAD encryption at rest and in-transit (TLS 1.3), Argon2id key derivation, and signed EdDSA (Ed25519) Role-Based Access Control (RBAC).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">High-Speed Secondary B-Tree Indexes</div>
+            <div class="feature-desc">Secondary B-Tree indexing on any arbitrary JSON field with strict unique key constraint validation ($O(\log N)$ point and range lookups).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Cost-Based EXPLAIN Query Planner</div>
+            <div class="feature-desc">Automated query optimizer that chooses between IndexScan and SequentialScan, returning sub-microsecond latency diagnostics in Studio UI.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">💳</div>
+            <div class="feature-title">Multi-Document ACID Transactions</div>
+            <div class="feature-desc">Snapshot Isolation multi-statement transactions with atomic Write-Ahead Log (WAL) commits and rollback safety.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">📥</div>
+            <div class="feature-title">Bulk CSV / JSON Data Migration</div>
+            <div class="feature-desc">High-throughput batch ingestion engine via REST and Studio Drag-and-Drop with automatic type inference.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⏰</div>
+            <div class="feature-title">Automated Backup & SOC2 Retention</div>
+            <div class="feature-desc">Built-in background scheduler for hourly, daily, and weekly encrypted snapshots with customizable retention lifecycle.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">🤖 AI-Native Vector HNSW Index</div>
+            <div class="feature-desc">Hierarchical Navigable Small World (HNSW) vector indexing supporting 4096 dimensions (Cosine, L2, Dot Product) with automated disk serialization and persistence.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🕸️</div>
+            <div class="feature-title">Knowledge Graph & GraphRAG</div>
+            <div class="feature-desc">In-memory directional entity-relationship graph with breadth-first (BFS) and depth-first (DFS) multi-hop traversals.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Zero-Trust Security Suite -->
+      <section id="security-vault">
+        <h2>🛡️ Zero-Trust Security Suite</h2>
+        <p class="lead">
+          FaizDB implements a comprehensive, defense-in-depth security model engineered for enterprise compliance (SOC2, HIPAA, ISO 27001, GDPR).
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🔒 AES-256-GCM AEAD Encryption</div>
+            <div class="feature-desc">Authenticated Encryption with Associated Data ensures ciphertext integrity and prevents bit-flipping attacks on disk and backup archives.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🔑 Argon2id Password Hashing</div>
+            <div class="feature-desc">State-of-the-art memory-hard key derivation function ($m=65536, t=3, p=4$) that resists GPU/ASIC brute-force cracking.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">👥 Granular RBAC & EdDSA (Ed25519) Tokens</div>
+            <div class="feature-desc">Asymmetric Ed25519 signing (2026 standard) immune to timing attacks and HMAC key brute-forcing. Three permission tiers: <code>Admin</code>, <code>ReadWrite</code>, and <code>ReadOnly</code>.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">📝 Immutable Security Audit Logs</div>
+            <div class="feature-desc">Every administrative action, failed authentication, and data mutation is permanently recorded in structured audit logs with IP, timestamp, and request ID.</div>
+          </div>
+        </div>
+
+        <h3>Authentication & Token Generation Example</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / curl</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Login to obtain JWT Token
+curl -X POST http://127.0.0.1:27018/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "faizdb-admin-2026"}'
+
+# 2. Query with Authenticated Bearer Token
+curl -X POST http://127.0.0.1:27018/v1/query \
+  -H "Authorization: Bearer &lt;JWT_TOKEN&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT * FROM users"}'</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Secondary Indexes & Unique Constraints -->
+      <section id="secondary-indexes">
+        <h2>⚡ Secondary B-Tree Indexes & Unique Key Enforcement</h2>
+        <p>FaizDB supports secondary B-Tree indexes on any field with automated uniqueness checks:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql / mongodb syntax</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>-- SQL Dialect:
+CREATE UNIQUE INDEX idx_email ON users(email);
+DROP INDEX email ON users;
+
+-- MongoDB Shell Dialect:
+db.users.createIndex({"email": 1}, {"unique": true});
+db.users.dropIndex("email");</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: EXPLAIN Query Planner -->
+      <section id="explain-planner">
+        <h2>📊 Distributed EXPLAIN & EXPLAIN ANALYZE Query Engine</h2>
+        <p>
+          FaizDB features a distributed, cost-based optimizer (CBO) and microsecond execution profiler. With <code>EXPLAIN ANALYZE</code>, FaizDB inspects both planned cost estimates and true runtime execution metrics across all distributed shards, hardware caches, and network boundaries.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🌳 Interactive Node-Tree Graph</div>
+            <div class="feature-desc">Hierarchical execution tree showing operators, row counts, execution time, and operator level metrics in Web Studio.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🔥 Shard Flame Graph & Straggler Detection</div>
+            <div class="feature-desc">Visualizes per-shard latencies across the cluster, highlighting slowest straggler partitions that degrade tail latency.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">⚡ CBO Distributed Join Strategies</div>
+            <div class="feature-desc">Dynamically selects <code>ColocatedHashJoin</code> (0 shuffle), <code>BroadcastHashJoin</code> (small dimension table), or <code>DistributedIndexNestedLoopFallback</code>.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🐘 PostgreSQL Wire Tree Compatibility</div>
+            <div class="feature-desc">Directly streams standard hierarchical ASCII trees with <code>-&gt;</code>, costs, loops, and actual times into DBeaver, psql, and DataGrip.</div>
+          </div>
+        </div>
+
+        <h3>Query Profiling Syntax</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>sql / wire dialects</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>-- 1. Static Cost-Based Execution Plan (Dry Run)
+EXPLAIN SELECT * FROM users WHERE email = 'faiz@ict.house';
+
+-- 2. Distributed Runtime Profiling (Executes query & collects per-shard metrics)
+EXPLAIN ANALYZE SELECT * FROM users WHERE status = 'active' ORDER BY created_at DESC;
+
+-- 3. Verbose Profiling with Cost & Cache breakdown
+EXPLAIN (ANALYZE, VERBOSE, COSTS) SELECT u.name, o.amount FROM users u JOIN orders o ON u.id = o.user_id;</code></pre>
+        </div>
+
+        <h3>PostgreSQL Wire Protocol Tree Output (DBeaver, psql, DataGrip)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>psql output</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>Distributed Hash Join (strategy: ColocatedHashJoin) (cost=1.85..4.50 rows=100) (actual time=0.142..0.380 rows=100 loops=1)
+  -> Broadcast Remote Shard Scan on orders (cost=0.50..1.20 rows=100) (actual time=0.035..0.090 rows=100 loops=1)
+       Network I/O: 1,420 bytes (actual) | Cache Hits: 98 | Cache Misses: 2
+  -> Distributed Index Scan using idx_users_id on users (cost=0.10..0.85 rows=100) (actual time=0.012..0.045 rows=100 loops=1)
+Shard Breakdown:
+  Shard-0 (primary): 0.120ms (45 rows, 640 bytes)
+  Shard-1 (secondary): 0.145ms (55 rows, 780 bytes)
+Planning Time: 0.042 ms
+Execution Time: 0.380 ms
+Peak Memory: 48 KB | Circuit Breaker Status: OK (&lt; 10MB network threshold)</code></pre>
+        </div>
+
+        <h3>JSON API Diagnostic Response</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>json response</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>{
+  "Explain": {
+    "plan_type": "DistributedHashJoin(ColocatedHashJoin)",
+    "collection": "orders",
+    "execution_time_us": 380,
+    "documents_examined": 100,
+    "documents_returned": 100,
+    "estimated_cost_score": 4.5,
+    "join_strategy": "ColocatedHashJoin",
+    "estimated_network_io_bytes": 1500,
+    "actual_network_io_bytes": 1420,
+    "cache_hits": 98,
+    "cache_misses": 2,
+    "circuit_breaker_triggered": false,
+    "shard_metrics": [
+      { "shard_id": "shard-0", "latency_us": 120, "rows_scanned": 45, "network_bytes": 640, "is_straggler": false },
+      { "shard_id": "shard-1", "latency_us": 145, "rows_scanned": 55, "network_bytes": 780, "is_straggler": false }
+    ],
+    "formatted_pg_tree": "Distributed Hash Join (strategy: ColocatedHashJoin)..."
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Multi-Document ACID Transactions -->
+      <section id="transactions">
+        <h2>💳 Multi-Document ACID Transactions</h2>
+        <p>Execute multi-statement transactions with Snapshot Isolation and Write-Ahead Log (WAL) safety:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>http rest transactions</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Begin Transaction
+curl -X POST http://127.0.0.1:27018/v1/transaction/begin -H "Authorization: Bearer &lt;TOKEN&gt;"
+
+# 2. Stage Document Mutations
+curl -X POST http://127.0.0.1:27018/v1/collections/accounts/insert \
+  -H "Authorization: Bearer &lt;TOKEN&gt;" -d '{"account": "A", "balance": 900}'
+
+# 3. Commit Transaction (or /rollback to abort)
+curl -X POST http://127.0.0.1:27018/v1/transaction/commit -H "Authorization: Bearer &lt;TOKEN&gt;"</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Bulk Data Migration -->
+      <section id="data-migration">
+        <h2>📥 Bulk CSV / JSON Data Migration Engine</h2>
+        <p>Migrate existing datasets into FaizDB with zero friction via REST API or Studio UI Drag & Drop:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>csv & json bulk ingestion</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Ingest CSV Data with Automatic Type Inference:
+curl -X POST http://127.0.0.1:27018/v1/collections/products/import \
+  -H "Authorization: Bearer &lt;TOKEN&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"csv": "name,price,in_stock\nRTX 5090,1999.99,true\nTPU v5,2499.50,true"}'</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Automated Backup & SOC2 Retention -->
+      <section id="backup-retention">
+        <h2>⏰ Automated Backup Scheduler & SOC2 Retention Policy</h2>
+        <p>Schedule non-blocking point-in-time snapshots with automatic retention pruning:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>backup schedule rest api</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Configure Daily Auto-Backup with 14-Day Retention:
+curl -X POST http://127.0.0.1:27018/v1/backup/schedule \
+  -H "Authorization: Bearer &lt;TOKEN&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "frequency_minutes": 1440,
+    "retention_days": 14,
+    "passphrase": "enterprise-vault-key-2026"
+  }'</code></pre>
         </div>
       </section>
 
@@ -732,6 +1235,108 @@ const collection = client.db('app_db').collection('users');
 
 await collection.insertOne({ name: 'Faiz Aziz', tier: 'Enterprise', _ttl: 60 });
 console.log('Saved with 60-second auto-expiry TTL!');</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: PostgreSQL Wire Protocol -->
+      <section id="postgres-wire">
+        <h2>🐘 PostgreSQL Wire Protocol v3.0 (Port 5432)</h2>
+        <p class="lead">
+          FaizDB speaks native PostgreSQL Wire Protocol v3.0 on standard port <code>5432</code>. Connect directly using <code>psql</code>, GUI tools (DBeaver, TablePlus, DataGrip), BI dashboards (Grafana, Metabase), and standard SQL ORMs (Prisma, GORM, SQLAlchemy, Hibernate).
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🐘 Drop-in SQL Compatibility</div>
+            <div class="feature-desc">Standard SQL <code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>EXPLAIN</code>, and multi-statement transactions over port 5432.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">📊 GUI &amp; BI Introspection</div>
+            <div class="feature-desc">Automatic support for <code>information_schema</code> and <code>pg_catalog</code> table schema introspection for TablePlus, DBeaver &amp; Grafana.</div>
+          </div>
+        </div>
+
+        <h3>1. Connect with <code>psql</code> CLI</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / psql</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Connect with standard psql client:
+psql -h 127.0.0.1 -p 5432 -U postgres -d faizdb
+
+-- Execute SQL queries directly:
+SELECT * FROM users WHERE score > 8000;
+INSERT INTO users (name, role, score) VALUES ('Faiz', 'Architect', 9900);</code></pre>
+        </div>
+
+        <h3>2. Connect with Python (<code>psycopg2</code> / <code>asyncpg</code>)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import psycopg2
+
+conn = psycopg2.connect("host=127.0.0.1 port=5432 dbname=faizdb user=postgres password=faizdb")
+cur = conn.cursor()
+
+cur.execute("SELECT name, role FROM users WHERE active = true;")
+rows = cur.fetchall()
+print("PostgreSQL Query Results:", rows)</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: gRPC & Protocol Buffers Gateway -->
+      <section id="grpc-wire">
+        <h2>⚡ gRPC &amp; Protocol Buffers Gateway (Port 50051)</h2>
+        <p class="lead">
+          FaizDB provides ultra-low latency, binary Protocol Buffers microservices communication and AI vector similarity search streaming on port <code>50051</code>.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">⚡ Sub-Millisecond Binary RPC</div>
+            <div class="feature-desc">HTTP/2 multiplexing with zero-allocation Protobuf serialization for high-throughput enterprise microservices.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">📡 Server Streaming Change Streams</div>
+            <div class="feature-desc">Direct gRPC server-streaming for live database mutation events and reactive change feeds.</div>
+          </div>
+        </div>
+
+        <h3>1. Protocol Buffers Schema (<code>proto/faizdb.proto</code>)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>protobuf</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>syntax = "proto3";
+package faizdb.v1;
+
+service FaizDbService {
+  rpc ExecuteQuery (QueryRequest) returns (QueryResponse);
+  rpc VectorSearch (VectorSearchRequest) returns (VectorSearchResponse);
+  rpc InsertDocuments (InsertRequest) returns (InsertResponse);
+  rpc SubscribeChangeStream (StreamRequest) returns (stream ChangeEventMsg);
+  rpc HealthCheck (HealthRequest) returns (HealthResponse);
+}</code></pre>
+        </div>
+
+        <h3>2. High-Performance gRPC Vector Search (Python / TypeScript / Go)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python grpc</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>from faizdb import FaizDbGrpcClient
+
+client = FaizDbGrpcClient(target="localhost:50051")
+
+# Sub-millisecond ANN Vector Similarity Search (&lt; 1ms)
+hits = client.vector_search("ai_embeddings", vector=[0.95, 0.90, 0.10], top_k=5)
+for h in hits:
+    print(f"Match: {h['id']} | Similarity Score: {h['score']:.4f}")</code></pre>
         </div>
       </section>
 
@@ -936,18 +1541,198 @@ db.players.deleteOne({ "name": "Inactive User" });</code></pre>
       <!-- Section: Raft Cluster & Sharding -->
       <section id="raft-cluster">
         <h2>🌐 Raft Consensus, High Availability & Auto-Sharding</h2>
-        <p>FaizDB includes a native Raft distributed consensus implementation with automated leader election and 16,384 virtual hash slots:</p>
+        <p class="lead">
+          FaizDB integrates a native, high-performance <strong>Raft Distributed Consensus Engine</strong> paired with a <strong>16,384 Virtual Hash Slot</strong> partition ring. It guarantees automatic leader election, zero-downtime failover, and linear horizontal scale-out across bare-metal servers, VMs, and Kubernetes pods.
+        </p>
 
         <div class="grid-2">
           <div class="feature-card">
-            <div class="feature-title">Automated Failover</div>
-            <div class="feature-desc">When a leader node goes offline, followers initiate a Term Election and elect a new Leader within 150-300ms.</div>
+            <div class="feature-title">⚡ Sub-300ms Automated Failover</div>
+            <div class="feature-desc">When a Leader node disconnects or crashes, follower nodes detect heartbeat timeout and elect a new Leader within 150–300ms via Raft randomized term timers.</div>
           </div>
           <div class="feature-card">
-            <div class="feature-title">Consistent Hash Ring</div>
-            <div class="feature-desc">Keys are partitioned into 16,384 virtual slots using CRC32 hash algorithms for balanced distribution.</div>
+            <div class="feature-title">🎯 16,384 Virtual Slot Hash Ring</div>
+            <div class="feature-desc">Keys are partitioned into 16,384 consistent hash slots using CRC32. Shards are rebalanced across joining/leaving nodes with zero downtime.</div>
           </div>
         </div>
+
+        <h3>Raft Cluster Management REST API</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / curl — cluster endpoints</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Check Live Cluster Topology & Shard Distribution
+curl -X GET http://127.0.0.1:27018/v1/cluster/status \
+  -H "Authorization: Bearer faizdb-cluster-secret"
+
+# Response:
+# {
+#   "success": true,
+#   "data": {
+#     "node": { "node_id": "node-1", "term": 3, "is_leader": true, "peers": 3 },
+#     "shards": { "node-1": "0-5461", "node-2": "5462-10922", "node-3": "10923-16383" },
+#     "consensus": "Raft v1.0",
+#     "virtual_slots": 16384
+#   }
+# }
+
+# 2. Dynamically Join a New Node to the Cluster
+curl -X POST http://127.0.0.1:27018/v1/cluster/join \
+  -H "Authorization: Bearer faizdb-cluster-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"peer_id": "node-4", "peer_address": "10.0.0.14:27018"}'
+
+# 3. Simulate Failover / Trigger Immediate Leader Election
+curl -X POST http://127.0.0.1:27018/v1/cluster/failover \
+  -H "Authorization: Bearer faizdb-cluster-secret"</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Multi-Region Geo-Replication & CRDTs -->
+      <section id="geo-replication">
+        <h2>🌍 Multi-Region Geo-Replication &amp; Active-Active CRDTs</h2>
+        <p class="lead">
+          Deploy FaizDB across globally distributed datacenters (e.g. Singapore <code>ap-southeast-1</code>, Frankfurt <code>eu-central-1</code>, US Virginia <code>us-east-1</code>) with <strong>local sub-millisecond writes</strong> and mathematically proven <strong>Strong Eventual Consistency (SEC)</strong> using Conflict-Free Replicated Data Types (CRDTs).
+        </p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>global active-active mesh topology</span>
+          </div>
+          <pre><code>                     ┌───────────────────────────────────────┐
+                     │       Singapore (ap-southeast-1)      │
+                     │       Local Read & Write < 0.5ms      │
+                     └───────────────┬───────▲───────────────┘
+                                     │       │
+                   Async Gossip Delta│       │Async Gossip Delta
+                                     ▼       │
+        ┌────────────────────────────────────┴──┐   Async Delta   ┌───────────────────────────────────────┐
+        │       Frankfurt (eu-central-1)        │◄───────────────►│       US Virginia (us-east-1)         │
+        │       Local Read & Write < 0.5ms      │                 │       Local Read & Write < 0.5ms      │
+        └───────────────────────────────────────┘                 └───────────────────────────────────────┘
+                                ▲                                             ▲
+                                │                                             │
+                                └────── CRDT Version Vector & LWW Merge ──────┘</code></pre>
+        </div>
+
+        <h3>📐 The 4 Native CRDT Mathematical Models in FaizDB</h3>
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">1. Version Vectors (Causal Ordering)</div>
+            <div class="feature-desc">Tracks causal event history across $N$ regional nodes without requiring globally synchronized atomic clocks (immune to NTP drift).</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">2. LWW-Register (Last-Write-Wins)</div>
+            <div class="feature-desc">Field-level deterministic conflict resolution combining hybrid physical timestamps and deterministic region ID tie-breakers.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">3. OR-Set (Observed-Remove Set)</div>
+            <div class="feature-desc">Handles distributed arrays, tags, and sets. Unique element UUID tags eliminate the classic distributed delete-resurrection bug.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">4. PN-Counter (Positive-Negative)</div>
+            <div class="feature-desc">State-based distributed counters supporting commutative increments ($P$) and decrements ($N$) for live player scores, likes, and balances.</div>
+          </div>
+        </div>
+
+        <h3>🚀 3-Region Deployment Walkthrough</h3>
+        <p>Follow these steps to launch a 3-continent active-active cluster:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / curl — 3-region setup</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># ─── Step 1: Start Region 1 (Singapore) ───
+export FAIZDB_REGION="ap-southeast-1"
+faizdb serve --http-port 27018 --host 0.0.0.0
+
+# ─── Step 2: Start Region 2 (Frankfurt) & Register to Singapore ───
+export FAIZDB_REGION="eu-central-1"
+faizdb serve --http-port 27018 --host 0.0.0.0
+
+# Register Frankfurt into Singapore's mesh:
+curl -X POST http://singapore.faizdb.io:27018/v1/cluster/regions \
+  -H "Authorization: Bearer faizdb-cluster-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"region_id": "eu-central-1", "endpoint": "http://frankfurt.faizdb.io:27018"}'
+
+# ─── Step 3: Start Region 3 (US East) & Register to Mesh ───
+curl -X POST http://singapore.faizdb.io:27018/v1/cluster/regions \
+  -H "Authorization: Bearer faizdb-cluster-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"region_id": "us-east-1", "endpoint": "http://us.faizdb.io:27018"}'
+
+# ─── Step 4: Verify Mesh Status Across All Regions ───
+curl -X GET http://singapore.faizdb.io:27018/v1/cluster/regions \
+  -H "Authorization: Bearer faizdb-cluster-secret"</code></pre>
+        </div>
+
+        <h3>🐍 Python Multi-Region Delta Synchronization Example</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>python multi-region synchronization</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import requests
+
+SINGAPORE_API = "http://singapore.faizdb.io:27018/v1"
+FRANKFURT_API = "http://frankfurt.faizdb.io:27018/v1"
+AUTH_HEADER = {"Authorization": "Bearer faizdb-cluster-secret"}
+
+# 1. Write document locally in Singapore (< 0.5ms latency)
+requests.post(f"{SINGAPORE_API}/collections/customers/documents", json={
+    "_id": "cust_apac_01",
+    "tier": "Enterprise",
+    "balance": 50000
+}, headers=AUTH_HEADER)
+
+# 2. Propagate CRDT Delta to Frankfurt asynchronously
+sync_payload = {
+    "deltas": [{
+        "source_region": "ap-southeast-1",
+        "collection": "customers",
+        "document_id": "cust_apac_01",
+        "field_updates": {
+            "tier": ["Enterprise", 1700000000000, "ap-southeast-1"]
+        },
+        "version_vector": {"ap-southeast-1": 1},
+        "timestamp": 1700000000000
+    }]
+}
+
+resp = requests.post(f"{FRANKFURT_API}/cluster/geo-sync", json=sync_payload, headers=AUTH_HEADER)
+print("Deltas Applied in Frankfurt:", resp.json()["data"]["applied_deltas"])</code></pre>
+        </div>
+
+        <h3>⚡ Why FaizDB CRDTs Outperform Synchronous Consensus (CockroachDB / Spanner)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Architecture Aspect</th>
+              <th>Synchronous 2PC / Multi-Paxos (CockroachDB / Spanner)</th>
+              <th>🚀 FaizDB Active-Active CRDTs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Cross-Region Write Latency</strong></td>
+              <td>150–250ms (Waits for round-trip WAN consensus ACK)</td>
+              <td><strong>&lt; 0.5ms (Writes commit locally immediately)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Trans-Oceanic Cable Cut (Partition)</strong></td>
+              <td>Regional partition freezes writes (Quorum loss)</td>
+              <td><strong>100% Uptime (Continues writes locally, merges upon reconnect)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Distributed Lock Contention</strong></td>
+              <td>High lock wait times during concurrent global updates</td>
+              <td><strong>Zero Distributed Locks (Lock-free CRDT mathematical convergence)</strong></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <!-- Section 8: Backup & Disaster Recovery -->
@@ -968,44 +1753,221 @@ faizdb restore --input ./backups/faizdb_snapshot_2026.json</code></pre>
         </div>
       </section>
 
+      <!-- Section: Big Data, Lakehouse & Columnar Engine -->
+      <section id="bigdata-lakehouse">
+        <h2>🐘 Big Data, Columnar Parquet &amp; Streaming Lakehouse Architecture</h2>
+        <p class="lead">
+          FaizDB scales seamlessly from single-node embedded IoT devices to <strong>Petabyte-Scale Big Data Lakehouse Workloads</strong>. Engineered with an LSM-Tree sequential storage core, vector quantization, Arrow-compatible columnar batching, multi-tier hot/cold storage, and distributed scatter-gather query aggregation.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card" style="border-top: 3px solid #8b5cf6;">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">Phase 1: Scalar Quantization (SQ8)</div>
+            <div class="feature-desc">Compresses 32-bit float vector embeddings into 8-bit integers (<code>u8</code>), delivering <strong>4x RAM reduction</strong> and enabling 100M+ vectors on cost-efficient hardware with &gt;98% recall accuracy.</div>
+          </div>
+          <div class="feature-card" style="border-top: 3px solid #0ea5e9;">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Phase 2: ColumnarBatch (Arrow/Parquet)</div>
+            <div class="feature-desc">Transposes row JSON into typed columnar arrays with zero-copy projections and SIMD-accelerated column aggregations (DuckDB, Apache Spark, Polars, and Pandas ready).</div>
+          </div>
+          <div class="feature-card" style="border-top: 3px solid #f59e0b;">
+            <div class="feature-icon">💾</div>
+            <div class="feature-title">Phase 3: Automated Tiered Storage</div>
+            <div class="feature-desc">Separates active Hot operational data on NVMe SSDs from Cold historical data on S3/MinIO/GCS object storage with automatic age/capacity lifecycle migration.</div>
+          </div>
+          <div class="feature-card" style="border-top: 3px solid #10b981;">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">Phase 4: Distributed Scatter-Gather &amp; CDC</div>
+            <div class="feature-desc">Executes parallel queries across 16,384 virtual hash slots with filter pushdowns, while emitting Debezium/Kafka-compatible Change Data Capture event streams into Lakehouses.</div>
+          </div>
+        </div>
+
+        <h3>1. Vector Quantization (SQ8) Code Example</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>rust — 4x vector memory reduction</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>use faizdb_vector::{HnswConfig, HnswIndex, DistanceMetric, QuantizationType};
+
+// 1. Initialize HNSW with Scalar8 Quantization enabled
+let config = HnswConfig::new(1536, DistanceMetric::Cosine)
+    .with_quantization(QuantizationType::Scalar8);
+let mut index = HnswIndex::new(config);
+
+// 2. Insert 1536-dimensional embeddings (Compressed from 6.1KB -&gt; 1.5KB per vector)
+index.insert("article_01", embedding_vec)?;
+
+// 3. Ultra-fast Asymmetric Distance Search (&lt; 1ms)
+let hits = index.search(&amp;query_embedding, 5);</code></pre>
+        </div>
+
+        <h3>2. Zero-Copy Columnar Analytics (Arrow / DuckDB Interop)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>rust — columnar batch analytics</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>use faizdb_core::storage::columnar::ColumnarBatch;
+
+// 1. Transpose JSON documents into Arrow-compatible contiguous columns
+let batch = ColumnarBatch::from_json_documents(&amp;documents)?;
+
+// 2. SIMD-Accelerated Columnar Sum without row loops
+let total_volume = batch.sum_f64("trade_volume").unwrap();
+
+// 3. Zero-Copy Column Projection (extract only 'ticker' &amp; 'price')
+let projected = batch.project(&amp;["ticker", "price"])?;
+let csv_export = projected.to_csv();</code></pre>
+        </div>
+
+        <h3>3. Real-Time Change Data Capture (CDC) for Kafka &amp; Lakehouses</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>json — debezium / kafka cdc event stream</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>{
+  "payload": {
+    "op": "c",
+    "ts_ms": 1788339200000,
+    "source": {
+      "version": "0.1.0",
+      "connector": "faizdb-cdc",
+      "name": "faizdb_cluster",
+      "db": "production",
+      "collection": "financial_transactions",
+      "lsn": 10485760
+    },
+    "before": null,
+    "after": {
+      "tx_id": "tx_998822",
+      "amount": 450000.0,
+      "currency": "USD",
+      "status": "cleared"
+    }
+  }
+}</code></pre>
+        </div>
+
+        <h3>4. Big Data Performance Comparison Matrix</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Architecture Metric</th>
+              <th>Legacy Relational (Postgres / MySQL)</th>
+              <th>NoSQL / Big Data (Cassandra / Mongo)</th>
+              <th>🚀 FaizDB Big Data Engine</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Storage Engine</strong></td>
+              <td>B-Tree (Random I/O Bottleneck)</td>
+              <td>LSM-Tree (Cassandra) / B-Tree (Mongo)</td>
+              <td><strong>LSM-Tree with Streaming k-Way BinaryHeap Compaction</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Vector Memory Scale</strong></td>
+              <td>pgvector: Uncompressed (Heavy RAM)</td>
+              <td>Atlas: Expensive Dedicated Tier</td>
+              <td><strong>Native SQ8 Quantization (4x Memory Reduction, 100M+ Vectors)</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Lakehouse Interop</strong></td>
+              <td>Slow row-by-row SELECT</td>
+              <td>Requires Spark Mongo Connector</td>
+              <td><strong>Native ColumnarBatch, Arrow Slicing &amp; Debezium Kafka CDC</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Tiered Storage Cost</strong></td>
+              <td>All data on expensive hot disks</td>
+              <td>Manual archival scripts</td>
+              <td><strong>Automated Hot NVMe to Cold S3/GCS Object Lifecycle Migration</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
       <!-- Section: Python SDK -->
       <section id="sdk-python">
         <h2>🐍 Python Integration Guide</h2>
-        <p>Connect using the official Python MongoDB driver (<code>pymongo</code>):</p>
+        <p>Connect using <code>pymongo</code> (Port 27017) or the official high-speed gRPC Client (Port 50051):</p>
         <div class="code-block">
           <div class="code-header">
-            <span>python</span>
+            <span>python grpc & pymongo</span>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre><code>import pymongo
+          <pre><code># 1. Official FaizDB gRPC Client (Port 50051)
+from faizdb import FaizDbGrpcClient
 
-client = pymongo.MongoClient("mongodb://127.0.0.1:27017")
-db = client["production_db"]
-collection = db["telemetry"]
+client = FaizDbGrpcClient(target="localhost:50051")
+hits = client.vector_search("embeddings", vector=[0.95, 0.90, 0.10], top_k=5)
+print("Vector Matches:", hits)
 
-collection.insert_one({"sensor": "alpha-01", "humidity": 65.2, "status": "ok"})
-print("Retrieved:", collection.find_one({"sensor": "alpha-01"}))</code></pre>
+# 2. Drop-in PyMongo Driver (Port 27017)
+import pymongo
+mongo_client = pymongo.MongoClient("mongodb://127.0.0.1:27017")
+col = mongo_client["app_db"]["users"]
+col.insert_one({"name": "Ahmad Faiz", "role": "Architect"})</code></pre>
         </div>
       </section>
 
       <!-- Section: Node.js SDK -->
       <section id="sdk-node">
-        <h2>⚡ Node.js & TypeScript Integration Guide</h2>
-        <p>Connect using <code>mongodb</code> or <code>mongoose</code>:</p>
+        <h2>⚡ Node.js &amp; TypeScript Integration Guide</h2>
+        <p>Connect using <code>@faizdb/client</code> (gRPC Port 50051) or <code>mongodb</code> / <code>mongoose</code> (Port 27017):</p>
         <div class="code-block">
           <div class="code-header">
             <span>typescript</span>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
           </div>
-          <pre><code>import { MongoClient } from 'mongodb';
+          <pre><code>// 1. Official gRPC Client (Port 50051)
+import { FaizDbGrpcClient } from '@faizdb/client';
 
-const client = new MongoClient('mongodb://127.0.0.1:27017');
-await client.connect();
-const db = client.db('enterprise_app');
-const users = db.collection('customers');
+const client = new FaizDbGrpcClient({ target: 'localhost:50051' });
+const results = await client.vectorSearch('products', [0.1, 0.5, 0.9], 10);
+console.log('AI Vector Search:', results);
 
-await users.insertOne({ company: 'Acme Corp', tier: 'Enterprise', mrr: 5000 });
-console.log('Customer saved successfully in FaizDB!');</code></pre>
+// 2. Drop-in Native MongoDB Driver (Port 27017)
+import { MongoClient } from 'mongodb';
+const mongo = new MongoClient('mongodb://127.0.0.1:27017');
+await mongo.connect();
+await mongo.db('enterprise').collection('customers').insertOne({ name: 'Faiz', tier: 'Enterprise' });</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Go SDK -->
+      <section id="sdk-go">
+        <h2>🔵 Go Official SDK Integration Guide</h2>
+        <p>Connect using the official type-safe Go SDK (<code>github.com/ictdothouse/faizdb/bindings/go</code>) via gRPC or REST:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span>go</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/ictdothouse/faizdb/bindings/go"
+)
+
+func main() {
+	// 1. High-Performance gRPC Client (Port 50051)
+	grpcClient := faizdb.NewGrpcClient("localhost:50051")
+	hits, _ := grpcClient.VectorSearch(context.Background(), "ai_embeddings", []float32{0.95, 0.90, 0.10}, 5)
+	fmt.Printf("gRPC Vector Matches: %d\n", len(hits))
+
+	// 2. REST & Admin Client (Port 27018)
+	restClient := faizdb.NewClient("http://localhost:27018")
+	_, _ = restClient.Login("admin", "faizdb-admin-2026")
+	users := restClient.Collection("users")
+	docID, _ := users.Insert(map[string]interface{}{"name": "Faiz", "role": "Architect"})
+	fmt.Println("Inserted document:", docID)
+}</code></pre>
         </div>
       </section>
 
@@ -1055,7 +2017,166 @@ console.log('Leaderboard:', data);</code></pre>
       <!-- Section: Mobile & Smart TV -->
       <section id="sdk-mobile-tv">
         <h2>📱 Mobile Apps (Flutter / React Native) & Smart TV Integration</h2>
-        <p>FaizDB supports both network connections (via REST / WebSockets) and embedded native engines (compiled into <code>.so</code> / <code>.dylib</code> / <code>.framework</code> for offline embedded storage in Flutter & React Native).</p>
+        <p class="lead">
+          FaizDB supports both network-connected clients (via REST / WebSockets) and embedded native engines (compiled into <code>.so</code> / <code>.dylib</code> / <code>.xcframework</code> for offline local-first storage in Flutter, React Native, iOS, Android, and Smart TV operating systems).
+        </p>
+
+        <h3>1. Flutter / Dart Integration (REST & WebSockets)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>dart / flutter</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code>import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+class FaizDbService {
+  final String baseUrl = 'http://localhost:27018/v1';
+
+  // 1. Fetch user data
+  Future&lt;List&lt;dynamic&gt;&gt; fetchUsers() async {
+    final response = await http.get(Uri.parse('$baseUrl/collections/users/documents'));
+    final data = jsonDecode(response.body);
+    return data['data'] ?? [];
+  }
+
+  // 2. Subscribe to real-time live events (Change Streams)
+  void listenToLiveUpdates(Function(dynamic) onEvent) {
+    final channel = WebSocketChannel.connect(Uri.parse('ws://localhost:27018/v1/subscribe'));
+    channel.stream.listen((message) {
+      final change = jsonDecode(message);
+      onEvent(change);
+    });
+  }
+}</code></pre>
+        </div>
+
+        <h3>2. Embedded Native Mobile Compilation (Android NDK & iOS XCFramework)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / cargo</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Android ARM64 (.so shared library)
+cargo build --target aarch64-linux-android --release -p faizdb-core
+
+# 2. iOS Static Framework (.xcframework)
+cargo build --target aarch64-apple-ios --release -p faizdb-core</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Automated CI/CD & Testing -->
+      <section id="ci-pipeline">
+        <h2>🤖 Automated CI/CD Pipeline & Test Automation</h2>
+        <p class="lead">
+          Every commit and pull request to FaizDB is automatically validated through a comprehensive 6-stage GitHub Actions pipeline ensuring zero regressions and maximum memory safety.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">✨ Rustfmt & Clippy Quality Gate</div>
+            <div class="feature-desc">Enforces strict code styling and zero compiler warnings with <code>cargo clippy --all-targets -- -D warnings</code>.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🧪 84/84 Unit & Integration Tests</div>
+            <div class="feature-desc">Automated test matrix validating storage engine durability, WAL recovery, EdDSA authentication, and HNSW vector search.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🔒 Cargo Audit Security Scan</div>
+            <div class="feature-desc">Continuously cross-references workspace dependencies against the RustSec Advisory Database for known CVE vulnerabilities.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">🦀 Minimum Supported Rust Version (MSRV 1.88)</div>
+            <div class="feature-desc">Guarantees compiler compatibility across modern LTS distributions and production build systems.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Changelog & Versioning -->
+      <section id="changelog">
+        <h2>📋 Changelog & Versioning Policy</h2>
+        <p class="lead">
+          FaizDB adheres to <a href="https://semver.org/" target="_blank" style="color: var(--primary-dark); font-weight: 600;">Semantic Versioning (SemVer)</a> and documents all releases following the <a href="https://keepachangelog.com/" target="_blank" style="color: var(--primary-dark); font-weight: 600;">Keep a Changelog</a> specification.
+        </p>
+
+        <div class="feature-card" style="margin-bottom: 1rem;">
+          <div class="feature-title">🚀 Version 0.1.0 — Initial Release</div>
+          <ul style="margin-left: 1.25rem; font-size: 0.875rem; color: var(--text-muted); line-height: 1.7; margin-top: 0.5rem;">
+            <li>Hybrid LSM-Tree storage engine with sequential WAL and MVCC ACID snapshot isolation.</li>
+            <li>4-Way Gateway: MongoDB Wire (27017), PostgreSQL Wire (5432), gRPC (50051), REST/WS (27018).</li>
+            <li>Native HNSW Vector Index (Cosine, L2, Dot) and directional Knowledge Graph engine.</li>
+            <li>EdDSA (Ed25519) asymmetric JWT authentication and Argon2id password hashing.</li>
+            <li>Streaming k-Way BinaryHeap SSTable Compaction with bounded $O(k)$ memory usage.</li>
+            <li>Distributed Raft consensus clustering and Active-Active CRDT multi-region geo-replication.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section: Security Policy & SLA -->
+      <section id="security-policy">
+        <h2>🛡️ Security Policy & Vulnerability Reporting SLA</h2>
+        <p class="lead">
+          We take security and data integrity seriously. If you discover a vulnerability in FaizDB, please follow our responsible disclosure process.
+        </p>
+
+        <div class="callout">
+          <strong>🔒 Reporting a Security Vulnerability:</strong>
+          Please DO NOT open a public issue. Email our security team directly at <a href="mailto:faiz@ict.house" style="color: inherit; font-weight: 700;">faiz@ict.house</a> with details and reproduction steps.
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Response Milestone</th>
+              <th>Target SLA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Initial Acknowledgment</td>
+              <td>Within <strong>48 hours</strong></td>
+            </tr>
+            <tr>
+              <td>Severity Assessment</td>
+              <td>Within <strong>5 business days</strong></td>
+            </tr>
+            <tr>
+              <td>Patch Release (Critical / High)</td>
+              <td>Within <strong>14 days</strong></td>
+            </tr>
+            <tr>
+              <td>Public Disclosure</td>
+              <td>Coordinated after patch deployment</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: Contributing & Community -->
+      <section id="contributing">
+        <h2>🤝 Contributing to FaizDB</h2>
+        <p class="lead">
+          FaizDB is open-source software licensed under the <a href="https://github.com/ictdothouse/faizdb/blob/main/LICENSE" target="_blank" style="color: var(--primary-dark); font-weight: 600;">Apache License 2.0</a>. We welcome contributions from developers worldwide!
+        </p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / git workflow</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># 1. Clone workspace
+git clone https://github.com/ictdothouse/faizdb.git
+cd faizdb
+
+# 2. Build and run tests
+cargo build --all
+cargo test --all
+
+# 3. Verify quality gates before submitting PR
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all -- --check</code></pre>
+        </div>
       </section>
     </main>
   </div>
