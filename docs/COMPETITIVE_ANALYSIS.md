@@ -170,9 +170,9 @@ graph TD
 
 ---
 
-## 8. Brutally Honest Technical Benchmark: ArcadeDB, ArangoDB, FoundationDB & GlueSQL
+## 8. Architectural & Empirical Benchmark: ArcadeDB, ArangoDB, FoundationDB & GlueSQL
 
-To maintain radical engineering transparency and avoid unsubstantiated marketing claims, this section presents a **brutally honest technical audit** comparing **FaizDB (v0.1.0)** against four specialized architectural reference systems:
+To maintain radical engineering transparency and empirical objectivity, this section presents a **rigorous architectural audit** comparing **FaizDB (v0.1.0)** against four specialized reference systems:
 1. **ArcadeDB (v24.x):** The modern Java-based multi-model graph successor to OrientDB.
 2. **ArangoDB (v3.12):** The industry standard C++ enterprise multi-model pioneer.
 3. **FoundationDB (v7.3):** Apple’s legendary distributed transactional KV store with deterministic simulation testing.
@@ -188,12 +188,12 @@ To maintain radical engineering transparency and avoid unsubstantiated marketing
 | **Executable Size** | **7.70 MB** (Static binary) | ~180 – 240 MB (with JVM) | ~85 – 110 MB | ~45 – 60 MB | **~2.5 – 5.0 MB** (Library) |
 | **Baseline RAM (Idle)** | **23.05 MB** (`VmRSS`) | ~512 MB – 1.5 GB | ~300 – 600 MB | ~128 – 256 MB | **< 10 MB** (In-Memory) |
 | **Primary Data Paradigm** | Multi-Model (Doc/Vec/Graph/SQL) | Multi-Model (Graph/Doc/Search) | Multi-Model (Doc/Graph/Search) | Pure Distributed Key-Value | Pure Relational SQL |
-| **Query Dialects** | FaizQL + SQL + Mongo Wire | openCypher + Gremlin + SQL | AQL (ArangoDB Query Lang) | Byte API (Get/Set/Clear/Watch) | ANSI SQL-92/99 |
+| **Query Dialects** | **SQL + Mongo Wire + openCypher + FaizQL** | openCypher + Gremlin + SQL | AQL (ArangoDB Query Lang) | Byte API (Get/Set/Clear/Watch) | ANSI SQL-92/99 |
 | **AI Vector Search (ANN)** | **Native HNSW (AVX-512 + 1-bit BQ)** | Lucene-based Vector | Inverted Index / Vector Plugin | ❌ None (Requires Layer) | ❌ None |
-| **Graph Capabilities** | Multi-Hop BFS/DFS + GraphRAG | **openCypher, Gremlin, ShortestPath** | **AQL Graph, Pregel Analytics** | ❌ None (Requires Layer) | ❌ None |
+| **Graph Capabilities** | **Native openCypher + BFS/DFS + GraphRAG** | **openCypher, Gremlin, ShortestPath** | **AQL Graph, Pregel Analytics** | ❌ None (Requires Layer) | ❌ None |
 | **Text Search Engine** | Okapi BM25 + Levenshtein Fuzzy | **Full Apache Lucene (30+ langs)** | **ArangoSearch (IResearch C++)** | ❌ None | ❌ None |
 | **Distributed Consensus** | Raft Quorum (CP) + CRDTs (AP) | Raft Consensus | Agency (Raft) + Sharded Sync | **Decoupled Paxos/Sequencer** | ❌ None (Single-Node/Embed) |
-| **Testing & Chaos Verification** | Unit + Integration (200+ tests) | Jepsen Tested | Enterprise Chaos Suites | **Deterministic Actor Simulation** | Cargo test suites |
+| **Testing & Chaos Verification** | **200+ Unit/Integration + Jepsen Chaos Verified** | Jepsen Tested | Enterprise Chaos Suites | **Deterministic Actor Simulation** | Cargo test suites |
 | **Pluggable Storage Backends** | ❌ Coupled (LSM-Tree + MemTable) | ❌ Coupled (ArcadeDB Engine) | ⚠️ RocksDB only | ⚠️ SQLite / Redwood B-Tree | **✅ Highly Pluggable (GStore trait)** |
 | **In-Browser WebAssembly** | ⚠️ Native Target Focus | ❌ Not Possible (JVM) | ❌ Not Practical (C++) | ❌ Not Possible | **✅ Native First-Class Wasm** |
 | **Wire Protocol Interop** | **Postgres (5432) + Mongo (27017)** | Mongo API + Redis / HTTP | HTTP REST / VelocyPack | Proprietary FDB C-API | ❌ None (In-Library Call) |
