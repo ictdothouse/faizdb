@@ -735,7 +735,9 @@ name = "faizdb-graph"
 version = "0.1.0"
 dependencies = [
  "faizdb-core",
+ "parking_lot",
  "serde",
+ "serde_json",
  "thiserror",
  "tracing",
 ]

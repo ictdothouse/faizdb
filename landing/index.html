@@ -730,9 +730,10 @@
         <div class="card-icon">🧠</div>
         <h3 class="card-title">Transactional GraphRAG: Single Query & Single Binary</h3>
         <p class="card-text">
-          Eliminate the painful <strong>Neo4j + Qdrant synchronization tax</strong>. Traverse multi-hop knowledge graph relationships and rank matching context by high-dimensional vector embeddings in a single ACID transaction within one 7.70MB binary. Query using FaizQL <code>FIND col TRAVERSE FROM 'id' DEPTH 2 VECTOR [...] USING INDEX name</code> or MongoDB <code>$traverse</code>.
+          Eliminate the painful <strong>Neo4j + Qdrant synchronization tax</strong>. Traverse multi-hop knowledge graph relationships and rank matching context by high-dimensional vector embeddings with built-in sub-millisecond <strong>Semantic Caching</strong> in a single ACID transaction within one 7.70MB binary. Query using native openCypher <code>MATCH (a)-[:REL]->(b) WHERE a.id = 'p1' VECTOR NEAR [...] TOP 5 RETURN b</code>, FaizQL <code>FIND col TRAVERSE FROM 'id' DEPTH 2</code>, or MongoDB <code>$traverse</code>.
         </p>
       </div>
+
 
       <!-- Card 2: 32x Quantization -->
       <div class="card col-4">

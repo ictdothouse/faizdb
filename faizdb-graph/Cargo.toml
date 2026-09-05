@@ -8,6 +8,10 @@ license.workspace = true
 
 [dependencies]
 faizdb-core = { path = "../faizdb-core" }
+parking_lot = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+

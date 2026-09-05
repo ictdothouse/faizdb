@@ -98,6 +98,16 @@ pub struct PathStep {
     pub depth: usize,
 }
 
+/// Structured context extracted from knowledge graph for LLM GraphRAG prompt injection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphRagContext {
+    pub root_id: String,
+    pub vertices: Vec<Vertex>,
+    pub edges: Vec<Edge>,
+    pub formatted_markdown: String,
+}
+
+
 /// Graph Store with adjacency lists
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GraphStore {
@@ -359,7 +369,75 @@ impl GraphStore {
     pub fn edge_count(&self) -> usize {
         self.outgoing.values().map(|v| v.len()).sum()
     }
+
+    /// Extract knowledge graph context up to max_depth and format it into clean Markdown ready for LLM GraphRAG prompt injection
+    pub fn extract_rag_context(
+        &self,
+        start_id: &str,
+        max_depth: usize,
+        relation_filter: Option<&str>,
+    ) -> GraphRagContext {
+        let steps = self.traverse_bfs(start_id, max_depth, relation_filter);
+        let mut vertex_ids = HashSet::new();
+        for step in &steps {
+            vertex_ids.insert(step.vertex_id.clone());
+        }
+
+        let mut vertices = Vec::new();
+        for id in &vertex_ids {
+            if let Some(v) = self.vertices.get(id) {
+                vertices.push(v.clone());
+            }
+        }
+
+        let mut edges = Vec::new();
+        for id in &vertex_ids {
+            if let Some(out_edges) = self.outgoing.get(id) {
+                for edge in out_edges {
+                    if vertex_ids.contains(&edge.to)
+                        && relation_filter.is_none_or(|r| edge.relation == r)
+                    {
+                        edges.push(edge.clone());
+                    }
+                }
+            }
+        }
+
+        // Format into human- and LLM-readable Markdown
+        let mut md = String::new();
+        md.push_str(&format!("# Knowledge Graph Context for: `{start_id}`\n\n"));
+        md.push_str("## Entities (Nodes)\n");
+        for v in &vertices {
+            md.push_str(&format!("- **{}** (`{}`)\n", v.label, v.id));
+            if !v.properties.fields.is_empty() {
+                if let Ok(json_str) = serde_json::to_string(&v.properties) {
+                    md.push_str(&format!("  - Properties: `{json_str}`\n"));
+                }
+            }
+
+        }
+
+        md.push_str("\n## Relationships (Edges)\n");
+        if edges.is_empty() {
+            md.push_str("- None\n");
+        } else {
+            for e in &edges {
+                md.push_str(&format!(
+                    "- (`{}`) -[:{}]-> (`{}`) [weight: {}]\n",
+                    e.from, e.relation, e.to, e.weight
+                ));
+            }
+        }
+
+        GraphRagContext {
+            root_id: start_id.to_string(),
+            vertices,
+            edges,
+            formatted_markdown: md,
+        }
+    }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -434,4 +512,32 @@ mod tests {
         assert!(graph2.edges("A", Direction::Outgoing, None).is_empty());
         assert!(graph2.edges("C", Direction::Incoming, None).is_empty());
     }
+
+    #[test]
+    fn test_extract_rag_context() {
+        let mut graph = GraphStore::new();
+
+        let mut p1 = Vertex::new("doc_1", "Document");
+        let mut props = faizdb_core::document::model::Document::new();
+        props.set("title", "FaizDB Architecture");
+        p1.properties = props;
+        graph.add_vertex(p1);
+
+        let mut p2 = Vertex::new("doc_2", "Concept");
+        let mut props2 = faizdb_core::document::model::Document::new();
+        props2.set("name", "GraphRAG Engine");
+        p2.properties = props2;
+        graph.add_vertex(p2);
+
+        graph.add_edge(Edge::new("doc_1", "doc_2", "EXPLAINS"));
+
+        let ctx = graph.extract_rag_context("doc_1", 2, None);
+        assert_eq!(ctx.root_id, "doc_1");
+        assert_eq!(ctx.vertices.len(), 2);
+        assert_eq!(ctx.edges.len(), 1);
+        assert!(ctx.formatted_markdown.contains("# Knowledge Graph Context for: `doc_1`"));
+        assert!(ctx.formatted_markdown.contains("- **Document** (`doc_1`)"));
+        assert!(ctx.formatted_markdown.contains("- (`doc_1`) -[:EXPLAINS]-> (`doc_2`)"));
+    }
 }
+

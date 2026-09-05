@@ -36,6 +36,7 @@ pub struct DatabaseContext {
         DashMap<String, Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>>,
     vector_indexes: DashMap<String, Arc<parking_lot::RwLock<faizdb_vector::HnswIndex>>>,
     graph_store: Arc<parking_lot::RwLock<faizdb_graph::GraphStore>>,
+    semantic_cache: Arc<faizdb_graph::SemanticCache>,
     collection_stats: DashMap<String, crate::optimizer::TableStatistics>,
 }
 
@@ -58,6 +59,7 @@ impl Default for DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            semantic_cache: Arc::new(faizdb_graph::SemanticCache::default()),
             collection_stats: DashMap::new(),
         }
     }
@@ -87,6 +89,7 @@ impl DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            semantic_cache: Arc::new(faizdb_graph::SemanticCache::default()),
             collection_stats: DashMap::new(),
         };
         ctx.recover_from_storage()?;
@@ -114,6 +117,7 @@ impl DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            semantic_cache: Arc::new(faizdb_graph::SemanticCache::default()),
             collection_stats: DashMap::new(),
         };
 
@@ -140,6 +144,7 @@ impl DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            semantic_cache: Arc::new(faizdb_graph::SemanticCache::default()),
             collection_stats: DashMap::new(),
         };
 
@@ -167,12 +172,14 @@ impl DatabaseContext {
             active_txns: DashMap::new(),
             vector_indexes: DashMap::new(),
             graph_store: Arc::new(parking_lot::RwLock::new(faizdb_graph::GraphStore::new())),
+            semantic_cache: Arc::new(faizdb_graph::SemanticCache::default()),
             collection_stats: DashMap::new(),
         };
 
         let _ = ctx.recover_from_storage();
         ctx
     }
+
 
     /// Open or create storage engine at given data directory and recover existing data
     pub fn with_storage_dir(data_dir: impl AsRef<std::path::Path>) -> Result<Self, String> {
@@ -384,6 +391,12 @@ impl DatabaseContext {
     pub fn graph_store(&self) -> Arc<parking_lot::RwLock<faizdb_graph::GraphStore>> {
         self.graph_store.clone()
     }
+
+    /// Access semantic cache for GraphRAG and vector prompt embeddings
+    pub fn semantic_cache(&self) -> Arc<faizdb_graph::SemanticCache> {
+        self.semantic_cache.clone()
+    }
+
 
     /// List all collection names
     pub fn list_collections(&self) -> Vec<String> {
@@ -942,9 +955,46 @@ impl DatabaseContext {
                     )))
                 }
             }
+            Statement::CreateEdge {
+                from,
+                to,
+                relation,
+                weight,
+                properties,
+            } => {
+                let mut edge = faizdb_graph::Edge::new(&from, &to, &relation);
+                if let Some(w) = weight {
+                    edge.weight = w;
+                }
+                if let Some(props) = properties {
+                    edge.properties = props;
+                }
+                self.graph_store.write().add_edge(edge);
+                Ok(QueryResult::Success(format!(
+                    "Graph edge from '{from}' to '{to}' via '{relation}' created successfully"
+                )))
+            }
+            Statement::DeleteEdge {
+                from,
+                to,
+                relation,
+            } => {
+                let removed = self
+                    .graph_store
+                    .write()
+                    .remove_edge(&from, &to, relation.as_deref());
+                if removed {
+                    Ok(QueryResult::Success(format!(
+                        "Graph edge from '{from}' to '{to}' deleted successfully"
+                    )))
+                } else {
+                    Err(format!("Graph edge from '{from}' to '{to}' not found"))
+                }
+            }
             Statement::BeginTransaction => Ok(QueryResult::Success(
                 "ACID Transaction initialized (Snapshot Isolation)".into(),
             )),
+
             Statement::CommitTransaction => Ok(QueryResult::Success(
                 "ACID Transaction committed successfully to WAL".into(),
             )),
@@ -1195,4 +1245,68 @@ mod tests {
             _ => panic!("Expected QueryResult::Documents"),
         }
     }
+
+    #[test]
+    fn test_executor_cypher_graphrag_and_semantic_cache_e2e() {
+        let ctx = DatabaseContext::new();
+
+        // 1. Insert documents using openCypher CREATE
+        let s1 = parse_query("CREATE (n:prod {id: 'p1', cat: 'ai', title: 'FaizDB Core'})").unwrap();
+        let s2 = parse_query("CREATE (n:prod {id: 'p2', cat: 'ai', title: 'Graph Engine'})").unwrap();
+        let s3 = parse_query("CREATE (n:prod {id: 'p3', cat: 'ai', title: 'Isolated Component'})").unwrap();
+        ctx.execute(s1).unwrap();
+        ctx.execute(s2).unwrap();
+        ctx.execute(s3).unwrap();
+
+        // 2. Connect p1 -> p2 via openCypher CREATE edge
+        let edge_q = parse_query("CREATE (a {id: 'p1'})-[:USES]->(b {id: 'p2'})").unwrap();
+        let edge_res = ctx.execute(edge_q).unwrap();
+        match edge_res {
+            QueryResult::Success(msg) => assert!(msg.contains("created successfully")),
+            _ => panic!("Expected QueryResult::Success for edge creation"),
+        }
+
+        // 3. Execute openCypher traversal query
+        let match_q = parse_query("MATCH (a:prod)-[:USES]->(b:prod) WHERE a.id = 'p1' RETURN b").unwrap();
+        let match_res = ctx.execute(match_q).unwrap();
+        match match_res {
+            QueryResult::Documents(docs) => {
+                let ids: Vec<String> = docs.iter().map(|d| d.id.as_str().to_string()).collect();
+                assert!(ids.contains(&"p1".to_string()));
+                assert!(ids.contains(&"p2".to_string()));
+                assert!(!ids.contains(&"p3".to_string()), "Isolated p3 must not be reached");
+                assert_eq!(docs.len(), 2);
+            }
+            _ => panic!("Expected QueryResult::Documents from Cypher MATCH traversal"),
+        }
+
+
+        // 4. Extract LLM GraphRAG context
+        let rag = ctx.graph_store.read().extract_rag_context("p1", 2, None);
+        assert_eq!(rag.root_id, "p1");
+        assert!(rag.formatted_markdown.contains("# Knowledge Graph Context for: `p1`"));
+        assert!(rag.formatted_markdown.contains("- (`p1`) -[:USES]-> (`p2`)"));
+
+        // 5. Store in Semantic Cache
+        ctx.semantic_cache.put(
+            "Which component does FaizDB Core use?",
+            vec![1.0, 0.0, 0.0],
+            &rag.formatted_markdown,
+            vec!["p1".to_string(), "p2".to_string()],
+        );
+
+        // Near-identical query embedding (cosine similarity ~ 0.99 > 0.90)
+        let cache_hit = ctx.semantic_cache.get(&[0.99, 0.02, 0.0]);
+        assert!(cache_hit.is_some());
+        let hit = cache_hit.unwrap();
+        assert!(hit.similarity >= 0.90);
+        assert_eq!(hit.prompt, "Which component does FaizDB Core use?");
+        assert!(hit.context.contains("Knowledge Graph Context"));
+        assert_eq!(hit.document_ids, vec!["p1", "p2"]);
+
+        // Distinct query embedding (cosine similarity ~ 0.0 < 0.90) -> Cache Miss
+        let cache_miss = ctx.semantic_cache.get(&[0.0, 1.0, 0.0]);
+        assert!(cache_miss.is_none());
+    }
 }
+

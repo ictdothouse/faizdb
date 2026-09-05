@@ -219,7 +219,23 @@ pub enum Statement {
         collection: String,
     },
     Explain(Box<Statement>),
+    CreateEdge {
+        from: String,
+        to: String,
+        relation: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        weight: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        properties: Option<Document>,
+    },
+    DeleteEdge {
+        from: String,
+        to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        relation: Option<String>,
+    },
     BeginTransaction,
     CommitTransaction,
     RollbackTransaction,
 }
+

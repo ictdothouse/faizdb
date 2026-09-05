@@ -107,9 +107,10 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 | **Wire Protocol Security** | Mongo SCRAM-SHA | Postgres MD5/SCRAM | Redis AUTH | **Centralized Zero-Trust across all 4 Gateways (Argon2id + Ed25519 JWT RBAC: Admin/RO/RW)** |
 | **Document Memory & Payload** | 16 MB hard ceiling (C++ buffer bloat) | 1 GB (TOAST out-of-line disk overhead) | N/A | **Zero-Copy Byte Slices (Safe 16MB default, scalable for AI Context)** |
 | **AI Vector Search (ANN)** | Add-on / Atlas Cloud only | Requires `pgvector` extension | Requires RedisSearch | **Native HNSW (Cosine, L2, Dot) < 1ms with 32x Binary Quantization** |
-| **Graph & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Transactional GraphRAG: Single-query TRAVERSE + VECTOR ranking in 1 ACID binary** |
+| **Graph, openCypher & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Transactional GraphRAG: Native openCypher MATCH parser + TRAVERSE + VECTOR ranking + In-Memory Semantic Caching in 1 ACID binary** |
 | **Storage Engine & Compaction** | WiredTiger (LRU only) | Shared buffers (Clock-sweep) | In-memory only | **LSM-Tree + Self-Tuning ARC + Autonomous SSTable Compaction (auto-merge >= 4 Level-0 tables)** |
-| **Query Engine & Mutation** | JSON query language | SQL only | Key-Value commands | **Unified SQL + MongoDB: arithmetic UPDATE (score = score + 500), multi-type ORDER BY, .sort() & $set** |
+| **Query Engine & Mutation** | JSON query language | SQL only | Key-Value commands | **Unified SQL + MongoDB + openCypher: arithmetic UPDATE, multi-hop MATCH, multi-type ORDER BY, .sort() & $set** |
+
 | **Full-Text Search Engine** | Basic text index | `tsvector` (Complex) | Requires plugin | **Native Okapi BM25 with Fuzzy Typo Tolerance** |
 | **In-Memory Cache (TTL)** | TTL index (slow sweeper) | Unsuitable for sub-ms cache | In-memory only | **Unified Cache (Min-Heap $O(\log N)$) + Autonomous 30s Background TTL Sweeper** |
 | **Secondary Indexing & Constraints** | Standard B-Tree | B-Tree / GIN / GiST | Limited | **High-Speed B-Tree + Strict Unique Constraints ($O(\log N)$)** |
@@ -296,8 +297,9 @@ faizdb/
 ├── bindings/           # 📦 Polyglot SDKs: Python (pyproject.toml), Node.js (npm), Go, and PHP
 ├── faizdb-core/        # 🌲 LSM-Tree, MemTable, Streaming Compaction, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs
 ├── faizdb-vector/      # 🎯 HNSW Multi-Layer Vector Index with Persistence (Cosine, L2, Dot Product)
-├── faizdb-graph/       # 🕸️ Knowledge Graph, Multi-Hop Traversal & GraphRAG Engine
-├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, FaizQL) & Cost Optimizer
+├── faizdb-graph/       # 🕸️ Knowledge Graph, Multi-Hop Traversal & GraphRAG Engine + In-Memory Semantic Cache
+├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, openCypher, FaizQL) & Cost Optimizer
+
 ├── faizdb-security/    # 🔒 Zero-Trust AES-256-GCM Encryption, Argon2id & EdDSA (Ed25519) JWT RBAC
 ├── faizdb-server/      # 🌐 Modular Multi-Protocol Server (MongoDB 27017, Postgres 5432, gRPC 50051, REST 27018)
 ├── faizdb-cli/         # 💻 Production CLI, Interactive REPL Shell, Backup & Restore Tools
@@ -442,15 +444,23 @@ curl -X POST http://127.0.0.1:27018/v1/users \
 ./target/release/faizdb shell
 ```
 
-Supports SQL, MongoDB Query Syntax, and AI Vector dialect seamlessly:
+Supports SQL, MongoDB Query Syntax, openCypher, and AI Vector dialect seamlessly:
 ```sql
 -- SQL Dialect:
 SELECT * FROM users WHERE age >= 25 AND city = 'Kuala Lumpur' LIMIT 10;
 INSERT INTO users {"name": "Linus Torvalds", "role": "Creator", "age": 55};
 
+-- openCypher Graph Traversal Dialect:
+CREATE (a:Person {id: 'p1', name: 'Alice'})-[:KNOWS {weight: 1.0}]->(b:Person {id: 'p2', name: 'Bob'});
+MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.id = 'p1' RETURN b;
+
+-- Hybrid openCypher GraphRAG + Vector Search:
+MATCH (a:prod)-[:related]->(b:prod) WHERE a.id = 'doc1' VECTOR NEAR [0.95, 0.88, 0.12] TOP 5 RETURN b;
+
 -- Vector Dialect:
 FIND articles VECTOR NEAR [0.95, 0.88, 0.12, 0.04] TOP 5;
 ```
+
 
 ---
 

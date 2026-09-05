@@ -335,3 +335,40 @@ FaizDB operates native wire protocol listeners alongside HTTP REST:
 * **Driver Support**: Compatible with PyMongo, Mongoose, MongoDB Shell (`mongosh`), and Prisma.
 * **OP_MSG Support**: Handles document insert, find, update, and multi-stage `aggregate` pipelines including `$lookup` cross-collection joins.
 * **Connection String**: `mongodb://localhost:27017/faizdb`
+
+---
+
+## 🕸️ 12. openCypher Graph Syntax & AI Semantic Caching
+
+FaizDB provides native openCypher support for knowledge graphs and hybrid GraphRAG queries:
+
+### 1. Node Creation & Filtering
+```cypher
+-- Create node with properties:
+CREATE (n:Person {id: 'p1', name: 'Alice', age: 30});
+
+-- Match nodes with property filters:
+MATCH (n:Person) WHERE n.age >= 18 RETURN n;
+```
+
+### 2. Relationship Creation & Multi-Hop Traversal
+```cypher
+-- Create directed edge with weight:
+CREATE (a {id: 'p1'})-[:KNOWS {weight: 1.0}]->(b {id: 'p2'});
+
+-- 1-hop traversal:
+MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.id = 'p1' RETURN b;
+
+-- Variable-depth traversal (up to 3 hops):
+MATCH (a:Person {id: 'p1'})-[:KNOWS*1..3]->(b:Person) RETURN b;
+```
+
+### 3. Hybrid GraphRAG + Vector Search
+```cypher
+-- Combined Graph Traversal + HNSW Vector Ranking in ONE atomic query:
+MATCH (a:docs)-[:REFERENCES]->(b:docs) WHERE a.id = 'doc1' VECTOR NEAR [0.95, 0.88, 0.12] TOP 5 RETURN b;
+```
+
+### 4. In-Memory AI Semantic Cache
+Built-in `SemanticCache` performs sub-millisecond cosine similarity matching on prompt embeddings ($\ge 0.90$ threshold) with configurable TTL, preventing redundant LLM GraphRAG traversals and database scans.
+
