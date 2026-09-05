@@ -33,6 +33,12 @@ pub struct StorageConfig {
     pub enable_wal: bool,
     /// Capacity of the ARC (Adaptive Replacement Cache) block cache
     pub block_cache_size: usize,
+    /// Threshold of L0 SSTables to trigger background compaction (default 4)
+    pub l0_compaction_trigger: usize,
+    /// Threshold of L0 SSTables to start soft write backpressure (default 8)
+    pub l0_slowdown_writes_trigger: usize,
+    /// Threshold of L0 SSTables to enforce hard write stall protection (default 16)
+    pub l0_stop_writes_trigger: usize,
 }
 
 impl Default for StorageConfig {
@@ -43,6 +49,9 @@ impl Default for StorageConfig {
             sync_writes: true,
             enable_wal: true,
             block_cache_size: 4096,
+            l0_compaction_trigger: 4,
+            l0_slowdown_writes_trigger: 8,
+            l0_stop_writes_trigger: 16,
         }
     }
 }
@@ -79,6 +88,15 @@ pub struct StorageEngine {
 
     /// ARC (Adaptive Replacement Cache) for SSTable block and key-value lookups
     block_cache: parking_lot::Mutex<crate::storage::arc_cache::ArcCache<Vec<u8>, Option<Vec<u8>>>>,
+
+    /// Atomic flag indicating whether compaction is actively running
+    is_compacting: std::sync::atomic::AtomicBool,
+
+    /// Total write stalls encountered
+    write_stalls: AtomicU64,
+
+    /// Total compactions completed
+    compactions_completed: AtomicU64,
 
     /// Whether the engine is open
     is_open: std::sync::atomic::AtomicBool,
@@ -187,6 +205,9 @@ impl StorageEngine {
             sstables: RwLock::new(sstables),
             sstable_generation: AtomicU64::new(max_gen),
             block_cache,
+            is_compacting: std::sync::atomic::AtomicBool::new(false),
+            write_stalls: AtomicU64::new(0),
+            compactions_completed: AtomicU64::new(0),
             is_open: std::sync::atomic::AtomicBool::new(true),
         })
     }
@@ -206,6 +227,7 @@ impl StorageEngine {
     /// scheduled for flushing to an SSTable.
     pub fn put(&self, key: &[u8], value: &[u8]) -> FaizResult<()> {
         self.check_open()?;
+        self.apply_write_backpressure()?;
 
         // Step 1: Write to WAL
         if let Some(wal) = &self.wal {
@@ -237,6 +259,7 @@ impl StorageEngine {
         if entries.is_empty() {
             return Ok(());
         }
+        self.apply_write_backpressure()?;
 
         // Step 1: Write batch to WAL
         if let Some(wal) = &self.wal {
@@ -331,6 +354,7 @@ impl StorageEngine {
     /// during compaction.
     pub fn delete(&self, key: &[u8]) -> FaizResult<()> {
         self.check_open()?;
+        self.apply_write_backpressure()?;
 
         // Write to WAL
         if let Some(wal) = &self.wal {
@@ -431,6 +455,8 @@ impl StorageEngine {
             immutable_memtables: self.immutable_memtables.read().len(),
             sstable_count: sstables.len(),
             total_sstable_entries: sstables.iter().map(|s| s.entry_count()).sum(),
+            write_stalls: self.write_stalls.load(Ordering::Relaxed),
+            compactions_completed: self.compactions_completed.load(Ordering::Relaxed),
         }
     }
 
@@ -462,6 +488,23 @@ impl StorageEngine {
     fn check_open(&self) -> FaizResult<()> {
         if !self.is_open.load(Ordering::Acquire) {
             return Err(FaizError::EngineClosed);
+        }
+        Ok(())
+    }
+
+    /// Apply dynamic write backpressure and anti-stall protection based on L0 SSTable depth
+    fn apply_write_backpressure(&self) -> FaizResult<()> {
+        let sst_count = self.sstables.read().len();
+        if sst_count >= self.config.l0_stop_writes_trigger {
+            self.write_stalls.fetch_add(1, Ordering::Relaxed);
+            tracing::warn!(
+                "LSM write stall: {sst_count} L0 SSTables exceed stop threshold {}. Enforcing synchronous compaction.",
+                self.config.l0_stop_writes_trigger
+            );
+            let _ = self.compact();
+        } else if sst_count >= self.config.l0_slowdown_writes_trigger {
+            self.write_stalls.fetch_add(1, Ordering::Relaxed);
+            std::thread::yield_now();
         }
         Ok(())
     }
@@ -518,10 +561,17 @@ impl StorageEngine {
             let _ = wal.checkpoint();
         }
 
-        // Automatic compaction trigger: when Level 0 accumulates >= 4 SSTables
+        // Automatic compaction trigger: when Level 0 accumulates >= l0_compaction_trigger SSTables
         let sst_len = { self.sstables.read().len() };
-        if sst_len >= 4 {
-            if let Err(e) = self.compact() {
+        if sst_len >= self.config.l0_compaction_trigger
+            && self
+                .is_compacting
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        {
+            let res = self.run_compaction_locked();
+            self.is_compacting.store(false, Ordering::Release);
+            if let Err(e) = res {
                 tracing::warn!("Automatic SSTable compaction failed: {e}");
             }
         }
@@ -533,7 +583,21 @@ impl StorageEngine {
     /// dropping tombstones and reclaiming disk space.
     pub fn compact(&self) -> FaizResult<usize> {
         self.check_open()?;
+        if self
+            .is_compacting
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            // Another thread is already actively running compaction
+            return Ok(0);
+        }
 
+        let res = self.run_compaction_locked();
+        self.is_compacting.store(false, Ordering::Release);
+        res
+    }
+
+    fn run_compaction_locked(&self) -> FaizResult<usize> {
         let (sst_paths, count) = {
             let ssts = self.sstables.read();
             if ssts.len() < 2 {
@@ -575,6 +639,8 @@ impl StorageEngine {
             let _ = wal.checkpoint();
         }
 
+        self.compactions_completed.fetch_add(1, Ordering::Relaxed);
+
         tracing::info!(
             "Compacted {} SSTables into: {}",
             count,
@@ -603,6 +669,8 @@ pub struct StorageStats {
     pub immutable_memtables: usize,
     pub sstable_count: usize,
     pub total_sstable_entries: u64,
+    pub write_stalls: u64,
+    pub compactions_completed: u64,
 }
 
 impl std::fmt::Display for StorageStats {
@@ -619,6 +687,11 @@ impl std::fmt::Display for StorageStats {
             "  SSTables: {} ({} total entries)",
             self.sstable_count, self.total_sstable_entries
         )?;
+        writeln!(
+            f,
+            "  Compaction: {} completed, {} write stalls handled",
+            self.compactions_completed, self.write_stalls
+        )?;
         Ok(())
     }
 }
@@ -634,6 +707,7 @@ mod tests {
             sync_writes: false,
             enable_wal: true,
             block_cache_size: 1024,
+            ..Default::default()
         })
         .unwrap()
     }

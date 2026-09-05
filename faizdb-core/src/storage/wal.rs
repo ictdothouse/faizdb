@@ -158,6 +158,14 @@ impl WalRecord {
             });
         }
 
+        // Minimum payload size: 8 (seq) + 1 (op) + 4 (key_len) + 4 (val_len) = 17 bytes
+        if payload_len < 17 {
+            return Err(FaizError::WalCorrupted {
+                offset,
+                detail: format!("Payload length {payload_len} is less than minimum record header (17 bytes)"),
+            });
+        }
+
         // Parse payload
         let mut pos = 0;
 
@@ -172,12 +180,24 @@ impl WalRecord {
         // Key
         let key_len = u32::from_le_bytes(payload[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
+        if pos + key_len + 4 > payload_len {
+            return Err(FaizError::WalCorrupted {
+                offset,
+                detail: format!("Key length {key_len} exceeds payload bounds"),
+            });
+        }
         let key = payload[pos..pos + key_len].to_vec();
         pos += key_len;
 
         // Value
         let val_len = u32::from_le_bytes(payload[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
+        if pos + val_len != payload_len {
+            return Err(FaizError::WalCorrupted {
+                offset,
+                detail: format!("Value length {val_len} does not match remaining payload (expected {})", payload_len - pos),
+            });
+        }
         let value = payload[pos..pos + val_len].to_vec();
 
         Ok(WalRecord {
@@ -430,6 +450,14 @@ impl Wal {
                         tracing::warn!(
                             "WAL checksum mismatch at offset {offset} in {}. \
                              Truncating replay here.",
+                            wal_path.display()
+                        );
+                        break;
+                    }
+                    Err(FaizError::WalCorrupted { detail, .. }) => {
+                        tracing::warn!(
+                            "WAL torn write/corruption at offset {offset} in {}: {detail}. \
+                             Gracefully recovered all prior records.",
                             wal_path.display()
                         );
                         break;

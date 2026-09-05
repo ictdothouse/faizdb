@@ -129,6 +129,26 @@ pub fn handle_postgres_query(
             }
         }
 
+        // Introspection: Database listing
+        if upper.contains("PG_DATABASE") || upper.contains("PG_CATALOG.PG_DATABASE") {
+            return handle_pg_database(*in_transaction);
+        }
+
+        // Introspection: Namespace / schema listing
+        if upper.contains("PG_NAMESPACE") || upper.contains("PG_CATALOG.PG_NAMESPACE") {
+            return handle_pg_namespace(*in_transaction);
+        }
+
+        // Introspection: Type catalog listing (Prisma / Drizzle handshake)
+        if upper.contains("PG_TYPE") || upper.contains("PG_CATALOG.PG_TYPE") {
+            return handle_pg_type(*in_transaction);
+        }
+
+        // Introspection: Column listing
+        if upper.contains("INFORMATION_SCHEMA.COLUMNS") || upper.contains("PG_ATTRIBUTE") {
+            return handle_list_columns(db, *in_transaction);
+        }
+
         // Introspection: Table listing from information_schema or pg_catalog
         if upper.contains("INFORMATION_SCHEMA.TABLES")
             || upper.contains("PG_TABLES")
@@ -209,6 +229,129 @@ fn handle_list_tables(db: &Arc<DatabaseContext>, in_txn: bool) -> Vec<u8> {
 
     let tag = format!("SELECT {}", collections.len());
     out.extend_from_slice(&encode_command_complete(&tag));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle pg_database listing
+fn handle_pg_database(in_txn: bool) -> Vec<u8> {
+    let fields = vec![
+        PgField::text("datname"),
+        PgField {
+            name: "oid".to_string(),
+            table_oid: 0,
+            column_attr_num: 0,
+            type_oid: PG_TYPE_INT8,
+            type_size: 8,
+            type_modifier: -1,
+            format_code: 0,
+        },
+    ];
+    let mut out = encode_row_description(&fields);
+    let row = vec![Some("faizdb".to_string()), Some("16384".to_string())];
+    out.extend_from_slice(&encode_data_row(&row));
+    out.extend_from_slice(&encode_command_complete("SELECT 1"));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle pg_namespace listing
+fn handle_pg_namespace(in_txn: bool) -> Vec<u8> {
+    let fields = vec![
+        PgField::text("nspname"),
+        PgField {
+            name: "oid".to_string(),
+            table_oid: 0,
+            column_attr_num: 0,
+            type_oid: PG_TYPE_INT8,
+            type_size: 8,
+            type_modifier: -1,
+            format_code: 0,
+        },
+    ];
+    let mut out = encode_row_description(&fields);
+    let namespaces = [
+        ("public", "2200"),
+        ("pg_catalog", "11"),
+        ("information_schema", "12345"),
+    ];
+    for (nsp, oid) in namespaces {
+        let row = vec![Some(nsp.to_string()), Some(oid.to_string())];
+        out.extend_from_slice(&encode_data_row(&row));
+    }
+    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", namespaces.len())));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle pg_type listing for driver and ORM type handshakes (Prisma, Drizzle, SQLAlchemy)
+fn handle_pg_type(in_txn: bool) -> Vec<u8> {
+    let fields = vec![
+        PgField::text("typname"),
+        PgField {
+            name: "oid".to_string(),
+            table_oid: 0,
+            column_attr_num: 0,
+            type_oid: PG_TYPE_INT8,
+            type_size: 8,
+            type_modifier: -1,
+            format_code: 0,
+        },
+        PgField {
+            name: "typarray".to_string(),
+            table_oid: 0,
+            column_attr_num: 0,
+            type_oid: PG_TYPE_INT8,
+            type_size: 8,
+            type_modifier: -1,
+            format_code: 0,
+        },
+    ];
+    let mut out = encode_row_description(&fields);
+    let types = [
+        ("bool", "16", "1000"),
+        ("int8", "20", "1016"),
+        ("float8", "701", "1022"),
+        ("text", "25", "1009"),
+        ("varchar", "1043", "1015"),
+        ("jsonb", "3802", "3807"),
+        ("vector", "16390", "16391"),
+    ];
+    for (name, oid, arr) in types {
+        let row = vec![
+            Some(name.to_string()),
+            Some(oid.to_string()),
+            Some(arr.to_string()),
+        ];
+        out.extend_from_slice(&encode_data_row(&row));
+    }
+    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", types.len())));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle column listing for GUI tools and ORM schema reflection
+fn handle_list_columns(db: &Arc<DatabaseContext>, in_txn: bool) -> Vec<u8> {
+    let collections = db.list_collections();
+    let fields = vec![
+        PgField::text("table_name"),
+        PgField::text("column_name"),
+        PgField::text("data_type"),
+        PgField::text("is_nullable"),
+    ];
+    let mut out = encode_row_description(&fields);
+    let mut count = 0;
+    for col in &collections {
+        let row_id = vec![
+            Some(col.clone()),
+            Some("_id".to_string()),
+            Some("text".to_string()),
+            Some("NO".to_string()),
+        ];
+        out.extend_from_slice(&encode_data_row(&row_id));
+        count += 1;
+    }
+    out.extend_from_slice(&encode_command_complete(&format!("SELECT {count}")));
     out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
     out
 }

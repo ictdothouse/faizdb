@@ -356,6 +356,7 @@ async fn test_lsm_sstable_compaction() {
         sync_writes: false,
         enable_wal: true,
         block_cache_size: 1024 * 1024,
+        ..Default::default()
     };
 
     let engine = Arc::new(faizdb_core::storage::engine::StorageEngine::open(config).unwrap());
