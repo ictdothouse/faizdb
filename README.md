@@ -110,7 +110,6 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 | **Graph, openCypher & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Transactional GraphRAG: Native openCypher MATCH parser + TRAVERSE + VECTOR ranking + In-Memory Semantic Caching in 1 ACID binary** |
 | **Storage Engine & Compaction** | WiredTiger (LRU only) | Shared buffers (Clock-sweep) | In-memory only | **LSM-Tree + Self-Tuning ARC + Autonomous SSTable Compaction (auto-merge >= 4 Level-0 tables)** |
 | **Query Engine & Mutation** | JSON query language | SQL only | Key-Value commands | **Unified SQL + MongoDB + openCypher: arithmetic UPDATE, multi-hop MATCH, multi-type ORDER BY, .sort() & $set** |
-
 | **Full-Text Search Engine** | Basic text index | `tsvector` (Complex) | Requires plugin | **Native Okapi BM25 with Fuzzy Typo Tolerance** |
 | **In-Memory Cache (TTL)** | TTL index (slow sweeper) | Unsuitable for sub-ms cache | In-memory only | **Unified Cache (Min-Heap $O(\log N)$) + Autonomous 30s Background TTL Sweeper** |
 | **Secondary Indexing & Constraints** | Standard B-Tree | B-Tree / GIN / GiST | Limited | **High-Speed B-Tree + Strict Unique Constraints ($O(\log N)$)** |

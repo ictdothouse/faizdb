@@ -1326,11 +1326,8 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
 
         // Determine target node vs source node
         let (source_node, target_node) = if is_incoming {
-            if !node1.var.is_empty() && (return_text.contains(&node1.var) || delete_text.contains(&node1.var)) {
-                (node2, node1)
-            } else {
-                (node1, node2)
-            }
+            // `(a)<-[:REL]-(b)` means b -> a, so node2 is the source.
+            (node2, node1)
         } else {
             if !node1.var.is_empty() && (return_text.contains(&node1.var) || delete_text.contains(&node1.var)) {
                 (node2, node1)
@@ -1364,7 +1361,16 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
     let mut where_filters = Vec::new();
     let where_raw = where_tokens.join(" ");
     if !where_raw.is_empty() {
-        let and_parts: Vec<&str> = where_raw.split(" AND ").collect();
+        let upper_where = where_raw.to_uppercase();
+        let mut and_parts: Vec<&str> = Vec::new();
+        let mut last = 0usize;
+        while let Some(rel) = upper_where[last..].find(" AND ") {
+            let pos = last + rel;
+            and_parts.push(&where_raw[last..pos]);
+            last = pos + 5;
+        }
+        and_parts.push(&where_raw[last..]);
+
         for part in and_parts {
             let p_trim = part.trim();
             if p_trim.is_empty() {
@@ -1412,15 +1418,11 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
 
     // Finalize TraverseClause
     let final_traverse = if let Some((_, max_depth, relation)) = traverse {
-        if let Some(start_id) = start_id_candidate {
-            Some(TraverseClause {
-                start_id,
-                max_depth,
-                relation,
-            })
-        } else {
-            None
-        }
+        start_id_candidate.map(|start_id| TraverseClause {
+            start_id,
+            max_depth,
+            relation,
+        })
     } else {
         None
     };
@@ -2085,6 +2087,51 @@ mod tests {
                 assert_eq!(weight, Some(1.5));
             }
             _ => panic!("Expected Statement::CreateEdge"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cypher_case_insensitive_and() {
+        let stmt = parse_query(
+            "MATCH (n:Person) WHERE n.age >= 18 and n.city = 'KL' AND n.status = 'active' RETURN n",
+        )
+        .unwrap();
+        match stmt {
+            Statement::Find {
+                collection, filter, ..
+            } => {
+                assert_eq!(collection, "Person");
+                assert!(filter.is_some());
+                if let Some(FilterExpr::And(exprs)) = filter {
+                    assert_eq!(exprs.len(), 3);
+                } else {
+                    panic!("Expected FilterExpr::And with 3 conditions");
+                }
+            }
+            _ => panic!("Expected Statement::Find"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cypher_incoming_edge() {
+        // (a)<-[:KNOWS]-(b) means edge is b -> a, so traversal source is b, target is a
+        let stmt = parse_query(
+            "MATCH (a:Person)<-[:KNOWS]-(b:Person) WHERE b.id = 'p1' RETURN a",
+        )
+        .unwrap();
+        match stmt {
+            Statement::Find {
+                collection,
+                traverse,
+                ..
+            } => {
+                assert_eq!(collection, "Person");
+                assert!(traverse.is_some());
+                let t = traverse.unwrap();
+                assert_eq!(t.start_id, "p1");
+                assert_eq!(t.relation, Some("KNOWS".to_string()));
+            }
+            _ => panic!("Expected Statement::Find"),
         }
     }
 }

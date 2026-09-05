@@ -360,7 +360,7 @@ impl DatabaseContext {
         for id in expired {
             if let Some((_, m)) = self.active_txns.remove(&id) {
                 let mut txn = m.lock();
-                let _ = self.tx_manager.abort(&mut txn);
+                self.tx_manager.abort(&mut txn);
                 tracing::warn!(
                     "Reaped expired idle transaction '{id}' after timeout of {}s",
                     timeout.as_secs()

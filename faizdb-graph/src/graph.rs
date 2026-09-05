@@ -378,20 +378,23 @@ impl GraphStore {
         relation_filter: Option<&str>,
     ) -> GraphRagContext {
         let steps = self.traverse_bfs(start_id, max_depth, relation_filter);
+        let mut ordered_ids = Vec::with_capacity(steps.len());
         let mut vertex_ids = HashSet::new();
         for step in &steps {
-            vertex_ids.insert(step.vertex_id.clone());
+            if vertex_ids.insert(step.vertex_id.clone()) {
+                ordered_ids.push(step.vertex_id.clone());
+            }
         }
 
         let mut vertices = Vec::new();
-        for id in &vertex_ids {
+        for id in &ordered_ids {
             if let Some(v) = self.vertices.get(id) {
                 vertices.push(v.clone());
             }
         }
 
         let mut edges = Vec::new();
-        for id in &vertex_ids {
+        for id in &ordered_ids {
             if let Some(out_edges) = self.outgoing.get(id) {
                 for edge in out_edges {
                     if vertex_ids.contains(&edge.to)
@@ -534,6 +537,9 @@ mod tests {
         let ctx = graph.extract_rag_context("doc_1", 2, None);
         assert_eq!(ctx.root_id, "doc_1");
         assert_eq!(ctx.vertices.len(), 2);
+        // Verify deterministic BFS insertion ordering
+        assert_eq!(ctx.vertices[0].id, "doc_1");
+        assert_eq!(ctx.vertices[1].id, "doc_2");
         assert_eq!(ctx.edges.len(), 1);
         assert!(ctx.formatted_markdown.contains("# Knowledge Graph Context for: `doc_1`"));
         assert!(ctx.formatted_markdown.contains("- **Document** (`doc_1`)"));

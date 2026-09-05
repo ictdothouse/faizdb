@@ -109,6 +109,8 @@ impl FaizDbService for FaizDbGrpcService {
                         | faizdb_query::Statement::CreateCollection { .. }
                         | faizdb_query::Statement::DropCollection { .. }
                         | faizdb_query::Statement::CreateIndex { .. }
+                        | faizdb_query::Statement::DropIndex { .. }
+                        | faizdb_query::Statement::Analyze { .. }
                         | faizdb_query::Statement::CreateEdge { .. }
                         | faizdb_query::Statement::DeleteEdge { .. } => {
 

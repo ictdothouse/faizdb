@@ -482,6 +482,22 @@ async fn test_intensive_grpc_security_and_rbac() {
         err_query.message()
     );
 
+    let mut drop_idx_req = Request::new(QueryRequest {
+        query: "DROP INDEX idx_test ON metrics".to_string(),
+        database: "default".to_string(),
+        token: String::new(),
+    });
+    drop_idx_req.metadata_mut().insert(
+        "authorization",
+        format!("Bearer {guest_token}").parse().unwrap(),
+    );
+    let err_drop = svc.execute_query(drop_idx_req).await.unwrap_err();
+    assert_eq!(err_drop.code(), tonic::Code::PermissionDenied);
+    println!(
+        "  🛡️ [SEC-G9] ReadOnly user blocked from DROP INDEX query: {}",
+        err_drop.message()
+    );
+
     // Admin can insert successfully
     let mut insert_admin_req = Request::new(InsertRequest {
         collection: "metrics".to_string(),
