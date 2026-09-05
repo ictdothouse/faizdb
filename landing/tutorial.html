@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaizDB Interactive Tutorial & Real-World Use Cases</title>
+  <meta name="description" content="Step-by-step interactive tutorial for FaizDB — multi-dialect SQL & MongoDB queries, ACID MVCC ticketing, HNSW AI vector search, GraphRAG, and 128Hz robotics edge streaming.">
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #FAFAFC;
+      --surface: #FFFFFF;
+      --surface-subtle: #F1F5F9;
+      --border: #E2E8F0;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --primary: #4F46E5;
+      --primary-hover: #4338CA;
+      --primary-light: #EEF2FF;
+      --accent-emerald: #10B981;
+      --accent-amber: #F59E0B;
+      --accent-cyan: #06B6D4;
+      --accent-purple: #8B5CF6;
+      --code-bg: #0F172A;
+      --code-text: #F8FAFC;
+      --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      --card-hover: 0 10px 30px rgba(0, 0, 0, 0.08);
+      --radius: 16px;
+    }
+
+    html.dark {
+      --bg: #090D16;
+      --surface: #0F172A;
+      --surface-subtle: #1E293B;
+      --border: #1E293B;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --primary: #6366F1;
+      --primary-hover: #4F46E5;
+      --primary-light: #1E1B4B;
+      --code-bg: #030712;
+      --code-text: #F1F5F9;
+      --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      --card-hover: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    /* Top Navigation */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      height: 4.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+    }
+    html.dark nav {
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 1.2rem;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #F59E0B, #EA580C);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .badge-tutorial {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .progress-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .progress-pill span.num {
+      color: var(--accent-emerald);
+      font-weight: 800;
+    }
+
+    .btn-action {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.85rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s;
+    }
+    .btn-action:hover {
+      background: var(--surface-subtle);
+      border-color: var(--text-muted);
+    }
+
+    .btn-primary-action {
+      background: var(--primary);
+      color: white;
+      border: 1px solid var(--primary);
+    }
+    .btn-primary-action:hover {
+      background: var(--primary-hover);
+      color: white;
+    }
+
+    /* Layout */
+    .layout-wrapper {
+      max-width: 1380px;
+      margin: 0 auto;
+      display: flex;
+      gap: 2.5rem;
+      padding: 2.5rem 1.5rem;
+    }
+
+    /* Sticky Sidebar Stepper */
+    aside.stepper-nav {
+      width: 300px;
+      position: sticky;
+      top: 5.5rem;
+      height: calc(100vh - 6.5rem);
+      overflow-y: auto;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .stepper-header {
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 0.5rem 0.75rem;
+    }
+
+    .stepper-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 12px;
+      text-decoration: none;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+    .stepper-item:hover {
+      background: var(--surface-subtle);
+      color: var(--text);
+    }
+    .stepper-item.active {
+      background: var(--surface);
+      color: var(--primary);
+      font-weight: 700;
+      border-color: var(--border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .stepper-item.active .step-badge {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    .step-badge.completed {
+      background: var(--accent-emerald);
+      color: white;
+      border-color: var(--accent-emerald);
+    }
+
+    /* Main Tutorial Content */
+    main.tutorial-content {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3rem;
+    }
+
+    /* Hero Header */
+    .tutorial-hero {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(16, 185, 129, 0.08));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      margin-bottom: 1rem;
+    }
+
+    .tutorial-hero h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+
+    .tutorial-hero p.lead {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      max-width: 850px;
+      line-height: 1.7;
+    }
+
+    /* Module Card */
+    .module-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.25rem;
+      box-shadow: var(--card-shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      scroll-margin-top: 6rem;
+    }
+
+    .module-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+    }
+
+    .module-title-area {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .module-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+    }
+
+    .module-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .module-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Use Case Scenario Box */
+    .scenario-box {
+      background: rgba(99, 102, 241, 0.05);
+      border-left: 4px solid var(--primary);
+      padding: 1rem 1.25rem;
+      border-radius: 0 12px 12px 0;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+    .scenario-box strong {
+      color: var(--primary);
+    }
+
+    /* Code Container & Tabs */
+    .code-container {
+      background: var(--code-bg);
+      border: 1px solid #1E293B;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+
+    .code-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.6);
+      border-bottom: 1px solid #1E293B;
+      padding: 0.5rem 1rem;
+    }
+
+    .code-tabs {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .code-tab {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .code-tab.active {
+      background: #334155;
+      color: #F8FAFC;
+    }
+
+    .btn-copy {
+      background: #1E293B;
+      border: 1px solid #334155;
+      color: #94A3B8;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.3rem 0.65rem;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: all 0.15s;
+    }
+    .btn-copy:hover {
+      background: #334155;
+      color: white;
+    }
+
+    pre code {
+      display: block;
+      padding: 1.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--code-text);
+      overflow-x: auto;
+    }
+
+    /* Live Interactive Sandbox Box */
+    .sandbox-box {
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .sandbox-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sandbox-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--text);
+    }
+
+    .btn-run {
+      background: var(--accent-emerald);
+      color: white;
+      border: none;
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }
+    .btn-run:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .sandbox-output {
+      background: var(--code-bg);
+      border: 1px solid #1E293B;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: #10B981;
+      min-height: 70px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+
+    .btn-complete {
+      align-self: flex-start;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.15s;
+    }
+    .btn-complete.done {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: var(--accent-emerald);
+      color: var(--accent-emerald);
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .layout-wrapper {
+        flex-direction: column;
+      }
+      aside.stepper-nav {
+        width: 100%;
+        height: auto;
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <nav>
+    <a href="index.html" class="nav-brand">
+      <div class="brand-logo">🔥</div>
+      <span>FaizDB</span>
+      <span class="badge-tutorial">Interactive Tutorial</span>
+    </a>
+
+    <div class="nav-actions">
+      <div class="progress-pill">
+        <span>Progress:</span>
+        <span class="num" id="progress-text">0 of 7 Completed</span>
+      </div>
+
+      <a href="http://localhost:27020" target="_blank" class="btn-action btn-primary-action">
+        🖥️ Open Web Studio
+      </a>
+
+      <a href="https://github.com/ictdothouse/faizdb" target="_blank" class="btn-action">
+        ⭐ GitHub
+      </a>
+
+      <button id="theme-toggle" class="btn-action" onclick="toggleTheme()">
+        🌙 Mode
+      </button>
+    </div>
+  </nav>
+
+  <!-- Layout Wrapper -->
+  <div class="layout-wrapper">
+    <!-- Left Stepper Navigation -->
+    <aside class="stepper-nav">
+      <div class="stepper-header">Tutorial Modules</div>
+
+      <a href="#module-1" class="stepper-item active" id="step-nav-1">
+        <span class="step-badge" id="badge-1">1</span>
+        <span>60-Second Onboarding</span>
+      </a>
+
+      <a href="#module-2" class="stepper-item" id="step-nav-2">
+        <span class="step-badge" id="badge-2">2</span>
+        <span>Multi-Dialect Duality</span>
+      </a>
+
+      <a href="#module-3" class="stepper-item" id="step-nav-3">
+        <span class="step-badge" id="badge-3">3</span>
+        <span>E-Commerce (Zero Oversell)</span>
+      </a>
+
+      <a href="#module-4" class="stepper-item" id="step-nav-4">
+        <span class="step-badge" id="badge-4">4</span>
+        <span>AI Vector Semantic Search</span>
+      </a>
+
+      <a href="#module-5" class="stepper-item" id="step-nav-5">
+        <span class="step-badge" id="badge-5">5</span>
+        <span>GraphRAG Knowledge Graph</span>
+      </a>
+
+      <a href="#module-6" class="stepper-item" id="step-nav-6">
+        <span class="step-badge" id="badge-6">6</span>
+        <span>Robotics & Edge IoT Streaming</span>
+      </a>
+
+      <a href="#module-7" class="stepper-item" id="step-nav-7">
+        <span class="step-badge" id="badge-7">7</span>
+        <span>EXPLAIN ANALYZE Diagnostics</span>
+      </a>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="tutorial-content">
+      <!-- Hero Banner -->
+      <section class="tutorial-hero">
+        <div class="hero-tag">🎓 Hands-on Developer Guide</div>
+        <h1>Master FaizDB in 15 Minutes</h1>
+        <p class="lead">
+          Welcome to the official interactive tutorial for FaizDB. Explore how a single 8MB native binary delivers multi-dialect SQL & MongoDB syntax, sub-millisecond AI vector search, GraphRAG multi-hop traversal, and 128Hz robotics telemetry with zero GC pauses.
+        </p>
+      </section>
+
+      <!-- MODULE 1: 60-Second Onboarding -->
+      <section class="module-card" id="module-1">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">⚡</div>
+            <div>
+              <h2 class="module-title">Module 1: 60-Second First Launch & 4-Way Gateway</h2>
+              <p class="module-sub">Start the multi-protocol server or interactive REPL shell in under a minute.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> You need a self-contained, portable database for development that requires zero system configuration, zero background daemons, and doesn't pollute the Windows registry.
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c1-win')">Windows (1-Click)</button>
+              <button class="code-tab" onclick="switchTab(this, 'c1-cli')">PowerShell / Terminal</button>
+              <button class="code-tab" onclick="switchTab(this, 'c1-unix')">Linux & macOS</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c1-win"><code># 1. Double click the official 1-click launcher inside your extracted folder:
+start-faizdb-studio.bat
+
+# It starts the 4-Way Gateway and immediately opens Studio at:
+# http://localhost:27020</code></pre>
+          <pre id="c1-cli" style="display:none;"><code># Start interactive shell directly:
+.\faizdb.exe shell
+
+# Or start 4-Way server (using port 5433 to avoid local PostgreSQL conflicts):
+.\faizdb.exe serve --pg-port 5433</code></pre>
+          <pre id="c1-unix" style="display:none;"><code># 1-Line Universal Install & Run:
+curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.sh | bash
+./faizdb serve --pg-port 5433</code></pre>
+        </div>
+
+        <!-- Live Sandbox -->
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 Live Health Check Simulator</span>
+            <button class="btn-run" onclick="runSandbox(1)">▶ Ping Engine Health (/v1/health)</button>
+          </div>
+          <div class="sandbox-output" id="output-1">Click "Ping Engine Health" to simulate connecting to the 4-Way Gateway...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-1" onclick="toggleComplete(1)">
+          ✓ Mark Module 1 as Completed
+        </button>
+      </section>
+
+      <!-- MODULE 2: Multi-Dialect Duality -->
+      <section class="module-card" id="module-2">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">🍃</div>
+            <div>
+              <h2 class="module-title">Module 2: Multi-Dialect Duality (Insert Mongo -> Query SQL)</h2>
+              <p class="module-sub">Store documents with MongoDB syntax and query them instantly with Relational SQL.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> Frontend developers love working with flexible JSON documents (MongoDB style), while data analysts and backend reporting teams need standard SQL queries. FaizDB unifies both without ETL pipelines!
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c2-mongo')">1. MongoDB Insert</button>
+              <button class="code-tab" onclick="switchTab(this, 'c2-sql')">2. SQL Query</button>
+              <button class="code-tab" onclick="switchTab(this, 'c2-python')">Python (PyMongo)</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c2-mongo"><code>// Inside faizdb shell or MongoDB Compass (Port 27017):
+db.inventory.insert({
+  "sku": "GPU-5090",
+  "name": "NVIDIA RTX 5090",
+  "category": "Hardware",
+  "price": 1999.00,
+  "stock": 42
+});</code></pre>
+          <pre id="c2-sql" style="display:none;"><code>-- Query the EXACT SAME collection using relational SQL:
+SELECT name, price, stock 
+FROM inventory 
+WHERE category = 'Hardware' AND price > 1000 
+ORDER BY price DESC;</code></pre>
+          <pre id="c2-python" style="display:none;"><code>from pymongo import MongoClient
+
+# Connect directly using official PyMongo driver on port 27017:
+client = MongoClient("mongodb://127.0.0.1:27017")
+db = client["faizdb"]
+db.inventory.insert_one({"sku": "GPU-5090", "price": 1999.00, "stock": 42})
+print("Inserted successfully into unified LSM storage!")</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 Live Duality Simulator</span>
+            <button class="btn-run" onclick="runSandbox(2)">▶ Execute SQL Query on Mongo Document</button>
+          </div>
+          <div class="sandbox-output" id="output-2">Click "Execute SQL Query" to simulate cross-dialect query resolution...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-2" onclick="toggleComplete(2)">
+          ✓ Mark Module 2 as Completed
+        </button>
+      </section>
+
+      <!-- MODULE 3: E-Commerce Ticketing (Zero Oversell MVCC) -->
+      <section class="module-card" id="module-3">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">🎫</div>
+            <div>
+              <h2 class="module-title">Module 3: E-Commerce & Ticketing (Zero Oversell ACID MVCC)</h2>
+              <p class="module-sub">Guarantee zero overselling during high-concurrency ticket and flash sale checkouts.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> 5,000 concert fans click "Buy Ticket" at the exact same millisecond when only 2 tickets remain. Under standard NoSQL, race conditions cause overselling. FaizDB enforces Multi-Version Concurrency Control (MVCC) with Write-Ahead Log (WAL) safety.
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c3-tx')">ACID Transaction (REST)</button>
+              <button class="code-tab" onclick="switchTab(this, 'c3-sql')">SQL Staged Mutation</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c3-tx"><code># 1. Begin Atomic Snapshot Transaction
+curl -X POST http://127.0.0.1:27018/v1/transaction/begin \
+  -H "Authorization: Bearer <TOKEN>"
+
+# 2. Deduct Seat Inventory (Condition: available_seats > 0)
+curl -X POST http://127.0.0.1:27018/v1/collections/tickets/update \
+  -d '{"query": {"concert": "Coldplay-KL", "seats": {"$gt": 0}}, "update": {"$inc": {"seats": -1}}}'
+
+# 3. Commit atomically (If conflict occurs, transaction aborts cleanly)
+curl -X POST http://127.0.0.1:27018/v1/transaction/commit</code></pre>
+          <pre id="c3-sql" style="display:none;"><code>-- Interactive Shell / psql:
+BEGIN TRANSACTION;
+UPDATE tickets SET seats = seats - 1 WHERE concert = 'Coldplay-KL' AND seats > 0;
+INSERT INTO orders VALUES (101, 'Faiz', 'Coldplay-KL', 350.00, 'PAID');
+COMMIT;</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 5,000 Concurrent Checkouts Stress Simulation</span>
+            <button class="btn-run" onclick="runSandbox(3)">▶ Simulate Flash Sale Checkouts</button>
+          </div>
+          <div class="sandbox-output" id="output-3">Click "Simulate Flash Sale Checkouts" to test race-condition immunity...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-3" onclick="toggleComplete(3)">
+          ✓ Mark Module 3 as Completed
+        </button>
+      </section>
+
+      <!-- MODULE 4: AI Vector Search -->
+      <section class="module-card" id="module-4">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">🤖</div>
+            <div>
+              <h2 class="module-title">Module 4: AI Vector Embeddings & Semantic Search (HNSW)</h2>
+              <p class="module-sub">Sub-millisecond Approximate Nearest Neighbor (ANN) search inside your database.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> You're building an AI Chatbot or Semantic Document Search. Instead of paying for a separate Pinecone or Milvus cluster, FaizDB indexes up to 4,096-dimension vectors natively using SIMD-accelerated HNSW.
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c4-shell')">CLI Utility</button>
+              <button class="code-tab" onclick="switchTab(this, 'c4-rest')">REST API Endpoint</button>
+              <button class="code-tab" onclick="switchTab(this, 'c4-node')">TypeScript / Node.js</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c4-shell"><code># Inside faizdb shell:
+demo vector
+
+# Output will index 4 concept vectors and perform sub-millisecond similarity search!</code></pre>
+          <pre id="c4-rest" style="display:none;"><code># Ingest vector embedding into 'knowledge_base' collection:
+curl -X POST http://127.0.0.1:27018/v1/vector/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection": "articles",
+    "query_vector": [0.92, 0.88, 0.08, 0.06],
+    "top_k": 3,
+    "metric": "Cosine"
+  }'</code></pre>
+          <pre id="c4-node" style="display:none;"><code>import fetch from 'node-fetch';
+
+const res = await fetch('http://localhost:27018/v1/vector/search', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    collection: 'faq',
+    query_vector: [0.15, 0.82, 0.33, 0.91],
+    top_k: 2
+  })
+});
+const matches = await res.json();
+console.log('Top match similarity:', matches[0].similarity);</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 HNSW Vector ANN Matcher Simulator</span>
+            <button class="btn-run" onclick="runSandbox(4)">▶ Search Semantic Similarity (Cosine Metric)</button>
+          </div>
+          <div class="sandbox-output" id="output-4">Click "Search Semantic Similarity" to compute sub-ms vector distance...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-4" onclick="toggleComplete(4)">
+          ✓ Mark Module 4 as Completed
+        </button>
+      </section>
+
+      <!-- MODULE 5: GraphRAG Knowledge Graph -->
+      <section class="module-card" id="module-5">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">🕸️</div>
+            <div>
+              <h2 class="module-title">Module 5: GraphRAG & Multi-Hop Entity Traversal</h2>
+              <p class="module-sub">Ground AI prompts with interconnected knowledge graphs to eliminate hallucination.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> AI models hallucinate when isolated vectors lack relational context. GraphRAG connects entities (e.g. <code>User -> PURCHASED -> Device -> SHIPPED_BY -> Courier</code>) and retrieves multi-hop context in 1 single traversal.
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c5-cli')">CLI Graph Demo</button>
+              <button class="code-tab" onclick="switchTab(this, 'c5-rest')">REST Traversal API</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c5-cli"><code># Inside faizdb shell:
+demo graph
+
+# Traverses knowledge graph from 'Ahmad' across 3 hops in 0.04ms!</code></pre>
+          <pre id="c5-rest" style="display:none;"><code># Multi-hop Breadth-First Search (BFS) graph query:
+curl -X POST http://127.0.0.1:27018/v1/graph/traverse \
+  -H "Content-Type: application/json" \
+  -d '{
+    "start_node": "developer_faiz",
+    "relationship": "CONTRIBUTES_TO",
+    "max_depth": 2
+  }'</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 Multi-Hop BFS Graph Traversal Simulator</span>
+            <button class="btn-run" onclick="runSandbox(5)">▶ Traverse Knowledge Graph (2 Hops)</button>
+          </div>
+          <div class="sandbox-output" id="output-5">Click "Traverse Knowledge Graph" to execute BFS relational traversal...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-5" onclick="toggleComplete(5)">
+          ✓ Mark Module 5 as Completed
+        </button>
+      </section>
+
+      <!-- MODULE 6: Robotics & Edge IoT Streaming -->
+      <section class="module-card" id="module-6">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">🤖</div>
+            <div>
+              <h2 class="module-title">Module 6: Robotics & Edge IoT Sensor Streaming (128Hz)</h2>
+              <p class="module-sub">Memory-capped 16MB/32MB telemetry for Raspberry Pi, Nvidia Jetson, and microchips.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> Warehouse robots and drones record telemetry at 128Hz. Heavy databases crash with Out-Of-Memory (OOM) or cause micro-stutters when garbage collection fires. FaizDB operates at 0 GC pauses with a strict 32MB RAM ceiling and offline WAL buffering.
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c6-studio')">Web Studio Control Center</button>
+              <button class="code-tab" onclick="switchTab(this, 'c6-robot')">Robot Telemetry Ingest</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c6-studio"><code>1. Open FaizDB Studio: http://localhost:27020
+2. Click the new "Robot & Edge Chip" icon on the sidebar.
+3. Choose your Hardware Profile:
+   - Microcontroller (16MB Cap)
+   - Robotics SBC (32MB Cap)
+   - Autonomous AI Robot (64MB Cap)
+4. Click "Start 128Hz Stream" to watch real-time IMU & vision vector telemetry!</code></pre>
+          <pre id="c6-robot" style="display:none;"><code>// Python on Raspberry Pi / Nvidia Jetson:
+import requests, time
+
+while True:
+    payload = {
+        "sensor": "IMU-6DOF",
+        "pitch": 0.42, "roll": -0.15, "lidar_m": 1.84,
+        "embedding": [0.84, 0.12, 0.65, 0.33]
+    }
+    requests.post("http://127.0.0.1:27018/v1/collections/robot_feed/insert", json=payload)
+    time.sleep(1/128) # 128Hz tick loop</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 128Hz Sensor Ingestion Simulator</span>
+            <button class="btn-run" onclick="runSandbox(6)">▶ Simulate 128Hz Telemetry Tick</button>
+          </div>
+          <div class="sandbox-output" id="output-6">Click "Simulate 128Hz Telemetry Tick" to test microsecond edge ingestion...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-6" onclick="toggleComplete(6)">
+          ✓ Mark Module 6 as Completed
+        </button>
+      </section>
+
+      <!-- MODULE 7: Distributed EXPLAIN ANALYZE -->
+      <section class="module-card" id="module-7">
+        <div class="module-header">
+          <div class="module-title-area">
+            <div class="module-icon">📊</div>
+            <div>
+              <h2 class="module-title">Module 7: Distributed EXPLAIN ANALYZE & Visual Profiling</h2>
+              <p class="module-sub">Inspect Node-Tree plans, Shard Flame Graphs, and PostgreSQL wire format.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-box">
+          <strong>Scenario:</strong> A distributed query is taking longer than expected. You need to identify whether network shuffle, an inefficient join strategy, or a slow straggler shard is causing the delay.
+        </div>
+
+        <div class="code-container">
+          <div class="code-topbar">
+            <div class="code-tabs">
+              <button class="code-tab active" onclick="switchTab(this, 'c7-sql')">EXPLAIN ANALYZE Query</button>
+              <button class="code-tab" onclick="switchTab(this, 'c7-psql')">PostgreSQL Wire Output</button>
+            </div>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre id="c7-sql"><code>-- Execute full distributed profiling in faizdb shell or Query Console:
+EXPLAIN (ANALYZE, VERBOSE, COSTS) 
+SELECT o.order_id, u.name, o.amount 
+FROM orders o 
+JOIN users u ON o.user_id = u.id 
+WHERE o.status = 'COMPLETED';</code></pre>
+          <pre id="c7-psql" style="display:none;"><code>-- Standard hierarchical ASCII tree output compatible with DBeaver / psql:
+Distributed Hash Join (strategy: ColocatedHashJoin) (cost=1.85..4.50 rows=100) (actual time=0.142..0.380 rows=100 loops=1)
+  -> Broadcast Remote Shard Scan on orders (cost=0.50..1.20 rows=100) (actual time=0.035..0.090 rows=100 loops=1)
+       Network I/O: 1,420 bytes (actual) | Cache Hits: 98 | Cache Misses: 2
+  -> Distributed Index Scan using idx_users_id on users (cost=0.10..0.85 rows=100) (actual time=0.012..0.045 rows=100 loops=1)
+Planning Time: 0.042 ms | Execution Time: 0.380 ms</code></pre>
+        </div>
+
+        <div class="sandbox-box">
+          <div class="sandbox-header">
+            <span class="sandbox-title">🧪 Distributed Query Profiler Simulator</span>
+            <button class="btn-run" onclick="runSandbox(7)">▶ Run Distributed EXPLAIN ANALYZE</button>
+          </div>
+          <div class="sandbox-output" id="output-7">Click "Run Distributed EXPLAIN ANALYZE" to generate execution breakdown...</div>
+        </div>
+
+        <button class="btn-complete" id="chk-7" onclick="toggleComplete(7)">
+          ✓ Mark Module 7 as Completed
+        </button>
+      </section>
+    </main>
+  </div>
+
+  <!-- Interactive JavaScript Logic -->
+  <script>
+    // Theme Management
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.classList.toggle('dark');
+      localStorage.setItem('faizdb_theme', isDark ? 'dark' : 'light');
+      document.getElementById('theme-toggle').innerText = isDark ? '☀️ Light' : '🌙 Dark';
+    }
+
+    // Initialize Theme
+    const savedTheme = localStorage.getItem('faizdb_theme');
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.getElementById('theme-toggle').innerText = '☀️ Light';
+    }
+
+    // Code Tab Switching
+    function switchTab(btn, targetId) {
+      const container = btn.closest('.code-container');
+      container.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+      container.querySelectorAll('pre').forEach(p => p.style.display = 'none');
+      btn.classList.add('active');
+      const target = document.getElementById(targetId);
+      if (target) target.style.display = 'block';
+    }
+
+    // Code Copying
+    function copyCode(btn) {
+      const container = btn.closest('.code-container');
+      const activePre = Array.from(container.querySelectorAll('pre')).find(p => p.style.display !== 'none');
+      if (activePre) {
+        navigator.clipboard.writeText(activePre.innerText.trim()).then(() => {
+          const original = btn.innerText;
+          btn.innerText = '✓ Copied!';
+          btn.style.color = '#10B981';
+          setTimeout(() => {
+            btn.innerText = original;
+            btn.style.color = '';
+          }, 1800);
+        });
+      }
+    }
+
+    // Progress Tracking
+    const totalModules = 7;
+    let completedSet = new Set(JSON.parse(localStorage.getItem('faizdb_tutorial_progress') || '[]'));
+
+    function updateProgressUI() {
+      document.getElementById('progress-text').innerText = `${completedSet.size} of ${totalModules} Completed`;
+      for (let i = 1; i <= totalModules; i++) {
+        const badge = document.getElementById(`badge-${i}`);
+        const chk = document.getElementById(`chk-${i}`);
+        if (completedSet.has(i)) {
+          if (badge) {
+            badge.classList.add('completed');
+            badge.innerText = '✓';
+          }
+          if (chk) {
+            chk.classList.add('done');
+            chk.innerText = `✓ Module ${i} Completed`;
+          }
+        } else {
+          if (badge) {
+            badge.classList.remove('completed');
+            badge.innerText = i.toString();
+          }
+          if (chk) {
+            chk.classList.remove('done');
+            chk.innerText = `✓ Mark Module ${i} as Completed`;
+          }
+        }
+      }
+    }
+
+    function toggleComplete(moduleId) {
+      if (completedSet.has(moduleId)) {
+        completedSet.delete(moduleId);
+      } else {
+        completedSet.add(moduleId);
+      }
+      localStorage.setItem('faizdb_tutorial_progress', JSON.stringify(Array.from(completedSet)));
+      updateProgressUI();
+    }
+
+    // Interactive Sandbox Simulations
+    function runSandbox(step) {
+      const out = document.getElementById(`output-${step}`);
+      out.innerText = 'Executing query on FaizDB engine...\n';
+
+      setTimeout(() => {
+        if (step === 1) {
+          out.innerText = `🟢 HTTP/REST 27018 : Status 200 OK (Engine: FaizDB v0.1.0, Latency: 0.18ms)\n` +
+            `🍃 Mongo Wire 27017 : Listening (Ready for PyMongo / Mongoose / Compass)\n` +
+            `🐘 Postgres 5433   : Listening (Ready for psql / DBeaver / Grafana)\n` +
+            `⚡ gRPC 50051       : Ready (Sub-millisecond protobuf streaming)\n` +
+            `✨ All gateways healthy and responsive!`;
+        } else if (step === 2) {
+          out.innerText = `[SQL Execution Result]\n` +
+            `Query: SELECT name, price, stock FROM inventory WHERE category = 'Hardware'\n` +
+            `------------------------------------------------------------------------\n` +
+            `| sku       | name            | price      | stock | format_origin      |\n` +
+            `------------------------------------------------------------------------\n` +
+            `| GPU-5090  | NVIDIA RTX 5090 | $1,999.00  | 42    | MongoDB Document   |\n` +
+            `------------------------------------------------------------------------\n` +
+            `1 row retrieved in 74 µs (0.074ms). Zero ETL conversion required.`;
+        } else if (step === 3) {
+          out.innerText = `[MVCC ACID Concurrency Simulation]\n` +
+            `Starting concurrent transactions: 5,000 requests for remaining seats: 2\n` +
+            `--> Request #1: Staged deduction -> COMMIT SUCCESSFUL (Seats remaining: 1)\n` +
+            `--> Request #2: Staged deduction -> COMMIT SUCCESSFUL (Seats remaining: 0)\n` +
+            `--> Request #3..5000: Condition (seats > 0) unsatisfied -> ATOMIC ROLLBACK (4,998 requests)\n` +
+            `Result: EXACTLY 2 TICKETS SOLD. OOM/Oversell Errors: 0. Integrity: 100% Guaranteed.`;
+        } else if (step === 4) {
+          out.innerText = `[HNSW Vector Similarity Search]\n` +
+            `Query Vector: [0.92, 0.88, 0.08, 0.06] (Metric: Cosine Similarity)\n` +
+            `Top-2 Nearest Neighbors:\n` +
+            `  #1: ID='doc_ai_database' | Similarity=0.9999 | Distance=0.0001 | Latency: 0.28ms\n` +
+            `  #2: ID='doc_rust_engine' | Similarity=0.9984 | Distance=0.0016 | Latency: 0.31ms\n` +
+            `HNSW Graph visited 18 nodes across 3 layers. Zero GC lag.`;
+        } else if (step === 5) {
+          out.innerText = `[GraphRAG Knowledge Graph Traversal]\n` +
+            `Root Node: 'developer_faiz' | Max Depth: 2 Hops\n` +
+            `Path 1: (developer_faiz) --[CREATED]--> (FaizDB Engine) --[WRITTEN_IN]--> (Safe Rust)\n` +
+            `Path 2: (developer_faiz) --[COOPERATES_WITH]--> (Edge Robotics) --[TARGET_ARCH]--> (ARM64)\n` +
+            `Retrieved 4 contextual entity relations in 0.042ms for LLM context grounding.`;
+        } else if (step === 6) {
+          out.innerText = `[Robotics 128Hz Telemetry Ingest Loop]\n` +
+            `Target: Raspberry Pi 5 / Jetson Nano (RAM Profile: 32MB SBC)\n` +
+            `Tick #128: IMU=[pitch: 0.42, roll: -0.15] | Lidar=1.84m | Temp=36.8°C | Ingest: 0.012ms\n` +
+            `Tick #129: IMU=[pitch: 0.44, roll: -0.14] | Lidar=1.83m | Temp=36.8°C | Ingest: 0.011ms\n` +
+            `Tick #130: IMU=[pitch: 0.45, roll: -0.16] | Lidar=1.81m | Temp=36.9°C | Ingest: 0.012ms\n` +
+            `Memory Footprint: 21.4 MB / 32 MB Cap (Safe). Zero GC spikes.`;
+        } else if (step === 7) {
+          out.innerText = `[Distributed EXPLAIN ANALYZE Tree Output]\n` +
+            `Distributed Hash Join (strategy: ColocatedHashJoin) (cost=1.85..4.50 rows=100) (actual time=0.142..0.380 rows=100 loops=1)\n` +
+            `  -> Broadcast Remote Shard Scan on orders (cost=0.50..1.20 rows=100) (actual time=0.035..0.090 rows=100 loops=1)\n` +
+            `       Network I/O: 1,420 bytes (actual) | Cache Hits: 98 | Cache Misses: 2\n` +
+            `  -> Distributed Index Scan using idx_users_id on users (cost=0.10..0.85 rows=100) (actual time=0.012..0.045 rows=100 loops=1)\n` +
+            `Planning Time: 0.042 ms | Execution Time: 0.380 ms | Straggler Shards Detected: 0`;
+        }
+        // Auto mark complete
+        if (!completedSet.has(step)) {
+          toggleComplete(step);
+        }
+      }, 350);
+    }
+
+    // Initialize on load
+    updateProgressUI();
+  </script>
+</body>
+</html>
