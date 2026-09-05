@@ -1,0 +1,53 @@
+name: Nightly Performance Benchmarks & Stress Tests — FaizDB
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  benchmarks:
+    name: Nightly Benchmarks & Regressions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --all --release
+
+      - name: Verify Binary Footprint (Embedded & Edge Target < 15 MB)
+        run: |
+          ls -lh target/release/faizdb
+          SIZE_BYTES=$(stat -c%s target/release/faizdb)
+          echo "Binary size: $SIZE_BYTES bytes"
+          strip target/release/faizdb
+          STRIPPED_BYTES=$(stat -c%s target/release/faizdb)
+          echo "Stripped binary size: $STRIPPED_BYTES bytes"
+          if [ $STRIPPED_BYTES -gt 15728640 ]; then
+            echo "ERROR: Stripped binary exceeds 15MB embedded threshold!"
+            exit 1
+          fi
+
+      - name: High-Throughput Point Write & Query Micro-Benchmark (50,000 Ops)
+        run: |
+          target/release/faizdb benchmark --count 50000
+
+      - name: Vector ANN Demo & HNSW Latency Verification
+        run: |
+          target/release/faizdb vector-demo
+
+      - name: GraphRAG Knowledge Traversal Benchmark
+        run: |
+          target/release/faizdb graph-demo

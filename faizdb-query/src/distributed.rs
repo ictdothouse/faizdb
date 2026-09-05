@@ -15,6 +15,18 @@ pub struct ShardTarget {
     pub slot_range: (u16, u16),
 }
 
+/// Physical execution strategy for distributed joins across cluster shards
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DistributedJoinStrategy {
+    /// Zero network data transfer: Entities share the exact same hash slot tag {...}
+    ColocatedHashJoin,
+    /// Coordinator streams the smaller dimension table to all participating shards
+    BroadcastHashJoin,
+    /// Graceful degradation fallback when dimension table exceeds broadcast threshold:
+    /// executes micro-batch index lookups against the target shards
+    DistributedIndexNestedLoopFallback,
+}
+
 /// A distributed scatter-gather execution plan
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScatterGatherPlan {
@@ -23,6 +35,8 @@ pub struct ScatterGatherPlan {
     pub target_shards: Vec<ShardTarget>,
     pub pushdown_filter: Option<String>,
     pub aggregation_type: Option<AggregationOp>,
+    pub broadcast_payload: Option<Vec<serde_json::Value>>,
+    pub join_strategy: Option<DistributedJoinStrategy>,
 }
 
 /// Aggregation operations pushed down to shards
@@ -61,16 +75,55 @@ pub struct DistributedQueryResult {
     pub total_execution_time_us: u64,
 }
 
+/// Default maximum size for broadcasting dimension tables (10 MB)
+pub const DEFAULT_BROADCAST_THRESHOLD_BYTES: usize = 10 * 1024 * 1024;
+
 /// Coordinator responsible for routing and reducing scatter-gather queries
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DistributedQueryCoordinator {
     shards: Vec<ShardTarget>,
+    pub broadcast_threshold_bytes: usize,
+}
+
+impl Default for DistributedQueryCoordinator {
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
 }
 
 impl DistributedQueryCoordinator {
-    /// Create a new coordinator with known cluster shard topology
+    /// Create a new coordinator with known cluster shard topology and default 10MB broadcast threshold
     pub fn new(shards: Vec<ShardTarget>) -> Self {
-        Self { shards }
+        Self {
+            shards,
+            broadcast_threshold_bytes: DEFAULT_BROADCAST_THRESHOLD_BYTES,
+        }
+    }
+
+    /// Set a custom broadcast threshold in bytes
+    pub fn with_broadcast_threshold(mut self, threshold_bytes: usize) -> Self {
+        self.broadcast_threshold_bytes = threshold_bytes;
+        self
+    }
+
+    /// Evaluate and plan the distributed join physical execution strategy.
+    ///
+    /// - If `is_colocated_key` is true: selects `ColocatedHashJoin` (Zero network transfer).
+    /// - If `dimension_table_bytes <= broadcast_threshold_bytes`: selects `BroadcastHashJoin`.
+    /// - If `dimension_table_bytes > broadcast_threshold_bytes`: triggers circuit-breaker fallback
+    ///   to `DistributedIndexNestedLoopFallback` (graceful degradation via micro-batching).
+    pub fn plan_distributed_join(
+        &self,
+        dimension_table_bytes: usize,
+        is_colocated_key: bool,
+    ) -> DistributedJoinStrategy {
+        if is_colocated_key {
+            DistributedJoinStrategy::ColocatedHashJoin
+        } else if dimension_table_bytes <= self.broadcast_threshold_bytes {
+            DistributedJoinStrategy::BroadcastHashJoin
+        } else {
+            DistributedJoinStrategy::DistributedIndexNestedLoopFallback
+        }
     }
 
     /// Add a shard node to the topology
@@ -91,6 +144,8 @@ impl DistributedQueryCoordinator {
             target_shards: self.shards.clone(),
             pushdown_filter: None,
             aggregation_type: aggregation,
+            broadcast_payload: None,
+            join_strategy: None,
         }
     }
 
@@ -234,4 +289,43 @@ mod tests {
         assert_eq!(final_result.avg, Some(50.0)); // 25000 / 500
         assert_eq!(final_result.total_rows, 3);
     }
+
+    #[test]
+    fn test_cbo_distributed_join_planning_and_circuit_breaker() {
+        let coordinator = DistributedQueryCoordinator::new(vec![]);
+
+        // Case 1: Colocated key with hash tags {...} -> zero network transfer
+        let colocated_plan = coordinator.plan_distributed_join(50 * 1024 * 1024, true);
+        assert_eq!(colocated_plan, DistributedJoinStrategy::ColocatedHashJoin);
+
+        // Case 2: Under 10 MB threshold (e.g., 4 MB dimension table) -> Broadcast Join
+        let small_dim = 4 * 1024 * 1024;
+        let broadcast_plan = coordinator.plan_distributed_join(small_dim, false);
+        assert_eq!(broadcast_plan, DistributedJoinStrategy::BroadcastHashJoin);
+
+        // Case 3: Exactly at 10 MB threshold -> Broadcast Join
+        let exact_dim = 10 * 1024 * 1024;
+        let exact_plan = coordinator.plan_distributed_join(exact_dim, false);
+        assert_eq!(exact_plan, DistributedJoinStrategy::BroadcastHashJoin);
+
+        // Case 4: Exceeds 10 MB threshold (e.g., 15 MB) -> Circuit Breaker trips to Distributed Index-Nested-Loop fallback
+        let large_dim = 15 * 1024 * 1024;
+        let fallback_plan = coordinator.plan_distributed_join(large_dim, false);
+        assert_eq!(
+            fallback_plan,
+            DistributedJoinStrategy::DistributedIndexNestedLoopFallback
+        );
+
+        // Case 5: Custom threshold via builder pattern
+        let custom_coord = coordinator.with_broadcast_threshold(2 * 1024 * 1024); // 2 MB
+        assert_eq!(
+            custom_coord.plan_distributed_join(3 * 1024 * 1024, false),
+            DistributedJoinStrategy::DistributedIndexNestedLoopFallback
+        );
+        assert_eq!(
+            custom_coord.plan_distributed_join(1 * 1024 * 1024, false),
+            DistributedJoinStrategy::BroadcastHashJoin
+        );
+    }
 }
+

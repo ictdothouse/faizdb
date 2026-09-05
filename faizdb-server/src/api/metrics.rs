@@ -41,6 +41,15 @@ pub struct MetricsCollector {
     pub bucket_inf: AtomicU64,
     pub query_duration_sum_us: AtomicU64,
     pub query_duration_count: AtomicU64,
+
+    // Cost-Based Optimizer (CBO) Distributed Join Telemetry
+    pub cbo_broadcast_joins_total: AtomicU64,
+    pub cbo_broadcast_rejected_total: AtomicU64,
+    pub cbo_index_nested_loop_fallback_total: AtomicU64,
+    pub cbo_colocated_joins_total: AtomicU64,
+    pub cbo_broadcast_bytes_total: AtomicU64,
+    pub cbo_fallback_duration_sum_us: AtomicU64,
+    pub cbo_fallback_duration_count: AtomicU64,
 }
 
 impl Default for MetricsCollector {
@@ -68,6 +77,13 @@ impl Default for MetricsCollector {
             bucket_inf: AtomicU64::new(0),
             query_duration_sum_us: AtomicU64::new(0),
             query_duration_count: AtomicU64::new(0),
+            cbo_broadcast_joins_total: AtomicU64::new(0),
+            cbo_broadcast_rejected_total: AtomicU64::new(0),
+            cbo_index_nested_loop_fallback_total: AtomicU64::new(0),
+            cbo_colocated_joins_total: AtomicU64::new(0),
+            cbo_broadcast_bytes_total: AtomicU64::new(0),
+            cbo_fallback_duration_sum_us: AtomicU64::new(0),
+            cbo_fallback_duration_count: AtomicU64::new(0),
         }
     }
 }
@@ -103,6 +119,15 @@ impl MetricsCollector {
         self.bucket_inf.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Record distributed fallback latency observation
+    pub fn record_fallback_latency(&self, duration: Duration) {
+        let us = duration.as_micros() as u64;
+        self.cbo_fallback_duration_sum_us
+            .fetch_add(us, Ordering::Relaxed);
+        self.cbo_fallback_duration_count
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
     /// Render current metrics into Prometheus Text Format (version 0.0.4)
     pub fn render_prometheus(&self) -> String {
         let uptime_sec = self.start_time.elapsed().as_secs();
@@ -136,6 +161,18 @@ impl MetricsCollector {
         let sum_sec = (self.query_duration_sum_us.load(Ordering::Relaxed) as f64) / 1_000_000.0;
         let count = self.query_duration_count.load(Ordering::Relaxed);
 
+        // CBO Distributed Query Metrics
+        let cbo_broadcast = self.cbo_broadcast_joins_total.load(Ordering::Relaxed);
+        let cbo_rejected = self.cbo_broadcast_rejected_total.load(Ordering::Relaxed);
+        let cbo_fallback = self
+            .cbo_index_nested_loop_fallback_total
+            .load(Ordering::Relaxed);
+        let cbo_colocated = self.cbo_colocated_joins_total.load(Ordering::Relaxed);
+        let cbo_broadcast_bytes = self.cbo_broadcast_bytes_total.load(Ordering::Relaxed);
+        let cbo_fallback_sec =
+            (self.cbo_fallback_duration_sum_us.load(Ordering::Relaxed) as f64) / 1_000_000.0;
+        let cbo_fallback_count = self.cbo_fallback_duration_count.load(Ordering::Relaxed);
+
         format!(
             "# HELP faizdb_uptime_seconds FaizDB process uptime in seconds\n\
              # TYPE faizdb_uptime_seconds gauge\n\
@@ -160,6 +197,19 @@ impl MetricsCollector {
              # HELP faizdb_cache_hit_ratio Storage cache hit ratio\n\
              # TYPE faizdb_cache_hit_ratio gauge\n\
              faizdb_cache_hit_ratio {:.4}\n\n\
+             # HELP faizdb_cbo_distributed_joins_total Distributed join execution counter by strategy\n\
+             # TYPE faizdb_cbo_distributed_joins_total counter\n\
+             faizdb_cbo_distributed_joins_total{{strategy=\"colocated\"}} {}\n\
+             faizdb_cbo_distributed_joins_total{{strategy=\"broadcast\"}} {}\n\
+             faizdb_cbo_distributed_joins_total{{strategy=\"index_nested_loop_fallback\"}} {}\n\
+             faizdb_cbo_distributed_joins_total{{status=\"broadcast_rejected\"}} {}\n\n\
+             # HELP faizdb_cbo_broadcast_bytes_total Total bytes transferred over cluster network for broadcast joins\n\
+             # TYPE faizdb_cbo_broadcast_bytes_total counter\n\
+             faizdb_cbo_broadcast_bytes_total {}\n\n\
+             # HELP faizdb_cbo_fallback_duration_seconds Fallback execution latency in seconds\n\
+             # TYPE faizdb_cbo_fallback_duration_seconds summary\n\
+             faizdb_cbo_fallback_duration_seconds_sum {:.6}\n\
+             faizdb_cbo_fallback_duration_seconds_count {}\n\n\
              # HELP faizdb_query_duration_seconds Query latency histogram in seconds\n\
              # TYPE faizdb_query_duration_seconds histogram\n\
              faizdb_query_duration_seconds_bucket{{le=\"0.0001\"}} {}\n\
@@ -183,6 +233,13 @@ impl MetricsCollector {
             wal_syncs,
             conns,
             hit_ratio,
+            cbo_colocated,
+            cbo_broadcast,
+            cbo_fallback,
+            cbo_rejected,
+            cbo_broadcast_bytes,
+            cbo_fallback_sec,
+            cbo_fallback_count,
             b100,
             b500,
             b1m,
@@ -249,6 +306,13 @@ pub async fn system_profile_handler(State(state): State<Arc<AppState>>) -> Respo
                 } else {
                     0
                 }
+            },
+            "cbo_distributed_joins": {
+                "colocated_total": state.metrics.cbo_colocated_joins_total.load(Ordering::Relaxed),
+                "broadcast_total": state.metrics.cbo_broadcast_joins_total.load(Ordering::Relaxed),
+                "index_nested_loop_fallback_total": state.metrics.cbo_index_nested_loop_fallback_total.load(Ordering::Relaxed),
+                "broadcast_rejected_total": state.metrics.cbo_broadcast_rejected_total.load(Ordering::Relaxed),
+                "broadcast_bytes_total": state.metrics.cbo_broadcast_bytes_total.load(Ordering::Relaxed),
             }
         }
     });
@@ -276,6 +340,24 @@ mod tests {
         collector.record_query_latency(Duration::from_micros(250));
         collector.record_query_latency(Duration::from_micros(2500));
 
+        // CBO Distributed joins telemetry
+        collector
+            .cbo_colocated_joins_total
+            .fetch_add(45, Ordering::Relaxed);
+        collector
+            .cbo_broadcast_joins_total
+            .fetch_add(12, Ordering::Relaxed);
+        collector
+            .cbo_index_nested_loop_fallback_total
+            .fetch_add(2, Ordering::Relaxed);
+        collector
+            .cbo_broadcast_rejected_total
+            .fetch_add(2, Ordering::Relaxed);
+        collector
+            .cbo_broadcast_bytes_total
+            .fetch_add(8_388_608, Ordering::Relaxed);
+        collector.record_fallback_latency(Duration::from_micros(12_500));
+
         let rendered = collector.render_prometheus();
         assert!(rendered.contains("faizdb_uptime_seconds"));
         assert!(rendered.contains("faizdb_operations_total{op=\"insert\"} 50"));
@@ -284,5 +366,13 @@ mod tests {
         assert!(rendered.contains("faizdb_query_duration_seconds_bucket{le=\"0.0005\"} 1"));
         assert!(rendered.contains("faizdb_query_duration_seconds_bucket{le=\"0.005\"} 2"));
         assert!(rendered.contains("faizdb_query_duration_seconds_count 2"));
+
+        // Verify CBO metrics in Prometheus output
+        assert!(rendered.contains("faizdb_cbo_distributed_joins_total{strategy=\"colocated\"} 45"));
+        assert!(rendered.contains("faizdb_cbo_distributed_joins_total{strategy=\"broadcast\"} 12"));
+        assert!(rendered.contains("faizdb_cbo_distributed_joins_total{strategy=\"index_nested_loop_fallback\"} 2"));
+        assert!(rendered.contains("faizdb_cbo_distributed_joins_total{status=\"broadcast_rejected\"} 2"));
+        assert!(rendered.contains("faizdb_cbo_broadcast_bytes_total 8388608"));
+        assert!(rendered.contains("faizdb_cbo_fallback_duration_seconds_count 1"));
     }
 }

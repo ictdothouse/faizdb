@@ -57,11 +57,32 @@ impl ShardRouter {
         nodes.remove(node_id);
     }
 
-    /// Compute the shard slot (0..16383) for a given document key
+    /// Compute the shard slot (0..16383) for a given document key.
+    ///
+    /// Supports Redis Cluster-style **Hash Tags** (`{...}`) for Colocated Sharding.
+    /// If the key contains `{` and `}` with content in-between, only the string
+    /// inside `{...}` is hashed. For example:
+    /// - `{tenant_42}:orders:1001` and `{tenant_42}:users:1001` will always hash
+    ///   to the exact same virtual slot and reside on the exact same physical shard.
+    /// - If no `{...}` is present (or empty `{}`), the entire key is hashed.
     pub fn calculate_slot(key: &str) -> u16 {
+        let hash_target = Self::extract_hash_tag(key).unwrap_or(key);
         let mut hasher = Hasher::new();
-        hasher.update(key.as_bytes());
+        hasher.update(hash_target.as_bytes());
         (hasher.finalize() % (TOTAL_SHARD_SLOTS as u32)) as u16
+    }
+
+    /// Extract the hash tag between `{` and `}`, if present and non-empty.
+    pub fn extract_hash_tag(key: &str) -> Option<&str> {
+        if let Some(start) = key.find('{') {
+            if let Some(end) = key[start + 1..].find('}') {
+                let tag = &key[start + 1..start + 1 + end];
+                if !tag.is_empty() {
+                    return Some(tag);
+                }
+            }
+        }
+        None
     }
 
     /// Locate the target node responsible for a given document key
@@ -144,5 +165,34 @@ mod tests {
 
         let (target_node, _) = router.route_key("user_faiz_001").unwrap();
         assert!(["node_1", "node_2", "node_3"].contains(&target_node.as_str()));
+    }
+
+    #[test]
+    fn test_colocated_sharding_hash_tags() {
+        // Two different collections / keys sharing the same {tenant_42} hash tag
+        let order_slot = ShardRouter::calculate_slot("{tenant_42}:orders:1001");
+        let user_slot = ShardRouter::calculate_slot("{tenant_42}:users:5555");
+        let invoice_slot = ShardRouter::calculate_slot("{tenant_42}:invoices:999");
+
+        assert_eq!(
+            order_slot, user_slot,
+            "Keys with identical hash tags must colocate to the same slot"
+        );
+        assert_eq!(
+            user_slot, invoice_slot,
+            "All entities for tenant_42 must share the exact same slot"
+        );
+
+        // A key without hash tag or different tenant
+        let other_tenant_slot = ShardRouter::calculate_slot("{tenant_99}:orders:1001");
+        let raw_key_slot = ShardRouter::calculate_slot("tenant_42:orders:1001");
+        assert!(other_tenant_slot < TOTAL_SHARD_SLOTS);
+        assert!(raw_key_slot < TOTAL_SHARD_SLOTS);
+
+        // Empty or malformed braces fallback safely to entire key without panic
+        let empty_braces = ShardRouter::calculate_slot("{}:orders");
+        let unclosed_brace = ShardRouter::calculate_slot("{tenant_42:orders");
+        assert!(empty_braces < TOTAL_SHARD_SLOTS);
+        assert!(unclosed_brace < TOTAL_SHARD_SLOTS);
     }
 }
