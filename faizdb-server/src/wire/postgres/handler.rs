@@ -479,19 +479,23 @@ fn format_query_result(result: QueryResult, in_txn: bool) -> Vec<u8> {
             let fields = vec![PgField::text("QUERY PLAN")];
             out.extend_from_slice(&encode_row_description(&fields));
 
-            let lines = vec![
-                format!("Plan: {}", plan.plan_type),
-                format!("Collection: {}", plan.collection),
-                format!(
-                    "Index Used: {}",
-                    plan.index_used
-                        .unwrap_or_else(|| "None (Full Scan)".to_string())
-                ),
-                format!("Documents Examined: {}", plan.documents_examined),
-                format!("Documents Returned: {}", plan.documents_returned),
-                format!("Execution Time: {} µs", plan.execution_time_us),
-                format!("Cost Score: {:.2}", plan.estimated_cost_score),
-            ];
+            let lines: Vec<String> = if let Some(ref pg_tree) = plan.formatted_pg_tree {
+                pg_tree.lines().map(|s| s.to_string()).collect()
+            } else {
+                vec![
+                    format!("Plan: {}", plan.plan_type),
+                    format!("Collection: {}", plan.collection),
+                    format!(
+                        "Index Used: {}",
+                        plan.index_used
+                            .unwrap_or_else(|| "None (Full Scan)".to_string())
+                    ),
+                    format!("Documents Examined: {}", plan.documents_examined),
+                    format!("Documents Returned: {}", plan.documents_returned),
+                    format!("Execution Time: {} µs", plan.execution_time_us),
+                    format!("Cost Score: {:.2}", plan.estimated_cost_score),
+                ]
+            };
 
             for line in lines {
                 out.extend_from_slice(&encode_data_row(&[Some(line)]));

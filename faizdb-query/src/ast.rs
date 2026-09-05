@@ -148,6 +148,43 @@ pub struct JoinClause {
     pub on_right: String, // e.g. "customers.id" or "id"
 }
 
+/// Detailed metric for a single shard participating in distributed execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShardExecutionMetric {
+    pub shard_id: u16,
+    pub partition_name: String,
+    pub execution_time_us: u64,
+    pub rows_scanned: usize,
+    pub rows_emitted: usize,
+    pub cache_hit_pct: f64,
+    pub network_transfer_bytes: u64,
+    pub status: String,
+}
+
+/// Hierarchical plan node for interactive tree visualization and PostgreSQL wire output
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanNode {
+    pub node_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition: Option<String>,
+    pub estimated_cost_start: f64,
+    pub estimated_cost_total: f64,
+    pub estimated_rows: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_time_start_us: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_time_total_us: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_rows: Option<usize>,
+    pub loops: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<PlanNode>,
+}
+
 /// Execution plan details for EXPLAIN queries
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplainPlan {
@@ -167,6 +204,28 @@ pub struct ExplainPlan {
     pub index_scan_cost: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub optimization_rationale: Option<String>,
+    #[serde(default)]
+    pub is_analyze: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_strategy: Option<String>,
+    #[serde(default)]
+    pub estimated_network_io_bytes: u64,
+    #[serde(default)]
+    pub actual_network_io_bytes: u64,
+    #[serde(default)]
+    pub cache_hits: usize,
+    #[serde(default)]
+    pub cache_misses: usize,
+    #[serde(default)]
+    pub shards_involved: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shard_metrics: Vec<ShardExecutionMetric>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_tree: Option<PlanNode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formatted_pg_tree: Option<String>,
 }
 
 /// Top-level AST statement
@@ -218,7 +277,13 @@ pub enum Statement {
     Analyze {
         collection: String,
     },
-    Explain(Box<Statement>),
+    Explain {
+        statement: Box<Statement>,
+        #[serde(default)]
+        analyze: bool,
+        #[serde(default)]
+        verbose: bool,
+    },
     CreateEdge {
         from: String,
         to: String,

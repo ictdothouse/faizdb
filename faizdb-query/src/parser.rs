@@ -12,11 +12,48 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
 
     let upper = trimmed.to_uppercase();
 
-    // 0. EXPLAIN query execution plan
+    // 0. EXPLAIN / EXPLAIN ANALYZE query execution plan
     if upper.starts_with("EXPLAIN") {
-        let inner = trimmed[7..].trim();
-        let inner_stmt = parse_query(inner)?;
-        return Ok(Statement::Explain(Box::new(inner_stmt)));
+        let mut rest = trimmed[7..].trim();
+        let mut analyze = false;
+        let mut verbose = false;
+
+        // Check for parenthesized options e.g. EXPLAIN (ANALYZE, VERBOSE, COSTS)
+        if rest.starts_with('(') {
+            if let Some(close_idx) = rest.find(')') {
+                let opts = rest[1..close_idx].to_uppercase();
+                for opt in opts.split(',') {
+                    let opt = opt.trim();
+                    if opt == "ANALYZE" || opt == "ANALYSE" {
+                        analyze = true;
+                    } else if opt == "VERBOSE" {
+                        verbose = true;
+                    }
+                }
+                rest = rest[close_idx + 1..].trim();
+            }
+        }
+
+        // Check for bare keyword modifiers e.g. EXPLAIN ANALYZE ... / EXPLAIN VERBOSE ...
+        loop {
+            let upper_rest = rest.to_uppercase();
+            if upper_rest.starts_with("ANALYZE ") || upper_rest.starts_with("ANALYSE ") {
+                analyze = true;
+                rest = rest[8..].trim();
+            } else if upper_rest.starts_with("VERBOSE ") {
+                verbose = true;
+                rest = rest[8..].trim();
+            } else {
+                break;
+            }
+        }
+
+        let inner_stmt = parse_query(rest)?;
+        return Ok(Statement::Explain {
+            statement: Box::new(inner_stmt),
+            analyze,
+            verbose,
+        });
     }
 
     // Transactions
