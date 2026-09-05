@@ -5,6 +5,11 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.1.0)'
+        required: false
+        default: 'v0.1.0'
 
 permissions:
   contents: write
@@ -24,7 +29,12 @@ jobs:
 
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact_name: faizdb-linux-arm64.tar.gz
+            artifact_name: faizdb-linux-arm64-robot-chip.tar.gz
+            use_cross: true
+
+          - target: armv7-unknown-linux-gnueabihf
+            os: ubuntu-latest
+            artifact_name: faizdb-linux-armv7-embedded-chip.tar.gz
             use_cross: true
 
           - target: x86_64-apple-darwin
@@ -39,7 +49,7 @@ jobs:
 
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: faizdb-windows-x64.zip
+            artifact_name: faizdb-windows-x86_64.zip
             use_cross: false
 
     steps:
@@ -51,17 +61,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross (for ARM Linux)
+      - name: Install cross (for ARM Linux & Robotics/IoT Chips)
         if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        uses: taiki-e/install-action@cross
 
       - name: Build Release Binaries
         shell: bash
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
+            cross build --release --target ${{ matrix.target }} --bin faizdb
           else
-            cargo build --release --target ${{ matrix.target }}
+            cargo build --release --target ${{ matrix.target }} --bin faizdb
           fi
 
       - name: Package Artifacts (Unix)
@@ -69,7 +79,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/faizdb dist/ 2>/dev/null || cp target/${{ matrix.target }}/release/faizdb-cli dist/faizdb 2>/dev/null || cp target/release/faizdb dist/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/faizdb dist/ 2>/dev/null || cp target/release/faizdb dist/ 2>/dev/null || true
+          cp README.md dist/ 2>/dev/null || true
+          cp LICENSE dist/ 2>/dev/null || true
           tar -czf ${{ matrix.artifact_name }} -C dist .
           shasum -a 256 ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.sha256
 
@@ -80,21 +92,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist
           if (Test-Path target/${{ matrix.target }}/release/faizdb.exe) {
             Copy-Item target/${{ matrix.target }}/release/faizdb.exe dist/
-          } elseif (Test-Path target/${{ matrix.target }}/release/faizdb-cli.exe) {
-            Copy-Item target/${{ matrix.target }}/release/faizdb-cli.exe dist/faizdb.exe
           } elseif (Test-Path target/release/faizdb.exe) {
             Copy-Item target/release/faizdb.exe dist/
           }
+          if (Test-Path README.md) { Copy-Item README.md dist/ }
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist/ }
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }}
           (Get-FileHash ${{ matrix.artifact_name }} -Algorithm SHA256).Hash > ${{ matrix.artifact_name }}.sha256
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: |
             ${{ matrix.artifact_name }}
             ${{ matrix.artifact_name }}.sha256
           draft: false
           prerelease: false
           generate_release_notes: true
+
