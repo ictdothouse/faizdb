@@ -10,7 +10,7 @@ This document details **20 real-world production use cases** where **FaizDB** re
 
 ### 🤖 Frontier AI, Autonomous Agents & Model Systems
 1. [Autonomous AI Agent 3-Tier Memory Architecture (Redis + Pinecone + Neo4j in One)](#1-autonomous-ai-agent-3-tier-memory-architecture)
-2. [Semantic Caching: Slashing 70%+ Frontier LLM (OpenAI / Claude / Gemini / DeepSeek) API Bills](#2-semantic-caching-slashing-70-llm-api-bills)
+2. [Semantic Caching: Slashing 70%+ Frontier LLM (OpenAI / Anthropic / Google / DeepSeek) API Bills](#2-semantic-caching-slashing-70-llm-api-bills)
 3. [Tri-Hybrid GraphRAG: Eliminating Foundation Model Hallucinations](#3-tri-hybrid-graphrag-eliminating-foundation-model-hallucinations)
 4. [High-Throughput PyTorch / TensorFlow DataLoader Streaming (Preventing GPU Starvation)](#4-high-throughput-pytorch--tensorflow-dataloader-streaming)
 5. [Autonomous Multi-Agent Swarm Collaboration Event Bus (< 0.5ms Push Latency)](#5-autonomous-multi-agent-swarm-collaboration-event-bus)
@@ -70,7 +70,7 @@ This document details **20 real-world production use cases** where **FaizDB** re
 ---
 
 ### 2. Semantic Caching: Slashing 70%+ LLM API Bills
-* **The Problem:** Repeated calls to frontier LLM APIs — including OpenAI (GPT-5, o3, o1), Anthropic (Claude 3.7 Sonnet, Claude 4), Google (Gemini 2.5 Flash/Pro), and DeepSeek (DeepSeek-R1, DeepSeek-V3) — for semantically identical questions cost enterprises tens of thousands of dollars per month with 1.5–3.0s latency.
+* **The Problem:** Repeated calls to frontier LLM APIs — including OpenAI, Anthropic, Google, and DeepSeek — for semantically identical questions cost enterprises tens of thousands of dollars per month with 1.5–3.0s latency.
 * **FaizDB Solution:**
   1. Incoming prompt text is vectorized into embeddings.
   2. The built-in `SemanticCache` performs sub-millisecond vector similarity matching (`cosine_similarity`).
