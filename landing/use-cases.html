@@ -215,15 +215,16 @@
             </div>
             <h2 class="type-subhead">1. Autonomous AI Agent 3-Tier Memory</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Unifies short-term working context (TTL min-heap), episodic vector memory (HNSW 1536-dim), and long-term entity relations (Knowledge Graph) in <strong>one ACID transaction</strong>. Eliminates the complex sync tax between Redis, Pinecone, and Neo4j.
+              Unifies short-term working context (TTL min-heap), episodic vector memory (HNSW 1536-dim), and long-term entity relations (Knowledge Graph) in <strong>one ACID transaction</strong>. Eliminates the complex sync tax between Redis, Pinecone, and Neo4j using native openCypher or FaizQL.
             </p>
             <div class="code-snippet">
-              <span class="code-comment">-- Single query: 2-hop graph traverse + vector ranking</span><br/>
-              <span class="code-accent">FIND</span> agents <span class="code-accent">TRAVERSE FROM</span> "agent_01" <span class="code-accent">DEPTH</span> 2<br/>
-              <span class="code-accent">VECTOR</span> [0.12, 0.45, 0.88] <span class="code-accent">TOP</span> 5;
+              <span class="code-comment">-- Native openCypher Cypher: graph traverse + vector ranking</span><br/>
+              <span class="code-accent">MATCH</span> (a:Agent {id: "agent_01"})-[:interacted_with*1..2]-&gt;(b:Memory)<br/>
+              <span class="code-accent">VECTOR NEAR</span> [0.12, 0.45, 0.88] <span class="code-accent">TOP</span> 5 <span class="code-accent">RETURN</span> b;
             </div>
           </div>
           <div class="card-meta">
+            <span class="meta-pill">openCypher Cypher</span>
             <span class="meta-pill">CrewAI / LangChain</span>
             <span class="meta-pill">AutoGPT</span>
             <span class="meta-pill">3-Tier Memory</span>
@@ -240,19 +241,19 @@
             </div>
             <h2 class="type-subhead">2. Semantic Caching (Slash 70%+ LLM Bills)</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Caches prompt embeddings in sub-millisecond in-memory vector space. When incoming prompts have cosine similarity $\ge 0.95$, FaizDB immediately serves the response from memory, slashing expensive OpenAI, Claude, and Gemini token costs by over 70%.
+              Caches prompt embeddings in sub-millisecond in-memory vector space via built-in <code>SemanticCache</code>. When incoming prompts have cosine similarity $\ge 0.90$, FaizDB immediately serves the response from memory with auto-TTL, slashing expensive OpenAI, Claude, and Gemini token costs by over 70%–85%.
             </p>
             <div class="code-snippet">
-              <span class="code-comment">// Query semantic cache before hitting LLM API</span><br/>
-              <span class="code-accent">const</span> hit = <span class="code-accent">await</span> db.vectorSearch("cache", embed, 1);<br/>
-              <span class="code-accent">if</span> (hit[0].score &gt;= 0.95) <span class="code-accent">return</span> hit[0].response;
+              <span class="code-comment">// Query built-in SemanticCache before hitting LLM API</span><br/>
+              <span class="code-accent">const</span> hit = <span class="code-accent">await</span> db.semanticCache.get(promptEmbedding);<br/>
+              <span class="code-accent">if</span> (hit &amp;&amp; hit.similarity &gt;= 0.90) <span class="code-accent">return</span> hit.response;
             </div>
           </div>
           <div class="card-meta">
             <span class="meta-pill">OpenAI / Claude / Gemini</span>
-            <span class="meta-pill">Cosine &gt;= 0.95</span>
+            <span class="meta-pill">Cosine &gt;= 0.90</span>
             <span class="meta-pill">Auto TTL 24h</span>
-            <span class="meta-pill">260 µs Median</span>
+            <span class="meta-pill">&lt; 1ms Median</span>
           </div>
         </div>
 
@@ -265,18 +266,18 @@
             </div>
             <h2 class="type-subhead">3. Tri-Hybrid GraphRAG Engine</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Eliminates LLM hallucinations by fusing <strong>Okapi BM25 exact keyword matching</strong>, <strong>HNSW dense vector semantic search</strong>, and <strong>Multi-hop Knowledge Graph relationships</strong>. Provides foundation models with factual, verifiable context.
+              Eliminates LLM hallucinations by fusing <strong>Okapi BM25 keyword matching</strong>, <strong>HNSW vector search (with 32x binary quantization)</strong>, and <strong>Knowledge Graph traversal</strong>. <code>extract_rag_context</code> generates deterministic markdown context directly injectable into LLM prompts without token waste.
             </p>
             <div class="code-snippet">
-              <span class="code-comment"># Tri-Hybrid retrieval pipeline:</span><br/>
-              [Query] ➔ BM25 exact + HNSW vector + 3-Hop BFS<br/>
-              ➔ Deduplicated context ➔ <span class="code-accent">Zero Hallucination</span>
+              <span class="code-comment"># Tri-Hybrid GraphRAG retrieval pipeline:</span><br/>
+              [Query] ➔ BM25 exact + HNSW quantized + BFS Traversal<br/>
+              ➔ Deterministic Markdown Context ➔ <span class="code-accent">Zero Hallucination</span>
             </div>
           </div>
           <div class="card-meta">
             <span class="meta-pill">GraphRAG</span>
-            <span class="meta-pill">Okapi BM25</span>
-            <span class="meta-pill">HNSW 4096-dim</span>
+            <span class="meta-pill">extract_rag_context</span>
+            <span class="meta-pill">32x Quantization</span>
             <span class="meta-pill">Enterprise RAG</span>
           </div>
         </div>
@@ -497,18 +498,19 @@
             </div>
             <h2 class="type-subhead">11. Dual-Stack Modernization (Postgres + Mongo)</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Collection-level paradigm isolation: relational collections with strict schemas for PostgreSQL wire (5432) and flexible JSON document collections for MongoDB wire (27017). Cross-functional teams use their native tooling without maintaining two separate database servers.
+              Collection-level paradigm isolation: relational collections with strict schemas for PostgreSQL wire (5432) and flexible JSON document collections for MongoDB wire (27017). Features <strong>Virtual System Catalog Reflection</strong> (<code>pg_catalog.*</code>, <code>information_schema.*</code>) for instant, zero-config ORM introspection (Prisma, Drizzle, SQLAlchemy, DBeaver).
             </p>
             <div class="code-snippet">
               <span class="code-comment"># Prisma connects to:</span> postgresql://user:pass@127.0.0.1:5432/db<br/>
               <span class="code-comment"># PyMongo connects to:</span> mongodb://user:pass@127.0.0.1:27017/db<br/>
-              <span class="code-accent">➔ 1 Unified Database Engine! Zero ETL!</span>
+              <span class="code-accent">➔ Virtual Catalog Reflection! Zero Config ORMs! Zero ETL!</span>
             </div>
           </div>
           <div class="card-meta">
             <span class="meta-pill">Postgres 5432</span>
             <span class="meta-pill">Mongo 27017</span>
-            <span class="meta-pill">DBeaver &amp; Prisma</span>
+            <span class="meta-pill">Virtual pg_catalog</span>
+            <span class="meta-pill">Prisma &amp; Drizzle</span>
             <span class="meta-pill">Zero Data Sync</span>
           </div>
         </div>
@@ -639,19 +641,19 @@
             </div>
             <h2 class="type-subhead">16. Satellite Telemetry &amp; Air-Gapped Payloads</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Engineered for extreme orbital compute payloads (Starlink / SpaceX satellites, defense avionics). Operates 100% air-gapped without internet access, surviving sudden orbital power cuts with mathematically verified WAL crash recovery.
+              Engineered for extreme orbital compute payloads (Starlink / SpaceX satellites, defense avionics). Operates 100% air-gapped without internet access, surviving sudden orbital power cuts with <strong>Torn-Write Resilient WAL Crash Recovery</strong>, payload bounds validation, and safe LSN tail truncation proven via Jepsen chaos tests.
             </p>
             <div class="code-snippet">
-              <span class="code-comment"># Verified: Zero data corruption on abrupt power cut</span><br/>
+              <span class="code-comment"># Verified: Zero data corruption on abrupt power cut / torn write</span><br/>
               $ pkill -9 faizdb &amp;&amp; ./faizdb --recover<br/>
-              <span class="code-accent">[INFO] WAL Replay: 100% committed records recovered.</span>
+              <span class="code-accent">[INFO] WAL Replay: Corrupted tail truncated safely; 100% committed restored.</span>
             </div>
           </div>
           <div class="card-meta">
             <span class="meta-pill">Air-Gapped Satellites</span>
-            <span class="meta-pill">Crash Verified</span>
+            <span class="meta-pill">Torn-Write Resilient</span>
+            <span class="meta-pill">Jepsen Verified</span>
             <span class="meta-pill">0 C Dependencies</span>
-            <span class="meta-pill">High Radiation Safe</span>
           </div>
         </div>
 
@@ -664,17 +666,17 @@
             </div>
             <h2 class="type-subhead">17. Industrial IoT Sensor Streams &amp; Anomaly Detection</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Ingests tens of thousands of telemetry data points per second from factory sensors (temperature, vibration, pressure). Built-in vector search identifies acoustic anomaly patterns indicating turbine wear before catastrophic hardware failure.
+              Ingests tens of thousands of telemetry events per second from factory sensors (temperature, vibration, pressure) protected by <strong>Dynamic LSM Anti-Stall Backpressure</strong> (soft yield at 8 L0 SSTables, hard stall guard at 16 L0 SSTables). HNSW vector search identifies acoustic anomaly patterns indicating turbine wear before breakdown.
             </p>
             <div class="code-snippet">
-              <span class="code-comment">-- Detect vibrational frequency anomalies via vector dist</span><br/>
+              <span class="code-comment">-- Anti-stall burst ingest + vibrational anomaly vector search</span><br/>
               <span class="code-accent">SELECT</span> sensor_id, timestamp <span class="code-accent">FROM</span> telemetry<br/>
               <span class="code-accent">VECTOR</span> [vibration_freq_vector] <span class="code-accent">TOP</span> 1;
             </div>
           </div>
           <div class="card-meta">
-            <span class="meta-pill">SCADA &amp; PLCs</span>
-            <span class="meta-pill">Sensor Streams</span>
+            <span class="meta-pill">LSM Anti-Stall</span>
+            <span class="meta-pill">Dynamic Backpressure</span>
             <span class="meta-pill">Predictive Maintenance</span>
             <span class="meta-pill">Microsecond Scan</span>
           </div>
