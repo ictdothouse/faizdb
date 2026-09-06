@@ -5,7 +5,7 @@
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.sh | bash
 #
-# Architected by Ahmad Faiz <faiz@faizdb.io>
+# Architected by Ahmad Faiz <faiz@ict.house>
 # ==============================================================================
 
 set -e

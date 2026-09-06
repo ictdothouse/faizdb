@@ -4,7 +4,7 @@
 # Usage:
 #   iwr -useb https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/install.ps1 | iex
 #
-# Architected by Ahmad Faiz <faiz@faizdb.io>
+# Architected by Ahmad Faiz <faiz@ict.house>
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"

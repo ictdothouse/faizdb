@@ -19,6 +19,6 @@
     "graph",
     "sql"
   ],
-  "author": "Ahmad Faiz",
+  "author": "Ahmad Faiz <faiz@ict.house>",
   "license": "Apache-2.0"
 }
