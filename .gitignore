@@ -25,6 +25,8 @@ faizdb.exe
 *.dll
 *.a
 dist/
+*.tar.gz
+*.sha256
 
 # ── Environment & Security Secrets ────────────────────────────────
 .env
