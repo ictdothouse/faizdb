@@ -176,7 +176,7 @@ FaizDB is engineered not only for laboratory speed, but for **uncompromising ope
 
 </div>
 
-> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**docs/faizdb-audit-report-v7.md**](docs/faizdb-audit-report-v7.md).
+> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md**](docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md).
 
 ---
 

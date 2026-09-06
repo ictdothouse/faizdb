@@ -6,7 +6,7 @@
 [![Status](https://img.shields.io/badge/status-v0.1.0--Developer_Preview-blue.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge&logo=githubactions)](https://github.com/ictdothouse/faizdb/actions)
-[![Security](https://img.shields.io/badge/security-EdDSA_Ed25519_%7C_AES--256--GCM-red.svg?style=for-the-badge)](SECURITY.md)
+[![Security](https://img.shields.io/badge/security-EdDSA_Ed25519_%7C_AES--256--GCM-red.svg?style=for-the-badge)](../SECURITY.md)
 [![Protocols](https://img.shields.io/badge/gateways-Mongo_%7C_PostgreSQL_%7C_gRPC_%7C_REST-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 [![Architecture](https://img.shields.io/badge/consensus-Raft_%7C_CRDT_Geo_Replication-purple.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 
@@ -128,7 +128,7 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 | **Autonomous Snapshots** | Paid Atlas Cloud / OpsManager | Requires `pgBackRest` / cron daemon | Built-in `save` daemon | **Built-in Async Snapshot Daemon (`FAIZDB_AUTO_BACKUP`) with auto timestamp rotation** |
 | **Open Data Portability** | `mongodump` (BSON lock-in) | `pg_dump` (Postgres dialect only) | RDB dump (Key-Value only) | **Universal Anti-Lock-in: Streaming `faizdb dump` to standard JSONL & ANSI SQL** |
 
-*For a detailed competitive breakdown vs SurrealDB, CockroachDB, Qdrant, and ArangoDB, see [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md).*
+*For a detailed competitive breakdown vs SurrealDB, CockroachDB, Qdrant, and ArangoDB, see [docs/COMPETITIVE_ANALYSIS.md](../docs/COMPETITIVE_ANALYSIS.md).*
 
 ---
 
@@ -176,7 +176,7 @@ FaizDB is engineered not only for laboratory speed, but for **uncompromising ope
 
 </div>
 
-> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**docs/faizdb-audit-report-v7.md**](docs/faizdb-audit-report-v7.md).
+> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](../docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**../docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md**](../docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md).
 
 ---
 
@@ -332,7 +332,7 @@ iwr -useb https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/inst
 ```bash
 docker compose up -d
 ```
-*For detailed setup and Linux systemd production service instructions, see [docs/INSTALLATION.md](docs/INSTALLATION.md).*
+*For detailed setup and Linux systemd production service instructions, see [docs/INSTALLATION.md](../docs/INSTALLATION.md).*
 
 ---
 
@@ -610,21 +610,21 @@ let kafka_json = cdc_event.to_kafka_message()?;
 
 ## 📚 Comprehensive Documentation
 
-* [🛡️ Enterprise Production Standards & Operational Hardening Reference](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) — Comprehensive technical reference for connection governors, WAL group commits, Kubernetes native health probes, autonomous snapshot daemon, open data portability, and wire protocol hardening `[LATEST - ENTERPRISE 2026]`.
-* [🏛️ Latest System Capabilities, Architecture & Verification Reference](docs/LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) — Comprehensive technical reference, 4-gateway wire protocol throughput & latency benchmarks, query capabilities, and workspace test certification.
-* [🏆 Production Hardening & Enterprise Verification Record](docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md) — 100% compliant verification across all enterprise durability, consensus, and performance criteria.
-* [📖 Installation & Deployment Guide](docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
-* [🏛️ Tier-1 Engineering & Architecture Guide](docs/TIER1_ENGINEERING_GUIDE.md) — SIMD Vector Math, Adaptive Replacement Cache (ARC), Prometheus telemetry, Chaos Testing, and YCSB.
-* [🤖 AI, LLM, LangGraph & Real-Time Gaming Use Cases](docs/USE_CASES_AND_SOLUTIONS.md) — LangGraph unified backend checkpointer, Semantic caching (cut 70%+ LLM tokens), Agentic 3-tier memory (Postgres+Redis+Pinecone+Neo4j in 1), GraphRAG, PyTorch training streaming, and real-time multiplayer gaming.
-* [🧪 Testing & Benchmarks Guide](docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, Rust integration tests, Chaos tests, and YCSB runner.
-* [📖 Universal Commands & Syntax Reference Manual](docs/COMMANDS_AND_SYNTAX_REFERENCE.md) — Complete master manual & cheat-sheet for CLI commands, SQL statements, openCypher Graph, FaizQL Multi-Model, MongoDB wire queries, REST endpoints, and gRPC RPCs.
-* [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, EdDSA JWT auth, and Geo-Replication.
-* [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python (`pyproject.toml`), and Go.
-* [⚔️ Competitive Analysis & Architectural Matrix](docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
-* [☸️ Kubernetes HA Cluster Guide](k8s/README.md) — 3-Node StatefulSet architecture with automated persistence and zero-downtime rolling upgrades.
-* [📋 Changelog](CHANGELOG.md) — Version history and release notes.
-* [🛡️ Security Policy](SECURITY.md) — Vulnerability reporting and responsible disclosure.
-* [🤝 Contributing Guide](CONTRIBUTING.md) — Development setup, branch guidelines, and code of conduct.
+* [🛡️ Enterprise Production Standards & Operational Hardening Reference](../docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) — Comprehensive technical reference for connection governors, WAL group commits, Kubernetes native health probes, autonomous snapshot daemon, open data portability, and wire protocol hardening `[LATEST - ENTERPRISE 2026]`.
+* [🏛️ Latest System Capabilities, Architecture & Verification Reference](../docs/LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) — Comprehensive technical reference, 4-gateway wire protocol throughput & latency benchmarks, query capabilities, and workspace test certification.
+* [🏆 Production Hardening & Enterprise Verification Record](../docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md) — 100% compliant verification across all enterprise durability, consensus, and performance criteria.
+* [📖 Installation & Deployment Guide](../docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
+* [🏛️ Tier-1 Engineering & Architecture Guide](../docs/TIER1_ENGINEERING_GUIDE.md) — SIMD Vector Math, Adaptive Replacement Cache (ARC), Prometheus telemetry, Chaos Testing, and YCSB.
+* [🤖 AI, LLM, LangGraph & Real-Time Gaming Use Cases](../docs/USE_CASES_AND_SOLUTIONS.md) — LangGraph unified backend checkpointer, Semantic caching (cut 70%+ LLM tokens), Agentic 3-tier memory (Postgres+Redis+Pinecone+Neo4j in 1), GraphRAG, PyTorch training streaming, and real-time multiplayer gaming.
+* [🧪 Testing & Benchmarks Guide](../docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, Rust integration tests, Chaos tests, and YCSB runner.
+* [📖 Universal Commands & Syntax Reference Manual](../docs/COMMANDS_AND_SYNTAX_REFERENCE.md) — Complete master manual & cheat-sheet for CLI commands, SQL statements, openCypher Graph, FaizQL Multi-Model, MongoDB wire queries, REST endpoints, and gRPC RPCs.
+* [🌐 Universal API Reference](../docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, EdDSA JWT auth, and Geo-Replication.
+* [📦 Official Client SDKs Guide](../docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python (`pyproject.toml`), and Go.
+* [⚔️ Competitive Analysis & Architectural Matrix](../docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
+* [☸️ Kubernetes HA Cluster Guide](../k8s/README.md) — 3-Node StatefulSet architecture with automated persistence and zero-downtime rolling upgrades.
+* [📋 Changelog](../CHANGELOG.md) — Version history and release notes.
+* [🛡️ Security Policy](../SECURITY.md) — Vulnerability reporting and responsible disclosure.
+* [🤝 Contributing Guide](../CONTRIBUTING.md) — Development setup, branch guidelines, and code of conduct.
 
 ---
 
