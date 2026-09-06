@@ -158,7 +158,7 @@
         FaizDB is not a one-trick database. By unifying <strong>Document (JSON/BSON), HNSW Vectors, Directional Knowledge Graphs, and Relational SQL</strong> within a single <strong>7.70 MB</strong> Safe Rust binary, FaizDB eliminates database sprawl across 20 distinct mission-critical industries.
       </p>
       <div style="padding: 12px 16px; background: var(--primary-subtle); border-left: 3px solid var(--primary); border-radius: 4px; font-size: 13.5px; color: var(--text-primary); line-height: 1.5;">
-        🎯 <strong>Standalone-First with Native FaizQL:</strong> FaizDB is an independent, native database with its own unified query language (FaizQL), native gRPC (port 50051), and in-process embedded library mode. The PostgreSQL (5432) and MongoDB (27017) wire ports are <em>optional compatibility bridges</em> for seamless tool adoption (Prisma, DBeaver, PyMongo).
+        🎯 <strong>Standalone-First with Native FaizQL:</strong> FaizDB is an independent, native database with its own unified query language (FaizQL), native gRPC (port 50051), and in-process embedded library mode. The MySQL (3306), PostgreSQL (5432), and MongoDB (27017) wire ports are <em>optional compatibility bridges</em> for seamless tool adoption (Laravel Eloquent, Prisma, DBeaver, PyMongo, MySQL CLI).
       </div>
     </div>
 
@@ -185,12 +185,12 @@
 
     <!-- Filter Pills -->
     <div class="filter-bar">
-      <button class="filter-pill active" onclick="filterCategory('all')">🌐 All 20 Use Cases</button>
-      <button class="filter-pill" onclick="filterCategory('ai')">🤖 Frontier AI &amp; Agents (6)</button>
-      <button class="filter-pill" onclick="filterCategory('realtime')">⚡ Real-Time &amp; Gaming (4)</button>
-      <button class="filter-pill" onclick="filterCategory('enterprise')">🛍️ Fintech &amp; Commerce (4)</button>
-      <button class="filter-pill" onclick="filterCategory('edge')">🚗 Edge, IoT &amp; Robotics (3)</button>
-      <button class="filter-pill" onclick="filterCategory('distributed')">🌍 Global Multi-Region (3)</button>
+      <button class="filter-pill active" onclick="filterCategory('all', this)">🌐 All 20 Use Cases</button>
+      <button class="filter-pill" onclick="filterCategory('ai', this)">🤖 Frontier AI &amp; Agents (6)</button>
+      <button class="filter-pill" onclick="filterCategory('realtime', this)">⚡ Real-Time &amp; Big Data (4)</button>
+      <button class="filter-pill" onclick="filterCategory('enterprise', this)">🛍️ Fintech &amp; Commerce (4)</button>
+      <button class="filter-pill" onclick="filterCategory('edge', this)">🚗 Edge, IoT &amp; Robotics (3)</button>
+      <button class="filter-pill" onclick="filterCategory('distributed', this)">🌍 Global Multi-Region (3)</button>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════
@@ -398,28 +398,30 @@
           </div>
         </div>
 
-        <!-- 8. Change Data Capture & Live Streaming -->
+        <!-- 8. Petabyte Big Data & Streaming Lakehouse -->
         <div class="content-card">
           <div>
             <div class="card-top">
-              <div class="card-icon" style="background: var(--rose-subtle);">📡</div>
-              <span class="card-tag tag-realtime">CDC &amp; Streaming</span>
+              <div class="card-icon" style="background: var(--rose-subtle);">🐘📊</div>
+              <span class="card-tag tag-realtime">Big Data &amp; Lakehouse</span>
             </div>
-            <h2 class="type-subhead">8. Real-Time Change Data Capture (CDC)</h2>
+            <h2 class="type-subhead">8. Petabyte Big Data &amp; Streaming Lakehouse</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Streams database write mutations directly from WAL in real-time to downstream Apache Kafka, Debezium, ClickHouse, or Snowflake pipelines with zero replication lag and sub-millisecond end-to-end event propagation.
+              Bridges real-time operational ingestion with Big Data Lakehouses. Features <strong>Zero-Copy ColumnarBatch</strong> (Arrow/DuckDB/Spark interop), automated <strong>Hot NVMe to Cold S3/GCS Tiered Storage</strong>, and native sub-millisecond <strong>Change Data Capture (CDC)</strong> streaming directly to Apache Kafka, Debezium, ClickHouse, or Snowflake.
             </p>
             <div class="code-snippet">
-              <span class="code-comment"># Native CDC stream consumer</span><br/>
-              <span class="code-accent">for</span> mutation <span class="code-accent">in</span> client.cdc_stream("orders"):<br/>
-              &nbsp;&nbsp;kafka_producer.send("orders.cdc", mutation.bytes())
+              <span class="code-comment">// SIMD Columnar sum + Tiered S3 lifecycle + Kafka CDC</span><br/>
+              <span class="code-accent">let</span> batch = ColumnarBatch::from_json(&amp;docs)?;<br/>
+              <span class="code-accent">let</span> sum = batch.sum_f64("trade_volume"); <span class="code-comment">// SIMD Scan</span><br/>
+              cdc_stream.emit_kafka("lakehouse.events", &amp;tx);
             </div>
           </div>
           <div class="card-meta">
-            <span class="meta-pill">Kafka / Debezium</span>
-            <span class="meta-pill">Event-Driven</span>
-            <span class="meta-pill">Zero Lag</span>
-            <span class="meta-pill">WAL Tailing</span>
+            <span class="meta-pill">Apache Spark / Arrow</span>
+            <span class="meta-pill">S3/GCS Cold Tiering</span>
+            <span class="meta-pill">Kafka &amp; Debezium CDC</span>
+            <span class="meta-pill">Columnar SIMD</span>
+            <span class="meta-pill">ClickHouse / Snowflake</span>
           </div>
         </div>
 
@@ -482,34 +484,36 @@
     <section class="category-section" data-cat="enterprise">
       <div class="category-header">
         <div class="category-title">
-          <span>🛍️ Enterprise, Fintech &amp; Dual-Protocol Modernization</span>
+          <span>🛍️ Enterprise, Fintech &amp; Multi-Wire Modernization</span>
         </div>
-        <span class="category-badge">Postgres + Mongo in One Binary</span>
+        <span class="category-badge">MySQL + Postgres + Mongo in One Binary</span>
       </div>
 
       <div class="cards-grid">
         
-        <!-- 11. Drop-In Postgres & Mongo Unification -->
+        <!-- 11. Triple-Wire Modernization (MySQL + Postgres + Mongo) -->
         <div class="content-card">
           <div>
             <div class="card-top">
-              <div class="card-icon" style="background: var(--secondary-subtle);">🐘🍃</div>
+              <div class="card-icon" style="background: var(--secondary-subtle);">🐬🐘🍃</div>
               <span class="card-tag tag-enterprise">Multi-Wire</span>
             </div>
-            <h2 class="type-subhead">11. Dual-Stack Modernization (Postgres + Mongo)</h2>
+            <h2 class="type-subhead">11. Triple-Wire Modernization (MySQL + Postgres + Mongo)</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Collection-level paradigm isolation: relational collections with strict schemas for PostgreSQL wire (5432) and flexible JSON document collections for MongoDB wire (27017). Features <strong>Virtual System Catalog Reflection</strong> (<code>pg_catalog.*</code>, <code>information_schema.*</code>) for instant, zero-config ORM introspection (Prisma, Drizzle, SQLAlchemy, DBeaver).
+              Unifies three distinct ecosystems: relational tables for MySQL wire (3306) and PostgreSQL wire (5432), plus flexible JSON collections for MongoDB wire (27017). Features <strong>Virtual System Catalog Reflection</strong> (<code>information_schema.*</code>, <code>pg_catalog.*</code>) for instant, zero-config ORM and framework introspection (Laravel Eloquent, Prisma, Drizzle, PyMongo, DBeaver).
             </p>
             <div class="code-snippet">
-              <span class="code-comment"># Prisma connects to:</span> postgresql://user:pass@127.0.0.1:5432/db<br/>
-              <span class="code-comment"># PyMongo connects to:</span> mongodb://user:pass@127.0.0.1:27017/db<br/>
-              <span class="code-accent">➔ Virtual Catalog Reflection! Zero Config ORMs! Zero ETL!</span>
+              <span class="code-comment"># Laravel Eloquent / PDO:</span> mysql://user:pass@127.0.0.1:3306/db<br/>
+              <span class="code-comment"># Prisma / PostgreSQL:</span> postgresql://user:pass@127.0.0.1:5432/db<br/>
+              <span class="code-comment"># PyMongo / BSON:</span> mongodb://user:pass@127.0.0.1:27017/db<br/>
+              <span class="code-accent">➔ 3 Protocols, 1 Storage Engine! Zero Sync ETL!</span>
             </div>
           </div>
           <div class="card-meta">
+            <span class="meta-pill">MySQL 3306</span>
             <span class="meta-pill">Postgres 5432</span>
             <span class="meta-pill">Mongo 27017</span>
-            <span class="meta-pill">Virtual pg_catalog</span>
+            <span class="meta-pill">Laravel Eloquent</span>
             <span class="meta-pill">Prisma &amp; Drizzle</span>
             <span class="meta-pill">Zero Data Sync</span>
           </div>
@@ -762,7 +766,7 @@
             <div class="code-snippet">
               <span class="code-comment"># Native Kubernetes StatefulSet probe</span><br/>
               livenessProbe:<br/>
-              &nbsp;&nbsp;httpGet: { path: /v1/health/liveness, port: 8080 }
+              &nbsp;&nbsp;httpGet: { path: /v1/health/liveness, port: 27018 }
             </div>
           </div>
           <div class="card-meta">
@@ -801,9 +805,12 @@
     });
 
     // Category Filter
-    function filterCategory(cat) {
+    function filterCategory(cat, btnEl) {
       document.querySelectorAll('.filter-pill').forEach(btn => btn.classList.remove('active'));
-      event.target.classList.add('active');
+      const activeBtn = btnEl || (window.event ? window.event.currentTarget || window.event.target : null);
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+      }
 
       const sections = document.querySelectorAll('.category-section');
       sections.forEach(sec => {
