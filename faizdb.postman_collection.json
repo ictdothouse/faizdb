@@ -205,9 +205,9 @@
               "raw": "{\n  \"id\": \"prod_demo_01\",\n  \"name\": \"Quantum Supercomputer Blade\",\n  \"price\": 14999.0,\n  \"category\": \"Enterprise AI\",\n  \"in_stock\": true\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/v1/collections/products/documents",
+              "raw": "{{baseUrl}}/v1/collections/products/insert",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "collections", "products", "documents"]
+              "path": ["v1", "collections", "products", "insert"]
             }
           }
         },
@@ -366,12 +366,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"dimensions\": 64,\n  \"metric\": \"Cosine\",\n  \"m\": 16,\n  \"ef_construction\": 100\n}"
+              "raw": "{\n  \"name\": \"products\",\n  \"dimensions\": 64,\n  \"metric\": \"Cosine\",\n  \"max_m\": 16,\n  \"ef_construction\": 100\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/v1/vectors/collections/products/index",
+              "raw": "{{baseUrl}}/v1/vector/index",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "vectors", "collections", "products", "index"]
+              "path": ["v1", "vector", "index"]
             }
           }
         },
@@ -390,12 +390,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vector\": [0.1, 0.2, 0.3, 0.4],\n  \"k\": 5,\n  \"ef_search\": 64\n}"
+              "raw": "{\n  \"index_name\": \"products\",\n  \"query\": [0.1, 0.2, 0.3, 0.4],\n  \"top_k\": 5\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/v1/vectors/collections/products/search",
+              "raw": "{{baseUrl}}/v1/vector/search",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "vectors", "collections", "products", "search"]
+              "path": ["v1", "vector", "search"]
             }
           }
         }
@@ -490,9 +490,9 @@
             },
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/v1/tx/begin",
+              "raw": "{{baseUrl}}/v1/transaction/begin",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "tx", "begin"]
+              "path": ["v1", "transaction", "begin"]
             }
           }
         },
@@ -514,9 +514,9 @@
               "raw": "{\n  \"transaction_id\": \"1\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/v1/tx/commit",
+              "raw": "{{baseUrl}}/v1/transaction/commit",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "tx", "commit"]
+              "path": ["v1", "transaction", "commit"]
             }
           }
         },
@@ -538,9 +538,9 @@
               "raw": "{\n  \"transaction_id\": \"1\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/v1/tx/rollback",
+              "raw": "{{baseUrl}}/v1/transaction/rollback",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "tx", "rollback"]
+              "path": ["v1", "transaction", "rollback"]
             }
           }
         }
@@ -560,14 +560,14 @@
             },
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/v1/backup/snapshot",
+              "raw": "{{baseUrl}}/v1/backup/create",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "backup", "snapshot"]
+              "path": ["v1", "backup", "create"]
             }
           }
         },
         {
-          "name": "List Available Backups",
+          "name": "Restore Backup",
           "request": {
             "auth": {
               "type": "bearer",
@@ -575,11 +575,18 @@
                 { "key": "token", "value": "{{authToken}}", "type": "string" }
               ]
             },
-            "method": "GET",
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"faizdb_snapshot_2026.json\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/v1/backup/list",
+              "raw": "{{baseUrl}}/v1/backup/restore",
               "host": ["{{baseUrl}}"],
-              "path": ["v1", "backup", "list"]
+              "path": ["v1", "backup", "restore"]
             }
           }
         }
