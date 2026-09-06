@@ -67,3 +67,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# ── AI Agent Internal Scaffolding ─────────────────────────────────
+.agents/
+skills-lock.json
