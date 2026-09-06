@@ -1,0 +1,589 @@
+{
+  "info": {
+    "_postman_id": "faizdb-v010-collection",
+    "name": "FaizDB v0.1.0 Multi-Model Database API",
+    "description": "Official Postman Collection for FaizDB v0.1.0 - High-performance Safe-Rust Multi-Model Database Engine.\nIncludes endpoints for Authentication, System Health, Collections, FaizQL Unified Queries, Vectors, Knowledge Graphs, MVCC Transactions, and Hot Backups.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:27017",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "admin123",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication & Security",
+      "item": [
+        {
+          "name": "Login & Generate JWT Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set(\"authToken\", jsonData.token);",
+                  "    console.log(\"Saved JWT Bearer Token to authToken collection variable\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/token",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "token"]
+            },
+            "description": "Authenticates against FaizDB and retrieves a cryptographic JWT token."
+          }
+        },
+        {
+          "name": "Verify Token Validity",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/auth/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "verify"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. System & Telemetry",
+      "item": [
+        {
+          "name": "Liveness Check (/health)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Detailed Cluster Health (/v1/health)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "health"]
+            }
+          }
+        },
+        {
+          "name": "Server Engine Info (/v1/info)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "info"]
+            }
+          }
+        },
+        {
+          "name": "Prometheus Metrics (/metrics)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["metrics"]
+            }
+          }
+        },
+        {
+          "name": "Runtime System Profile (/v1/system/profile)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/system/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "system", "profile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Collections & Documents",
+      "item": [
+        {
+          "name": "List All Collections",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/collections",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "collections"]
+            }
+          }
+        },
+        {
+          "name": "Create Collection",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/v1/collections/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "collections", "products"]
+            }
+          }
+        },
+        {
+          "name": "Insert Document",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"prod_demo_01\",\n  \"name\": \"Quantum Supercomputer Blade\",\n  \"price\": 14999.0,\n  \"category\": \"Enterprise AI\",\n  \"in_stock\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/collections/products/documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "collections", "products", "documents"]
+            }
+          }
+        },
+        {
+          "name": "Get Document by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/collections/products/documents/prod_demo_01",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "collections", "products", "documents", "prod_demo_01"]
+            }
+          }
+        },
+        {
+          "name": "Delete Document",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/v1/collections/products/documents/prod_demo_01",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "collections", "products", "documents", "prod_demo_01"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. FaizQL Unified Query Engine",
+      "item": [
+        {
+          "name": "SQL Filter & Projection",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"SELECT name, price, category FROM products WHERE price > 1000 ORDER BY price DESC\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "query"]
+            }
+          }
+        },
+        {
+          "name": "SQL Aggregation & Group By",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"SELECT category, COUNT(*), AVG(price) FROM products GROUP BY category\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "query"]
+            }
+          }
+        },
+        {
+          "name": "FaizQL Vector Near Search",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"FIND products VECTOR NEAR [0.15, 0.22, 0.45, 0.88] TOP 3\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "query"]
+            }
+          }
+        },
+        {
+          "name": "FaizQL Cypher Graph Match",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"MATCH (c:Customer)-[:PURCHASED]->(p:Product) RETURN c.name, p.name, p.price\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "query"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Vector Engine & Embeddings",
+      "item": [
+        {
+          "name": "Create HNSW Vector Index",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dimensions\": 64,\n  \"metric\": \"Cosine\",\n  \"m\": 16,\n  \"ef_construction\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/vectors/collections/products/index",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "vectors", "collections", "products", "index"]
+            }
+          }
+        },
+        {
+          "name": "k-NN Similarity Search",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vector\": [0.1, 0.2, 0.3, 0.4],\n  \"k\": 5,\n  \"ef_search\": 64\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/vectors/collections/products/search",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "vectors", "collections", "products", "search"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Knowledge Graph & GraphRAG",
+      "item": [
+        {
+          "name": "Add Graph Vertex",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"user:faiz\",\n  \"label\": \"User\",\n  \"properties\": {\n    \"name\": \"Ahmad Faiz\",\n    \"role\": \"Creator\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/graph/vertices",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "graph", "vertices"]
+            }
+          }
+        },
+        {
+          "name": "Add Graph Edge",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"user:faiz\",\n  \"to\": \"prod_demo_01\",\n  \"label\": \"DESIGNED\",\n  \"properties\": {\n    \"year\": 2026\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/graph/edges",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "graph", "edges"]
+            }
+          }
+        },
+        {
+          "name": "Graph Traversal",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/graph/traverse?start_vertex=user:faiz&direction=outgoing&max_depth=2",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "graph", "traverse"],
+              "query": [
+                { "key": "start_vertex", "value": "user:faiz" },
+                { "key": "direction", "value": "outgoing" },
+                { "key": "max_depth", "value": "2" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. ACID Transactions (MVCC)",
+      "item": [
+        {
+          "name": "Begin Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/v1/tx/begin",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "tx", "begin"]
+            }
+          }
+        },
+        {
+          "name": "Commit Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_id\": \"1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/tx/commit",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "tx", "commit"]
+            }
+          }
+        },
+        {
+          "name": "Rollback Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction_id\": \"1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/tx/rollback",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "tx", "rollback"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Enterprise Hot Backups",
+      "item": [
+        {
+          "name": "Trigger Hot Snapshot Backup",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/v1/backup/snapshot",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "backup", "snapshot"]
+            }
+          }
+        },
+        {
+          "name": "List Available Backups",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/backup/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "backup", "list"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

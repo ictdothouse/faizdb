@@ -492,7 +492,68 @@ FIND articles VECTOR NEAR [0.95, 0.88, 0.12, 0.04] TOP 5;
 
 ---
 
-### 5. Launch FaizDB Web Management Studio
+### 5. System Preflight & Health Diagnostics (`faizdb doctor`)
+
+Audit your host environment, check port bindings across all 5 gateways, verify disk write permissions, WAL integrity, CPU architecture, and security configuration in one instant command:
+
+```bash
+./target/release/faizdb doctor
+```
+
+```text
+╔══════════════════════════════════════════════════════════════════╗
+║              🩺 FaizDB System Preflight & Doctor                 ║
+║       Multi-Gateway, Storage, Consensus & Security Audit         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+🔍 [1/4] Probing Multi-Protocol Gateway Status (127.0.0.1)...
+  🟢 Port 27018 [REST & WebSocket API   ] : ONLINE (Active & Listening)
+  🟢 Port 27017 [MongoDB Wire Ingress   ] : ONLINE (Active & Listening)
+  🟢 Port 5432  [PostgreSQL Wire Ingress] : ONLINE (Active & Listening)
+  🟢 Port 3306  [MySQL / MariaDB Wire   ] : ONLINE (Active & Listening)
+  🟢 Port 50051 [gRPC & ProtoBuf Gateway] : ONLINE (Active & Listening)
+
+🔍 [2/4] Verifying Storage & Durability Subsystems...
+  🟢 Storage Directory: Present at './faizdb_data'
+  🟢 Disk I/O Integrity: Read/Write verified (Zero permissions lock)
+  🟢 Write-Ahead Log (WAL): Clean & Consistent
+
+🔍 [3/4] Hardware & Environment Diagnostics...
+  🟢 CPU Architecture: 12 logical execution cores detected
+  🟢 Engine Kernel: FaizDB v0.1.0 (Pure Safe Rust, Single-Binary)
+
+🔍 [4/4] Enterprise Security & Configuration Review...
+  🟢 Root Authentication: Configured (User: 'admin')
+  🟢 Autonomous Backup Daemon: ENABLED (Daily Snapshot Routine)
+```
+
+---
+
+### 6. Instant Multi-Model Dataset Seeder (`faizdb seed`)
+
+Quickly test SQL joins, MongoDB filters, HNSW vector search, and GraphRAG traversals without writing manual scripts:
+
+```bash
+# E-Commerce dataset: Products, Orders, 64-dim HNSW embeddings & Purchase Knowledge Graph
+./target/release/faizdb seed --dataset ecommerce
+
+# AI Agent Memory tier: Episodic, Semantic, Working memories & Goal Hierarchy Graph
+./target/release/faizdb seed --dataset agent-memory
+
+# Social Graph: User profiles, Posts, and Bi-directional Follows Network
+./target/release/faizdb seed --dataset social-graph
+```
+
+---
+
+### 7. Official Observability & API Testing Assets
+
+- **Official Grafana Dashboard Template**: [`dashboards/faizdb-overview.json`](dashboards/faizdb-overview.json) — Production-ready Grafana 9/10/11 dashboard with real-time QPS, $p_{50}/p_{90}/p_{99}$ latency percentiles, I/O bandwidth, buffer cache hit ratios, WAL sync frequencies, and CBO join strategy distribution.
+- **Official Postman Collection**: [`faizdb.postman_collection.json`](faizdb.postman_collection.json) — Comprehensive Postman v2.1 collection covering Authentication, Telemetry, Collections, FaizQL, Vectors, Knowledge Graph, MVCC Transactions, and Backups with automatic JWT extraction.
+
+---
+
+### 8. Launch FaizDB Web Management Studio
 
 FaizDB comes with a mission-control visual dashboard supporting Light & Dark modes:
 
@@ -519,7 +580,7 @@ Key Studio Workspaces:
 
 ---
 
-### 6. 🪶 Embedded & Edge IoT Mode (Zero-Dependency SQLite-Style In-Process DB)
+### 9. 🪶 Embedded & Edge IoT Mode (Zero-Dependency SQLite-Style In-Process DB)
 
 Need a lightweight, zero-setup, in-process database for CLI tools, Desktop apps, Raspberry Pi, IoT sensors, or local Edge AI without running a separate server process?
 
@@ -686,6 +747,10 @@ Rather than claiming instant battle-tested maturity for decade-old banking mainf
 - [x] Numerical Float Boundary Clamping & Safe Vector Distance Normalization
 - [x] Bounded-Resource Graph Traversal with Cycle Resistance
 - [x] Formal Jepsen Distributed Testing Framework (`tests/test_jepsen_distributed_chaos.rs` — 5/5 PASS)
+- [x] Preflight Diagnostics & Environment Doctor CLI (`faizdb doctor`)
+- [x] Multi-Model Dataset Generator CLI (`faizdb seed`) for Relational, Vector & Graph
+- [x] Official Prometheus & Grafana Monitoring Dashboard Template (`dashboards/faizdb-overview.json`)
+- [x] Official Postman Collection with 20+ Endpoints & Automatic Bearer Token Auth (`faizdb.postman_collection.json`)
 - [ ] In-Browser WebAssembly (WASM) Headless Engine
 - [ ] GPU-Accelerated Vector Indexing (CUDA / Metal Shaders)
 

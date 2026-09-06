@@ -698,6 +698,7 @@ dependencies = [
  "faizdb-security",
  "faizdb-server",
  "faizdb-vector",
+ "parking_lot",
  "serde",
  "serde_json",
  "tokio",

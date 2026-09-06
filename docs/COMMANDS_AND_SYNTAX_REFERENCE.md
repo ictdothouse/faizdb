@@ -15,6 +15,7 @@ This is the definitive, exhaustive command and syntax manual for **FaizDB**. It 
 7. [gRPC Protocol Buffers RPC Reference (Port 50051)](#7-grpc-protocol-buffers-rpc-reference)
 8. [Python SDK & LangGraph Native Saver](#8-python-sdk--langgraph-native-saver)
 9. [Embedded In-Process Rust Engine (`faizdb-core`)](#9-embedded-in-process-rust-engine)
+10. [Developer Tools & Observability Assets](#10-developer-tools--observability-assets)
 
 ---
 
@@ -31,6 +32,8 @@ faizdb [SUBCOMMAND] [OPTIONS]
 | Command | Description | Key Options / Flags |
 | :--- | :--- | :--- |
 | `faizdb serve` | Starts the 5-way universal database daemon | `--host 0.0.0.0`, `--http-port 27018`, `--grpc-port 50051`, `--mongo-port 27017`, `--pg-port 5432`, `--mysql-port 3306`, `--data-dir ./faizdb_data` |
+| `faizdb doctor` | Runs preflight system diagnostics across 5 gateways, storage, WAL & security | `--host 127.0.0.1`, `--http-port 27018`, `--wire-port 27017`, `--pg-port 5432`, `--mysql-port 3306`, `--grpc-port 50051`, `--data-dir ./faizdb_data` |
+| `faizdb seed` | Seeds multi-model datasets for instant evaluation (Relational, Vector, Graph) | `--dataset ecommerce\|agent-memory\|social-graph`, `--data-dir ./faizdb_data` |
 | `faizdb shell` | Starts the interactive multi-dialect REPL | `--endpoint http://localhost:27018`, `--token <jwt>`, `--username <user>`, `--password <pass>` |
 | `faizdb query "<query>"` | Runs a one-shot query from terminal | `--endpoint http://localhost:27018`, `--format json\|table\|csv` |
 | `faizdb backup` | Creates a non-blocking snapshot archive | `--output ./backups/snap.enc.json`, `--encrypt`, `--key <aes_key>` |
@@ -45,6 +48,18 @@ faizdb [SUBCOMMAND] [OPTIONS]
 ### Practical CLI Examples
 
 ```bash
+# Run comprehensive health preflight & port audit
+faizdb doctor
+
+# Seed rich multi-model ecommerce dataset (products, orders, 64-dim HNSW, knowledge graph)
+faizdb seed --dataset ecommerce
+
+# Seed autonomous AI agent memory tier (episodic, semantic, working, 64-dim embeddings)
+faizdb seed --dataset agent-memory
+
+# Seed social knowledge graph (profiles, posts, followers relationships)
+faizdb seed --dataset social-graph
+
 # Start full multi-gateway daemon in production mode
 faizdb serve --pg-port 5432 --mysql-port 3306 --mongo-port 27017 --http-port 27018 --grpc-port 50051
 
@@ -650,4 +665,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
-*© 2026 FaizDB Project · Official Engineering Specification · All Rights Reserved.*
+## 10. Developer Tools & Observability Assets
+
+FaizDB ships with official, production-ready observability and testing assets in the repository:
+
+### A. Official Grafana Dashboard Template
+- **File**: [`dashboards/faizdb-overview.json`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/dashboards/faizdb-overview.json)
+- **Features**:
+  - Real-time engine health, uptime, and active connection tracking
+  - Total QPS throughput and operation breakdown by command type
+  - Read/Write I/O bandwidth monitoring
+  - Query latency percentiles ($p_{50}$, $p_{90}$, $p_{99}$) and average execution times
+  - Distributed Cost-Based Optimizer (CBO) join strategy metrics and cluster network transfer
+  - Storage buffer cache hit ratio gauge and WAL fsync frequencies
+- **How to Use**:
+  1. Open Grafana (`http://localhost:3000`).
+  2. Navigate to **Dashboards** → **New** → **Import**.
+  3. Upload or paste the contents of `dashboards/faizdb-overview.json`.
+  4. Select your Prometheus data source (configured to scrape FaizDB at `http://localhost:27018/metrics`).
+
+### B. Official Postman Collection
+- **File**: [`faizdb.postman_collection.json`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb.postman_collection.json)
+- **Features**:
+  - Covers all 8 core API modules: Authentication, Health & Telemetry, Collections, FaizQL Engine, Vector HNSW, Knowledge Graph, MVCC Transactions, and Backups.
+  - Automatic JWT Bearer token capture and injection into collection variables upon login.
+  - Pre-populated JSON payloads for instant verification.
+- **How to Use**:
+  1. Open Postman or Insomnia.
+  2. Click **Import** and select `faizdb.postman_collection.json`.
+  3. Run the **01. Authentication & Security / Login** request to authenticate.
+  4. Test any query, vector search, or graph traversal with a single click.
+
+---
+
+*© 2026 FaizDB Project · Created by Ahmad Faiz · All Rights Reserved.*
