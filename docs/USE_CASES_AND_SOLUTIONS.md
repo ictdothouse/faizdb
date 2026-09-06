@@ -57,20 +57,53 @@ This document details **20 real-world production use cases** where **FaizDB** re
   * State checkpointer operates over native PostgreSQL wire (port 5432) or REST/gRPC in microsecond ACID transactions.
 
 #### 💡 Production Blueprint: FaizDB as the Unified Database for LangGraph
-LangGraph is the leading state machine framework for cyclical multi-agent workflows, but standard LangGraph deployments suffer from severe database sprawl. FaizDB serves as the ultimate drop-in persistence engine for LangGraph:
+LangGraph is the leading state machine framework for cyclical multi-agent workflows, but standard LangGraph deployments suffer from severe database sprawl. FaizDB serves as the ultimate drop-in persistence engine for LangGraph, offering **two flexible integration pathways**:
 
-1. **Solid Proof: Native Drop-In Checkpointer Compatibility (Port 5432):**
-   LangGraph's production persistence relies on `AsyncPostgresSaver` / `PostgresSaver` (`langgraph-checkpoint-postgres`). Because FaizDB exposes a native PostgreSQL wire protocol (Port 5432) with MVCC snapshot isolation, LangGraph connects directly via standard PostgreSQL connection strings (`postgresql://faizadmin:faizpass@127.0.0.1:5432/langgraph`) with **zero framework patches or custom drivers**.
-2. **70%–85% LLM API Bill Reduction (Built-In SemanticCache):**
-   Cyclical LangGraph agent loops frequently repeat near-identical prompts across turns. FaizDB's in-memory `SemanticCache` performs vector cosine similarity matching ($\ge 0.90$) in **< 1ms**, returning cached LLM outputs and cutting thousands of dollars in monthly token bills.
-3. **Sub-Millisecond "Time Travel" Snapshots:**
-   LangGraph's time-travel capability rewinds agent execution to previous checkpoints. While traditional PostgreSQL setups suffer from disk write stalls, FaizDB persists snapshots to a Lock-Free SkipList MemTable with sequential WAL group commits (< 1ms write latency).
-4. **Tri-Hybrid Fact Grounding (Zero Hallucination):**
-   Combines Okapi BM25 keyword matching, HNSW vector search, and openCypher BFS graph traversal within LangGraph worker nodes, delivering 100% grounded facts to the LLM.
+##### Path A: 100% Pure Native FaizDB Checkpointer (Zero PostgreSQL Dependency)
+Developers can use FaizDB's official native Python checkpointer (`faizdb.langgraph.FaizDbSaver`). This path completely bypasses PostgreSQL, storing agent execution snapshots directly into native FaizDB BSON/JSON collections over HTTP REST (port 27018) or gRPC (port 50051) with zero serialization overhead:
 
 ```python
 # ==============================================================================
-# Production LangGraph Workflow with FaizDB Unified Checkpointer & Graph Memory
+# Path A: 100% Pure Native FaizDB Checkpointer (Zero PostgreSQL Wire)
+# ==============================================================================
+from faizdb import FaizDB
+from faizdb.langgraph import FaizDbSaver
+from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+# 1. Connect natively to FaizDB (Port 27018 / gRPC 50051)
+db = FaizDB("http://localhost:27018")
+checkpointer = FaizDbSaver(db, collection_prefix="production_agents")
+
+class AgentState(TypedDict):
+    query: str
+    response: str
+
+def agent_node(state: AgentState):
+    # Perform openCypher knowledge graph traversal natively
+    facts = db.query("MATCH (a:Agent)-[:knows]->(b) RETURN b LIMIT 5")
+    return {"response": f"Resolved with facts: {facts}"}
+
+workflow = StateGraph(AgentState)
+workflow.add_node("agent", agent_node)
+workflow.set_entry_point("agent")
+workflow.add_edge("agent", END)
+
+# 2. Compile LangGraph workflow with pure native FaizDB persistence
+app = workflow.compile(checkpointer=checkpointer)
+
+# 3. Sub-millisecond snapshot persistence & time-travel enabled
+config = {"configurable": {"thread_id": "thread_pure_native_01"}}
+result = app.invoke({"query": "Analyze quarterly risk"}, config)
+print("Execution Result:", result)
+```
+
+##### Path B: Drop-In PostgreSQL Wire Compatibility (Port 5432)
+For enterprise teams with existing LangGraph codebases already using `langgraph-checkpoint-postgres` / `psycopg`, FaizDB exposes a drop-in PostgreSQL wire protocol (Port 5432) requiring **zero code modifications**:
+
+```python
+# ==============================================================================
+# Path B: Drop-In Wire Compatibility via LangGraph AsyncPostgresSaver (Port 5432)
 # ==============================================================================
 import asyncio
 from typing import TypedDict
@@ -78,20 +111,16 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 import psycopg
 
-# 1. State Definition for Cyclical Agent Loop
 class AgentWorkflowState(TypedDict):
     query: str
     grounded_facts: str
     response: str
 
-# 2. Worker Node: Queries FaizDB openCypher Knowledge Graph + HNSW Vectors
 async def knowledge_retrieval_node(state: AgentWorkflowState):
-    # Connect to FaizDB via PostgreSQL wire (Port 5432) or native REST (Port 27018)
     conn = await psycopg.AsyncConnection.connect(
         "postgresql://faizadmin:faizpass@127.0.0.1:5432/production"
     )
     async with conn.cursor() as cur:
-        # Atomic GraphRAG retrieval: openCypher BFS + HNSW vector similarity
         await cur.execute("""
             MATCH (e:Entity)-[:relates_to*1..2]->(target:Entity)
             VECTOR NEAR [0.12, 0.45, 0.88, 0.05] TOP 3
@@ -101,28 +130,20 @@ async def knowledge_retrieval_node(state: AgentWorkflowState):
     await conn.close()
     return {"grounded_facts": str(records)}
 
-# 3. LangGraph Orchestration with FaizDB Native Checkpointer
 async def main():
-    # LangGraph AsyncPostgresSaver connects directly to FaizDB Port 5432!
     DB_URI = "postgresql://faizadmin:faizpass@127.0.0.1:5432/langgraph_checkpoints"
-    
     async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
-        # Build Cyclical Workflow
         workflow = StateGraph(AgentWorkflowState)
         workflow.add_node("retriever", knowledge_retrieval_node)
         workflow.set_entry_point("retriever")
         workflow.add_edge("retriever", END)
-        
-        # Compile with FaizDB checkpointer (enables sub-ms state snapshots & time-travel)
         agent_app = workflow.compile(checkpointer=checkpointer)
-        
-        # Execute run with persistent thread ID
         thread_config = {"configurable": {"thread_id": "session_enterprise_99"}}
         final_state = await agent_app.ainvoke(
             {"query": "Investigate corporate acquisition history"}, 
             thread_config
         )
-        print("LangGraph + FaizDB Execution Succeeded:", final_state)
+        print("LangGraph + FaizDB Wire Execution Succeeded:", final_state)
 
 if __name__ == "__main__":
     asyncio.run(main())

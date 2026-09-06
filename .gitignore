@@ -18,8 +18,9 @@ backups/*.enc.json
 !backups/.gitkeep
 
 # ── Standalone Binaries & Libraries ───────────────────────────────
-faizdb
-faizdb.exe
+/faizdb
+/faizdb.exe
+/dist_local/faizdb
 *.so
 *.dylib
 *.dll
