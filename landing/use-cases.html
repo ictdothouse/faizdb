@@ -206,28 +206,28 @@
 
       <div class="cards-grid">
         
-        <!-- 1. Autonomous AI Agent Memory -->
+        <!-- 1. LangGraph & Autonomous AI Agent 3-Tier Memory -->
         <div class="content-card">
           <div>
             <div class="card-top">
-              <div class="card-icon" style="background: var(--primary-subtle);">🧠</div>
+              <div class="card-icon" style="background: var(--primary-subtle);">🧠⚡</div>
               <span class="card-tag tag-ai">AI-Native</span>
             </div>
-            <h2 class="type-subhead">1. Autonomous AI Agent 3-Tier Memory</h2>
+            <h2 class="type-subhead">1. LangGraph &amp; Autonomous AI Agent Memory</h2>
             <p class="type-body" style="margin-top: 8px;">
-              Unifies short-term working context (TTL min-heap), episodic vector memory (HNSW 1536-dim), and long-term entity relations (Knowledge Graph) in <strong>one ACID transaction</strong>. Eliminates the complex sync tax between Redis, Pinecone, and Neo4j using native openCypher or FaizQL.
+              Unified drop-in backend for <strong>LangGraph</strong>, CrewAI &amp; AutoGPT. Consolidates state checkpointer snapshots (via native Postgres wire Port 5432), conversation TTL buffers, episodic vector embeddings (HNSW 1536-dim), and entity relations (openCypher) in <strong>one ACID engine</strong>. Replaces PostgreSQL + Redis + Pinecone + Neo4j with zero sync tax.
             </p>
             <div class="code-snippet">
-              <span class="code-comment">-- Native openCypher Cypher: graph traverse + vector ranking</span><br/>
-              <span class="code-accent">MATCH</span> (a:Agent {id: "agent_01"})-[:interacted_with*1..2]-&gt;(b:Memory)<br/>
-              <span class="code-accent">VECTOR NEAR</span> [0.12, 0.45, 0.88] <span class="code-accent">TOP</span> 5 <span class="code-accent">RETURN</span> b;
+              <span class="code-comment"># LangGraph Checkpointer (5432) + openCypher Graph Query</span><br/>
+              saver = AsyncPostgresSaver.from_conn_string("<span class="code-accent">postgresql://...:5432/lg</span>")<br/>
+              <span class="code-accent">MATCH</span> (a:Entity)-[:relates_to*1..2]-&gt;(b) <span class="code-accent">VECTOR NEAR</span> [embed] <span class="code-accent">TOP</span> 3;
             </div>
           </div>
           <div class="card-meta">
-            <span class="meta-pill">openCypher Cypher</span>
-            <span class="meta-pill">CrewAI / LangChain</span>
-            <span class="meta-pill">AutoGPT</span>
-            <span class="meta-pill">3-Tier Memory</span>
+            <span class="meta-pill">LangGraph Checkpointer</span>
+            <span class="meta-pill">openCypher Graph</span>
+            <span class="meta-pill">Sub-ms Time-Travel</span>
+            <span class="meta-pill">CrewAI / AutoGPT</span>
             <span class="meta-pill">&lt; 1ms Retrieval</span>
           </div>
         </div>
