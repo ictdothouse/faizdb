@@ -617,6 +617,7 @@ let kafka_json = cdc_event.to_kafka_message()?;
 * [🏛️ Tier-1 Engineering & Architecture Guide](docs/TIER1_ENGINEERING_GUIDE.md) — SIMD Vector Math, Adaptive Replacement Cache (ARC), Prometheus telemetry, Chaos Testing, and YCSB.
 * [🤖 AI, LLM, LangGraph & Real-Time Gaming Use Cases](docs/USE_CASES_AND_SOLUTIONS.md) — LangGraph unified backend checkpointer, Semantic caching (cut 70%+ LLM tokens), Agentic 3-tier memory (Postgres+Redis+Pinecone+Neo4j in 1), GraphRAG, PyTorch training streaming, and real-time multiplayer gaming.
 * [🧪 Testing & Benchmarks Guide](docs/TESTING_AND_BENCHMARKS.md) — Live benchmark suites, Rust integration tests, Chaos tests, and YCSB runner.
+* [📖 Universal Commands & Syntax Reference Manual](docs/COMMANDS_AND_SYNTAX_REFERENCE.md) — Complete master manual & cheat-sheet for CLI commands, SQL statements, openCypher Graph, FaizQL Multi-Model, MongoDB wire queries, REST endpoints, and gRPC RPCs.
 * [🌐 Universal API Reference](docs/API_REFERENCE.md) — Multi-protocol matrix, gRPC RPCs, REST endpoints, EdDSA JWT auth, and Geo-Replication.
 * [📦 Official Client SDKs Guide](docs/SDK_GUIDE.md) — Complete guides and examples for Node.js/TypeScript, Python (`pyproject.toml`), and Go.
 * [⚔️ Competitive Analysis & Architectural Matrix](docs/COMPETITIVE_ANALYSIS.md) — Deep-dive vs SurrealDB, CockroachDB, Qdrant, ArangoDB, FerretDB, and MongoDB Atlas.
