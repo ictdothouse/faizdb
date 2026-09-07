@@ -245,29 +245,36 @@ Following completion of Phase 2 features (out-of-core pagination, drop collectio
 
 Phase 3 transitions FaizDB from single-tier storage and scalar vector processing into an automated, hardware-accelerated hybrid enterprise engine:
 
-### A. Architectural Enhancements:
+### A. Architectural Enhancements & Forensic Hardening:
 1. **Automated Tiered Storage (`StorageEngine` + `TieredStorageManager`)**:
    - Transparent point lookups (`get`) and prefix scans (`prefix_scan`) seamlessly query Hot NVMe and Cold HDD/Blob tiers without application-level branching.
    - Dual-tier SSTable reader management (`cold_sstables: RwLock<Vec<SSTableReader>>`) with ARC block caching for cold-tier blocks.
-   - Autonomous background migration (`maybe_trigger_tier_migration`) evaluates hot-tier capacity and age thresholds on MemTable flushes, relocating older SSTables to `cold_dir`.
+   - **Cross-Tier Zombie Resurrection Prevention**: When hot tier compaction runs while cold SSTables exist, tombstones are preserved (`drop_tombstones = false`), preventing deleted keys from prematurely reappearing from older cold storage tables.
+   - **Deterministic Compaction Path Ordering**: SSTable paths are passed in strictly ascending age order (`.iter().rev()`), ensuring that `merge_sstables`' highest-index precedence assigns winner status to the newest updates rather than stale records.
+   - **Dedicated Bottom-Tier Cold Compaction (`compact_cold`)**: Allows merging and purging tombstones within cold storage safely once data reaches the terminal storage tier.
+   - **Deterministic Migration Prioritization**: Candidates are evaluated oldest-first with projected hot capacity decrementing, preserving newest hot data in NVMe while evicting only qualifying tables.
    - Full persistence across database restarts: cold SSTables are scanned, registered, and validated during `StorageEngine::open()`.
    - Real-time telemetry (`StorageStats` and `TieredStorageStats`) tracking active hot vs. cold bytes, tables, and access frequencies.
 2. **Hardware SIMD Vector Acceleration (`faizdb-vector`)**:
    - Upgraded core distance kernels (`cosine_distance`, `squared_euclidean_distance`, and `dot_product_distance`) to 8-lane unrolled loops with trailing remainder handlers.
    - Emits 256-bit AVX2 / ARM NEON SIMD instructions, drastically accelerating high-dimensional vector search for modern 1536-dim (OpenAI) and 4096-dim (Llama) embeddings.
+   - Hardened slice length bounds (`a.len().min(b.len())`) to defensively prevent out-of-bounds panics on mismatched inputs.
 3. **Columnar Analytical Aggregation (`ColumnarBatch`)**:
    - Vectorized analytical aggregation functions (`avg_f64`, `min_f64`, `max_f64`, and `count`) execute directly on columnar vectors without deserializing full JSON document trees.
+   - Implemented zero-allocation accumulators for `avg_f64` to maximize throughput.
 
 ### B. Test Suite & Verification Results:
-* **Tiered Storage Integration Suite (`test_tiered_storage_engine_integration.rs`)**: 5/5 passed in 0.04s:
+* **Tiered Storage Integration Suite (`test_tiered_storage_engine_integration.rs`)**: 7/7 passed in 0.01s:
   - `test_tiered_storage_initialization_and_telemetry`: PASS
   - `test_transparent_point_lookup_across_hot_and_cold_tiers`: PASS
   - `test_transparent_prefix_scan_across_hybrid_tiers`: PASS
   - `test_cold_sstable_persistence_and_reopen`: PASS
   - `test_automatic_tier_migration_on_flush`: PASS
+  - `test_hot_compaction_preserves_tombstones_preventing_cold_zombie_resurrection`: PASS
+  - `test_cold_sstable_compaction_and_purging`: PASS
 * **Hardware SIMD Vector Math (`faizdb-vector`)**: 16/16 passed in 0.38s (all distance, quantization, and HNSW index tests).
 * **Core Analytical Aggregations (`faizdb-core`)**: 76/76 unit tests passed.
-* **Static Analysis & Linting**: `cargo clippy --workspace --all-targets -- -D warnings` verified 100% clean with **0 warnings and 0 errors** across all 7 workspace crates in 45.95s.
+* **Static Analysis & Linting**: `cargo clippy --workspace --all-targets -- -D warnings` verified 100% clean with **0 warnings and 0 errors** across all 7 workspace crates in 26.66s.
 * **Full Workspace Test Suite (`cargo test --workspace`)**: 100% passed across all 7 crates (200+ unit, integration, wire protocol, and chaos tests).
 
 ---

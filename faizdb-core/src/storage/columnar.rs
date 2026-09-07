@@ -219,23 +219,35 @@ impl ColumnarBatch {
         }
     }
 
-    /// High-Speed Column Average (SIMD-Friendly Columnar Scan)
+    /// High-Speed Column Average (SIMD-Friendly Columnar Scan with Zero Allocations)
     pub fn avg_f64(&self, column_name: &str) -> Option<f64> {
         if let Some(ColumnData::Float64(vals)) = self.columns.get(column_name) {
-            let non_nulls: Vec<f64> = vals.iter().filter_map(|&v| v).collect();
-            if non_nulls.is_empty() {
+            let mut sum = 0.0f64;
+            let mut count = 0usize;
+            for &v in vals {
+                if let Some(x) = v {
+                    sum += x;
+                    count += 1;
+                }
+            }
+            if count == 0 {
                 None
             } else {
-                let sum: f64 = non_nulls.iter().sum();
-                Some(sum / non_nulls.len() as f64)
+                Some(sum / count as f64)
             }
         } else if let Some(ColumnData::Int64(vals)) = self.columns.get(column_name) {
-            let non_nulls: Vec<f64> = vals.iter().filter_map(|&v| v.map(|i| i as f64)).collect();
-            if non_nulls.is_empty() {
+            let mut sum = 0.0f64;
+            let mut count = 0usize;
+            for &v in vals {
+                if let Some(i) = v {
+                    sum += i as f64;
+                    count += 1;
+                }
+            }
+            if count == 0 {
                 None
             } else {
-                let sum: f64 = non_nulls.iter().sum();
-                Some(sum / non_nulls.len() as f64)
+                Some(sum / count as f64)
             }
         } else {
             None

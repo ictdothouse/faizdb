@@ -80,7 +80,7 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
     let mut norm_b6 = 0.0f32;
     let mut norm_b7 = 0.0f32;
 
-    let len = a.len();
+    let len = a.len().min(b.len());
     let chunks = len / 8;
 
     for i in 0..chunks {
@@ -168,7 +168,7 @@ pub fn squared_euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     let mut s6 = 0.0f32;
     let mut s7 = 0.0f32;
 
-    let len = a.len();
+    let len = a.len().min(b.len());
     let chunks = len / 8;
 
     for i in 0..chunks {
@@ -212,7 +212,7 @@ pub fn dot_product_distance(a: &[f32], b: &[f32]) -> f32 {
     let mut d6 = 0.0f32;
     let mut d7 = 0.0f32;
 
-    let len = a.len();
+    let len = a.len().min(b.len());
     let chunks = len / 8;
 
     for i in 0..chunks {

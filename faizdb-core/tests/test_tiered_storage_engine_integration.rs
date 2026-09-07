@@ -238,3 +238,127 @@ fn test_automatic_tier_migration_on_flush() {
     assert_eq!(val, Some(b"val_1".to_vec()));
 }
 
+#[test]
+fn test_hot_compaction_preserves_tombstones_preventing_cold_zombie_resurrection() {
+    let dir = tempdir().unwrap();
+    let data_dir = dir.path().join("data");
+    let hot_dir = data_dir.join("sst");
+    let cold_dir = data_dir.join("cold");
+
+    let tiered_cfg = TieredStorageConfig {
+        hot_dir: hot_dir.clone(),
+        cold_dir: Some(cold_dir.clone()),
+        max_hot_bytes: 1_000_000, // Do not auto-migrate so we can control migration manually
+        cold_migration_age_days: 0,
+        enable_auto_tiering: false,
+    };
+
+    let storage_cfg = StorageConfig {
+        data_dir: data_dir.clone(),
+        memtable_size: 10_000,
+        tiered_storage: Some(tiered_cfg),
+        ..Default::default()
+    };
+
+    let engine = StorageEngine::open(storage_cfg).unwrap();
+
+    // 1. Write user:101 and migrate to Cold
+    engine.put(b"user:101", b"alice").unwrap();
+    engine.flush().unwrap();
+    engine.trigger_tier_migration().unwrap();
+
+    assert_eq!(engine.stats().cold_sstable_count, 1);
+    assert_eq!(engine.stats().sstable_count, 0);
+    assert_eq!(engine.get(b"user:101").unwrap(), Some(b"alice".to_vec()));
+
+    // 2. Delete user:101 in Hot Tier (writes tombstone) and flush
+    engine.delete(b"user:101").unwrap();
+    engine.flush().unwrap();
+
+    // 3. Write user:102 in Hot Tier and flush
+    engine.put(b"user:102", b"bob").unwrap();
+    engine.flush().unwrap();
+
+    assert_eq!(engine.stats().sstable_count, 2, "Hot tier must have 2 SSTables");
+
+    // 4. Trigger Hot Compaction
+    let compacted_count = engine.compact().unwrap();
+    assert_eq!(compacted_count, 2, "Must compact the 2 hot SSTables");
+    assert_eq!(engine.stats().sstable_count, 1, "Hot tier now has 1 merged SSTable");
+
+    // 5. CRITICAL VERIFICATION: Tombstone MUST be retained in hot merged table
+    // to shadow the old record in Cold tier and prevent zombie resurrection!
+    let deleted_user = engine.get(b"user:101").unwrap();
+    assert_eq!(
+        deleted_user, None,
+        "Zombie resurrection bug: user:101 was deleted but reappeared from cold storage!"
+    );
+
+    let active_user = engine.get(b"user:102").unwrap();
+    assert_eq!(active_user, Some(b"bob".to_vec()));
+
+    let scan_results = engine.prefix_scan(b"user:").unwrap();
+    assert_eq!(scan_results.len(), 1);
+    assert_eq!(scan_results[0], (b"user:102".to_vec(), b"bob".to_vec()));
+}
+
+#[test]
+fn test_cold_sstable_compaction_and_purging() {
+    let dir = tempdir().unwrap();
+    let data_dir = dir.path().join("data");
+    let hot_dir = data_dir.join("sst");
+    let cold_dir = data_dir.join("cold");
+
+    let tiered_cfg = TieredStorageConfig {
+        hot_dir: hot_dir.clone(),
+        cold_dir: Some(cold_dir.clone()),
+        max_hot_bytes: 1_000_000,
+        cold_migration_age_days: 0,
+        enable_auto_tiering: false,
+    };
+
+    let storage_cfg = StorageConfig {
+        data_dir: data_dir.clone(),
+        memtable_size: 10_000,
+        tiered_storage: Some(tiered_cfg),
+        ..Default::default()
+    };
+
+    let engine = StorageEngine::open(storage_cfg).unwrap();
+
+    // Batch 1 -> Cold
+    engine.put(b"archive:item1", b"v1_old").unwrap();
+    engine.flush().unwrap();
+    engine.trigger_tier_migration().unwrap();
+
+    // Batch 2 -> Cold (updates item1, adds item2)
+    engine.put(b"archive:item1", b"v1_updated").unwrap();
+    engine.put(b"archive:item2", b"v2_created").unwrap();
+    engine.flush().unwrap();
+    engine.trigger_tier_migration().unwrap();
+
+    // Batch 3 -> Cold (adds item3, deletes item2)
+    engine.put(b"archive:item3", b"v3_created").unwrap();
+    engine.delete(b"archive:item2").unwrap();
+    engine.flush().unwrap();
+    engine.trigger_tier_migration().unwrap();
+
+    assert_eq!(engine.stats().cold_sstable_count, 3, "Should have 3 cold SSTables");
+
+    // Compact Cold tier
+    let cold_compacted = engine.compact_cold().unwrap();
+    assert_eq!(cold_compacted, 3, "All 3 cold SSTables should be merged");
+    assert_eq!(engine.stats().cold_sstable_count, 1, "Cold tier should now have 1 compacted table");
+
+    // Verify point lookups and prefix scans on compacted cold tier
+    assert_eq!(engine.get(b"archive:item1").unwrap(), Some(b"v1_updated".to_vec()));
+    assert_eq!(engine.get(b"archive:item2").unwrap(), None, "Deleted item2 should be tombstoned/purged");
+    assert_eq!(engine.get(b"archive:item3").unwrap(), Some(b"v3_created".to_vec()));
+
+    let scan = engine.prefix_scan(b"archive:").unwrap();
+    assert_eq!(scan.len(), 2);
+    assert_eq!(scan[0], (b"archive:item1".to_vec(), b"v1_updated".to_vec()));
+    assert_eq!(scan[1], (b"archive:item3".to_vec(), b"v3_created".to_vec()));
+}
+
+

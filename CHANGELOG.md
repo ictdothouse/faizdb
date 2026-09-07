@@ -48,7 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **REST Collection Dropping Route**: Introduced `DELETE /v1/collections/{name}` REST endpoint with RBAC write authentication for complete collection lifecycle management.
 - **Memory Cap Enforcement on Recovery**: Hardened `Collection::load_document` with memory cap enforcement preventing out-of-memory blowouts during crash recovery or snapshot restores.
 - **Defensive SSTable & WAL Zero-Copy Bounds**: Hardened SSTable `read_entry_ref` and WAL `from_reader` against integer overflow and unbounded memory allocations via checked arithmetic and `MAX_WAL_SIZE` caps.
-- **Saturating Atomic Counters**: Replaced raw `fetch_sub` with `saturating_sub` across collection document counters and byte sizing, eliminating modulo $2^{64}$ underflow risks.
+- **Cross-Tier LSM Tombstone Retention (Zombie Resurrection Prevention)**: Preserved tombstones during hot-tier compaction whenever cold SSTables exist (`!cold_sstables.is_empty()`), eliminating zombie record resurrection across hybrid storage tiers.
+- **Deterministic Compaction Path Precedence**: Enforced ascending age order (`.iter().rev()`) when merging SSTables, ensuring newest updates deterministically supersede stale records in `merge_sstables`.
+- **Terminal Tier Cold Compaction**: Added `compact_cold()` to reclaim space and permanently purge tombstones from cold storage without application downtime.
+- **Defensive Vector Slice Clamping**: Guarded SIMD vector distance calculations against out-of-bounds slice indexing via `a.len().min(b.len())`.
+- **Zero-Allocation Columnar Aggregation**: Optimized `avg_f64` to accumulate sums in a single pass without allocating temporary vectors.
 - **Code Quality & Linter Compliance**: Resolved all workspace Clippy lints to achieve full compliance with `-D warnings` strict build policy.
 
 ### Changed

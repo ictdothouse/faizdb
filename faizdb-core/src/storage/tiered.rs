@@ -151,7 +151,8 @@ impl TieredStorageManager {
         }
     }
 
-    /// Check if any SSTables qualify for cold tier migration based on age or capacity threshold
+    /// Check if any SSTables qualify for cold tier migration based on age or capacity threshold.
+    /// Candidates are sorted oldest-first so that coldest data is migrated before newer tables.
     pub fn evaluate_migration_candidates(&self) -> Vec<PathBuf> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -159,20 +160,31 @@ impl TieredStorageManager {
             .unwrap_or(0);
 
         let age_threshold_sec = (self.config.cold_migration_age_days as u64) * 86400;
+
+        // Collect all Hot SSTables
+        let mut hot_tables: Vec<(&PathBuf, &TieredSSTableMeta)> = self
+            .tables
+            .iter()
+            .filter(|(_, meta)| meta.tier == StorageTier::Hot)
+            .collect();
+
+        // Sort oldest first (lowest created_at_sec, then lexicographical path)
+        hot_tables.sort_by(|(p1, m1), (p2, m2)| {
+            m1.created_at_sec
+                .cmp(&m2.created_at_sec)
+                .then_with(|| p1.cmp(p2))
+        });
+
         let mut candidates = Vec::new();
+        let mut projected_hot_bytes = self.total_hot_bytes;
 
-        for (path, meta) in &self.tables {
-            if meta.tier == StorageTier::Hot {
-                // Check age threshold
-                if now.saturating_sub(meta.created_at_sec) >= age_threshold_sec {
-                    candidates.push(path.clone());
-                    continue;
-                }
+        for (path, meta) in hot_tables {
+            let is_expired = now.saturating_sub(meta.created_at_sec) >= age_threshold_sec;
+            let exceeds_capacity = projected_hot_bytes > self.config.max_hot_bytes;
 
-                // Check capacity threshold
-                if self.total_hot_bytes > self.config.max_hot_bytes {
-                    candidates.push(path.clone());
-                }
+            if is_expired || exceeds_capacity {
+                candidates.push((*path).clone());
+                projected_hot_bytes = projected_hot_bytes.saturating_sub(meta.size_bytes);
             }
         }
 

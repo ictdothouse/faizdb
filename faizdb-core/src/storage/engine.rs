@@ -716,7 +716,12 @@ impl StorageEngine {
                     Ok(cold_path) => {
                         match SSTableReader::open(&cold_path) {
                             Ok(reader) => {
-                                self.cold_sstables.write().push(reader);
+                                {
+                                    let mut cold_ssts = self.cold_sstables.write();
+                                    cold_ssts.insert(0, reader);
+                                    // Ensure strictly newest-to-oldest generation order
+                                    cold_ssts.sort_by(|a, b| b.path().cmp(a.path()));
+                                }
                                 migrated_count += 1;
                                 tracing::info!(
                                     "Migrated SSTable {} -> {}",
@@ -775,14 +780,79 @@ impl StorageEngine {
         res
     }
 
+    /// Perform LSM-Tree compaction on Cold SSTables: merge multiple cold SSTables into
+    /// a single sorted cold SSTable. Because Cold is the bottom-most tier, tombstones
+    /// are permanently purged here.
+    pub fn compact_cold(&self) -> FaizResult<usize> {
+        self.check_open()?;
+        let (cold_paths, count) = {
+            let cold = self.cold_sstables.read();
+            if cold.len() < 2 {
+                return Ok(0);
+            }
+            // Pass paths in ascending age order (oldest to newest) because merge_sstables
+            // resolves duplicate keys by giving precedence to the highest-indexed table.
+            let paths: Vec<std::path::PathBuf> =
+                cold.iter().rev().map(|s| s.path().to_path_buf()).collect();
+            let count = cold.len();
+            (paths, count)
+        };
+
+        let cold_dir = match &self.config.tiered_storage {
+            Some(t) => match &t.cold_dir {
+                Some(d) => d.clone(),
+                None => return Ok(0),
+            },
+            None => return Ok(0),
+        };
+
+        let gen_num = self.sstable_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let merged_path = cold_dir.join(format!("sst_cold_{gen_num:06}_compacted.sst"));
+
+        // Bottom-most cold tier: tombstones can be safely purged
+        crate::storage::compaction::merge_sstables(&cold_paths, &merged_path, true)?;
+
+        let merged_reader = SSTableReader::open(&merged_path)?;
+
+        {
+            let mut cold = self.cold_sstables.write();
+            cold.retain(|s| !cold_paths.contains(&s.path().to_path_buf()));
+            cold.insert(0, merged_reader);
+            cold.sort_by(|a, b| b.path().cmp(a.path()));
+        }
+
+        for p in &cold_paths {
+            let _ = std::fs::remove_file(p);
+        }
+
+        if let Some(mgr) = &self.tiered_manager {
+            let mut m = mgr.write();
+            for p in &cold_paths {
+                m.remove_sstable(p);
+            }
+            let merged_size = fs::metadata(&merged_path).map(|meta| meta.len()).unwrap_or(0);
+            m.register_cold_sstable(merged_path.clone(), merged_size);
+        }
+
+        tracing::info!(
+            "Compacted {} Cold SSTables into: {}",
+            count,
+            merged_path.display()
+        );
+
+        Ok(count)
+    }
+
     fn run_compaction_locked(&self) -> FaizResult<usize> {
         let (sst_paths, count) = {
             let ssts = self.sstables.read();
             if ssts.len() < 2 {
                 return Ok(0);
             }
+            // Pass paths in ascending age order (oldest to newest) because merge_sstables
+            // resolves duplicate keys by giving precedence to the highest-indexed table.
             let paths: Vec<std::path::PathBuf> =
-                ssts.iter().map(|s| s.path().to_path_buf()).collect();
+                ssts.iter().rev().map(|s| s.path().to_path_buf()).collect();
             let count = ssts.len();
             (paths, count)
         };
@@ -794,8 +864,11 @@ impl StorageEngine {
             .join("sst")
             .join(format!("sst_{gen_num:06}_compacted.sst"));
 
-        // Merge input SSTables (dropping tombstones for compacted layer)
-        crate::storage::compaction::merge_sstables(&sst_paths, &merged_path, true)?;
+        // If cold SSTables exist, we MUST preserve tombstones during hot compaction
+        // so deleted records in cold storage are not resurrected (prevent zombie resurrection)
+        let has_cold = !self.cold_sstables.read().is_empty();
+        let drop_tombstones = !has_cold;
+        crate::storage::compaction::merge_sstables(&sst_paths, &merged_path, drop_tombstones)?;
 
         // Open newly merged SSTable reader
         let merged_reader = SSTableReader::open(&merged_path)?;
