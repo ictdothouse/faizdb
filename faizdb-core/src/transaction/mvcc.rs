@@ -260,15 +260,27 @@ impl TransactionManager {
         Ok(())
     }
 
-    /// Record a transaction as committed
+    /// Record a transaction as committed atomically with conflict validation
     pub fn commit(&self, txn: &mut Transaction) -> FaizResult<()> {
-        self.validate(txn)?;
-
         let commit_ts = NEXT_TXN_ID.fetch_add(1, Ordering::SeqCst);
 
-        // Record committed writes for future conflict detection
+        // Atomically validate and record committed writes under a single write lock
+        // to prevent time-of-check to time-of-use (TOCTOU) race conditions.
         {
             let mut committed = self.committed_writes.write();
+
+            for key in txn.write_buffer.keys() {
+                if let Some(&prev_commit_ts) = committed.get(key) {
+                    if prev_commit_ts > txn.snapshot_ts {
+                        return Err(FaizError::TransactionConflict(format!(
+                            "Key {:?} was modified by transaction committed at ts={}",
+                            String::from_utf8_lossy(key),
+                            prev_commit_ts
+                        )));
+                    }
+                }
+            }
+
             for key in txn.write_buffer.keys() {
                 committed.insert(key.clone(), commit_ts);
             }

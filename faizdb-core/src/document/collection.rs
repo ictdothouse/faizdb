@@ -445,6 +445,22 @@ impl Collection {
         })
     }
 
+    /// Check whether a document matches the given key-value filter (supporting _id / id and dot notation)
+    pub fn matches_filter(doc: &Document, filter: &[(String, Value)]) -> bool {
+        filter.iter().all(|(key, expected)| {
+            if key == "_id" || key == "id" {
+                match expected {
+                    Value::String(s) => s.as_str() == doc.id.as_str(),
+                    _ => false,
+                }
+            } else if let Some(actual) = doc.get_nested(key) {
+                actual == expected
+            } else {
+                false
+            }
+        })
+    }
+
     /// Find all documents matching a filter.
     ///
     /// The filter is a set of key-value pairs that must all match.
@@ -475,16 +491,7 @@ impl Collection {
             let results: Vec<Document> = self
                 .documents
                 .iter()
-                .filter(|entry| {
-                    let doc = entry.value();
-                    filter.iter().all(|(key, expected)| {
-                        if let Some(actual) = doc.get_nested(key) {
-                            actual == expected
-                        } else {
-                            false
-                        }
-                    })
-                })
+                .filter(|entry| Self::matches_filter(entry.value(), filter))
                 .skip(skip)
                 .take(limit)
                 .map(|entry| entry.value().clone())
@@ -499,15 +506,7 @@ impl Collection {
             let results: Vec<Document> = entries
                 .into_iter()
                 .filter_map(|(_k, v)| serde_json::from_slice::<Document>(&v).ok())
-                .filter(|doc| {
-                    filter.iter().all(|(key, expected)| {
-                        if let Some(actual) = doc.get_nested(key) {
-                            actual == expected
-                        } else {
-                            false
-                        }
-                    })
-                })
+                .filter(|doc| Self::matches_filter(doc, filter))
                 .skip(skip)
                 .take(limit)
                 .collect();
@@ -684,14 +683,7 @@ impl Collection {
         let mut count = 0u64;
 
         for mut entry in self.documents.iter_mut() {
-            let doc = entry.value();
-            let matches = filter.iter().all(|(key, expected)| {
-                if let Some(actual) = doc.get_nested(key) {
-                    actual == expected
-                } else {
-                    false
-                }
-            });
+            let matches = Self::matches_filter(entry.value(), filter);
 
             if matches {
                 let doc = entry.value_mut();
@@ -722,13 +714,7 @@ impl Collection {
                             if self.documents.contains_key(&id_str) {
                                 continue; // Already processed in RAM loop
                             }
-                            let matches = filter.iter().all(|(key, expected)| {
-                                if let Some(actual) = doc.get_nested(key) {
-                                    actual == expected
-                                } else {
-                                    false
-                                }
-                            });
+                            let matches = Self::matches_filter(&doc, filter);
                             if matches {
                                 for (key, value) in updates {
                                     doc.set(key.clone(), value.clone());
@@ -865,16 +851,7 @@ impl Collection {
             return self
                 .documents
                 .iter()
-                .filter(|entry| {
-                    let doc = entry.value();
-                    filter.iter().all(|(key, expected)| {
-                        if let Some(actual) = doc.get_nested(key) {
-                            actual == expected
-                        } else {
-                            false
-                        }
-                    })
-                })
+                .filter(|entry| Self::matches_filter(entry.value(), filter))
                 .count() as u64;
         }
 

@@ -403,33 +403,41 @@ async fn handle_postgres_connection(
                     }
                 };
 
-                // Read format codes
+                // Read format codes safely (guarding against negative values)
                 if cursor + 2 <= body.len() {
-                    let num_formats = i16::from_be_bytes([body[cursor], body[cursor + 1]]) as usize;
-                    cursor += 2 + (num_formats * 2);
+                    let num_formats = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
+                    cursor += 2;
+                    if num_formats > 0 {
+                        let bytes_to_skip = (num_formats as usize) * 2;
+                        cursor = cursor.saturating_add(bytes_to_skip).min(body.len());
+                    }
                 }
 
                 // Read bound parameter values
                 let mut params = Vec::new();
                 if cursor + 2 <= body.len() {
-                    let num_params = i16::from_be_bytes([body[cursor], body[cursor + 1]]) as usize;
+                    let num_params = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
                     cursor += 2;
-                    for _ in 0..num_params {
-                        if cursor + 4 <= body.len() {
-                            let param_len = i32::from_be_bytes([
-                                body[cursor],
-                                body[cursor + 1],
-                                body[cursor + 2],
-                                body[cursor + 3],
-                            ]);
-                            cursor += 4;
-                            if param_len == -1 {
-                                params.push("NULL".to_string());
-                            } else if param_len >= 0 && cursor + (param_len as usize) <= body.len()
-                            {
-                                let val_bytes = &body[cursor..cursor + (param_len as usize)];
-                                params.push(String::from_utf8_lossy(val_bytes).to_string());
-                                cursor += param_len as usize;
+                    if num_params > 0 {
+                        for _ in 0..num_params {
+                            if cursor + 4 <= body.len() {
+                                let param_len = i32::from_be_bytes([
+                                    body[cursor],
+                                    body[cursor + 1],
+                                    body[cursor + 2],
+                                    body[cursor + 3],
+                                ]);
+                                cursor += 4;
+                                if param_len == -1 {
+                                    params.push("NULL".to_string());
+                                } else if param_len >= 0 {
+                                    let p_len = param_len as usize;
+                                    if cursor + p_len <= body.len() {
+                                        let val_bytes = &body[cursor..cursor + p_len];
+                                        params.push(String::from_utf8_lossy(val_bytes).to_string());
+                                        cursor += p_len;
+                                    }
+                                }
                             }
                         }
                     }
@@ -473,19 +481,8 @@ async fn handle_postgres_connection(
 
                 let portal = portals.get(&portal_name).cloned();
                 if let Some(portal) = portal {
-                    // Parameter substitution: replace $1, $2 with values
-                    let mut resolved_query = portal.query.clone();
-                    for (idx, val) in portal.params.iter().enumerate() {
-                        let placeholder = format!("${}", idx + 1);
-                        let replacement = if val == "NULL" {
-                            "NULL".to_string()
-                        } else if val.parse::<f64>().is_ok() {
-                            val.clone()
-                        } else {
-                            format!("'{}'", val.replace('\'', "''"))
-                        };
-                        resolved_query = resolved_query.replace(&placeholder, &replacement);
-                    }
+                    // Safe parameter substitution: matches $N whole tokens outside quotes
+                    let resolved_query = substitute_postgres_params(&portal.query, &portal.params);
 
                     let response_bytes =
                         handle_postgres_execute_query(&db, &resolved_query, &mut in_transaction);
@@ -555,4 +552,67 @@ async fn handle_postgres_connection(
     }
 
     Ok(())
+}
+
+/// Safely substitute PostgreSQL extended query parameters ($1, $2, etc.) into the SQL string.
+/// Distinguishes full integer tokens (e.g. $1 vs $10) and does not replace tokens inside string literals.
+pub fn substitute_postgres_params(query: &str, params: &[String]) -> String {
+    let mut out = String::with_capacity(query.len() + params.len() * 16);
+    let chars: Vec<char> = query.chars().collect();
+    let mut i = 0;
+    let mut in_quote = false;
+
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\'' {
+            // Check for escaped quote ''
+            if in_quote && i + 1 < chars.len() && chars[i + 1] == '\'' {
+                out.push('\'');
+                out.push('\'');
+                i += 2;
+                continue;
+            }
+            in_quote = !in_quote;
+            out.push(ch);
+            i += 1;
+        } else if ch == '$' && !in_quote {
+            // Check if followed by digits
+            let mut j = i + 1;
+            while j < chars.len() && chars[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > i + 1 {
+                let num_str: String = chars[i + 1..j].iter().collect();
+                if let Ok(idx) = num_str.parse::<usize>() {
+                    if idx >= 1 && idx <= params.len() {
+                        let val = &params[idx - 1];
+                        if val == "NULL" {
+                            out.push_str("NULL");
+                        } else if val.parse::<f64>().is_ok() {
+                            out.push_str(val);
+                        } else {
+                            out.push('\'');
+                            out.push_str(&val.replace('\'', "''"));
+                            out.push('\'');
+                        }
+                    } else {
+                        // Out of range parameter, keep original token
+                        out.push('$');
+                        out.push_str(&num_str);
+                    }
+                } else {
+                    out.push('$');
+                    out.push_str(&num_str);
+                }
+                i = j;
+            } else {
+                out.push(ch);
+                i += 1;
+            }
+        } else {
+            out.push(ch);
+            i += 1;
+        }
+    }
+    out
 }

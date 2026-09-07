@@ -14,11 +14,16 @@ use faizdb_query::DatabaseContext;
 struct CachedCursor {
     ns: String,
     docs: Vec<BsonDocument>,
-    #[allow(dead_code)]
     created_at: std::time::Instant,
 }
 
 static CURSOR_CACHE: LazyLock<DashMap<i64, CachedCursor>> = LazyLock::new(DashMap::new);
+
+/// Evict cursors older than 10 minutes (600 seconds) to prevent unbounded memory growth
+fn reap_expired_cursors() {
+    let now = std::time::Instant::now();
+    CURSOR_CACHE.retain(|_, cursor| now.duration_since(cursor.created_at).as_secs() < 600);
+}
 
 /// Session state for a MongoDB Wire Protocol connection
 #[derive(Debug, Clone)]
@@ -533,8 +538,20 @@ fn handle_find(
                 _ => 1,
             };
             matched_docs.sort_by(|a, b| {
-                let va = a.get_nested(k);
-                let vb = b.get_nested(k);
+                let id_a;
+                let id_b;
+                let va = if k == "_id" || k == "id" {
+                    id_a = faizdb_core::document::model::Value::String(a.id.as_str().to_string());
+                    Some(&id_a)
+                } else {
+                    a.get_nested(k)
+                };
+                let vb = if k == "_id" || k == "id" {
+                    id_b = faizdb_core::document::model::Value::String(b.id.as_str().to_string());
+                    Some(&id_b)
+                } else {
+                    b.get_nested(k)
+                };
                 let cmp = match (va, vb) {
                     (Some(x), Some(y)) => match (x, y) {
                         (
@@ -598,6 +615,7 @@ fn handle_find(
     let first_batch: Vec<BsonDocument> = all_bson.drain(0..initial_batch_count).collect();
 
     let cursor_id = if !all_bson.is_empty() {
+        reap_expired_cursors();
         let new_id = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -629,6 +647,7 @@ fn handle_find(
 }
 
 fn handle_get_more(cmd: &BsonDocument) -> BsonDocument {
+    reap_expired_cursors();
     let cursor_id = match cmd.get("getMore") {
         Some(Bson::Int64(i)) => *i,
         Some(Bson::Int32(i)) => *i as i64,

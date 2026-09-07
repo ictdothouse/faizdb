@@ -46,7 +46,7 @@ impl FilterExpr {
                             id_val = Value::String(doc.id.to_string());
                             &id_val
                         } else {
-                            return false;
+                            return value.is_null() && *op == Operator::Eq;
                         }
                     }
                 };

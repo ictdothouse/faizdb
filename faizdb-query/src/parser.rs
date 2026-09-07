@@ -760,7 +760,50 @@ fn parse_sql_where(where_str: &str) -> Result<FilterExpr, String> {
                 .to_string()
         };
 
-        if let Some((field, val_str)) = part.split_once(">=") {
+        let upper_part = part.to_uppercase();
+        if let Some(pos) = upper_part.find(" IS NOT NULL") {
+            let field = extract_field(&part[..pos]);
+            exprs.push(FilterExpr::Field {
+                field,
+                op: Operator::Neq,
+                value: Value::Null,
+            });
+            continue;
+        } else if let Some(pos) = upper_part.find(" IS NULL") {
+            let field = extract_field(&part[..pos]);
+            exprs.push(FilterExpr::Field {
+                field,
+                op: Operator::Eq,
+                value: Value::Null,
+            });
+            continue;
+        } else if let Some(pos) = upper_part.find(" LIKE ") {
+            let field = extract_field(&part[..pos]);
+            let pattern_raw = part[pos + 6..].trim().trim_matches(|c| c == '\'' || c == '"');
+            let (op, pattern) = if pattern_raw.starts_with('%') && pattern_raw.ends_with('%') && pattern_raw.len() >= 2 {
+                (Operator::Contains, &pattern_raw[1..pattern_raw.len() - 1])
+            } else if let Some(stripped) = pattern_raw.strip_prefix('%') {
+                (Operator::EndsWith, stripped)
+            } else if let Some(stripped) = pattern_raw.strip_suffix('%') {
+                (Operator::StartsWith, stripped)
+            } else {
+                (Operator::Eq, pattern_raw)
+            };
+            exprs.push(FilterExpr::Field {
+                field,
+                op,
+                value: Value::String(pattern.to_string()),
+            });
+            continue;
+        }
+
+        if let Some((field, val_str)) = part.split_once("<>") {
+            exprs.push(FilterExpr::Field {
+                field: extract_field(field),
+                op: Operator::Neq,
+                value: parse_literal(val_str.trim()),
+            });
+        } else if let Some((field, val_str)) = part.split_once(">=") {
             exprs.push(FilterExpr::Field {
                 field: extract_field(field),
                 op: Operator::Gte,

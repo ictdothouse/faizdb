@@ -997,45 +997,54 @@ impl DatabaseContext {
                         .next_back()
                         .unwrap_or(&join.on_right);
 
+                    let val_to_str = |val: &Value| -> Option<String> {
+                        match val {
+                            Value::Null => None,
+                            Value::String(s) => Some(s.clone()),
+                            Value::Integer(i) => Some(i.to_string()),
+                            Value::Float(f) => Some(f.to_string()),
+                            Value::Boolean(b) => Some(b.to_string()),
+                            Value::Uuid(u) => Some(u.to_string()),
+                            Value::DateTime(dt) => Some(dt.to_rfc3339()),
+                            _ => Some(format!("{val:?}")),
+                        }
+                    };
+
                     let mut right_hash: std::collections::HashMap<String, Vec<Document>> =
                         std::collections::HashMap::new();
                     for rdoc in right_docs {
-                        let key_val_str = match right_key {
-                            "id" | "_id" => rdoc.id.as_str().to_string(),
-                            other => match rdoc.get_nested(other) {
-                                Some(Value::String(s)) => s.clone(),
-                                Some(Value::Integer(i)) => i.to_string(),
-                                Some(v) => format!("{v:?}"),
-                                None => continue,
-                            },
+                        let key_val_opt = match right_key {
+                            "id" | "_id" => Some(rdoc.id.as_str().to_string()),
+                            other => rdoc.get_nested(other).and_then(val_to_str),
                         };
-                        right_hash.entry(key_val_str).or_default().push(rdoc);
+                        if let Some(key_val_str) = key_val_opt {
+                            right_hash.entry(key_val_str).or_default().push(rdoc);
+                        }
                     }
 
                     let mut joined_results = Vec::new();
                     for left_doc in filtered {
-                        let left_val_str = match left_key {
-                            "id" | "_id" => left_doc.id.as_str().to_string(),
-                            other => match left_doc.get_nested(other) {
-                                Some(Value::String(s)) => s.clone(),
-                                Some(Value::Integer(i)) => i.to_string(),
-                                Some(v) => format!("{v:?}"),
-                                None => String::new(),
-                            },
+                        let left_val_opt = match left_key {
+                            "id" | "_id" => Some(left_doc.id.as_str().to_string()),
+                            other => left_doc.get_nested(other).and_then(val_to_str),
                         };
 
-                        if let Some(matching_rights) = right_hash.get(&left_val_str) {
-                            for right_doc in matching_rights {
-                                let mut combined = left_doc.clone();
-                                for (k, v) in &right_doc.fields {
-                                    combined
-                                        .fields
-                                        .insert(format!("{}_{}", join.collection, k), v.clone());
-                                    if !combined.fields.contains_key(k) {
-                                        combined.fields.insert(k.clone(), v.clone());
+                        if let Some(ref left_val_str) = left_val_opt {
+                            if let Some(matching_rights) = right_hash.get(left_val_str) {
+                                for right_doc in matching_rights {
+                                    let mut combined = left_doc.clone();
+                                    for (k, v) in &right_doc.fields {
+                                        combined
+                                            .fields
+                                            .insert(format!("{}_{}", join.collection, k), v.clone());
+                                        if !combined.fields.contains_key(k) {
+                                            combined.fields.insert(k.clone(), v.clone());
+                                        }
                                     }
+                                    joined_results.push(combined);
                                 }
-                                joined_results.push(combined);
+                            } else if join.join_type == crate::ast::JoinType::Left {
+                                joined_results.push(left_doc);
                             }
                         } else if join.join_type == crate::ast::JoinType::Left {
                             joined_results.push(left_doc);
@@ -1044,11 +1053,23 @@ impl DatabaseContext {
                     filtered = joined_results;
                 }
 
-                // Apply sort_by if specified
+                // Apply sort_by if specified (supporting _id and id fields)
                 if let Some((ref field, dir)) = sort_by {
                     filtered.sort_by(|a, b| {
-                        let va = a.get_nested(field);
-                        let vb = b.get_nested(field);
+                        let id_a;
+                        let id_b;
+                        let va = if field == "id" || field == "_id" {
+                            id_a = Value::String(a.id.as_str().to_string());
+                            Some(&id_a)
+                        } else {
+                            a.get_nested(field)
+                        };
+                        let vb = if field == "id" || field == "_id" {
+                            id_b = Value::String(b.id.as_str().to_string());
+                            Some(&id_b)
+                        } else {
+                            b.get_nested(field)
+                        };
                         let cmp = match (va, vb) {
                             (Some(x), Some(y)) => match (x, y) {
                                 (Value::Integer(ix), Value::Integer(iy)) => ix.cmp(iy),

@@ -88,6 +88,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added missing ports `5432` (PostgreSQL wire) and `50051` (gRPC) to Service
 
 ### Fixed
+- **MVCC Atomic Conflict Validation (TOCTOU Race Prevention)**: Fixed race condition in `TransactionManager::commit` where conflict validation and write insertion were split across separate read and write locks, allowing concurrent transactions with overlapping write sets to commit simultaneously without detecting conflicts. Validation and insertion are now executed atomically under a single write lock.
+- **WAL Sequence Continuity on Empty Rotated Segments**: Fixed sequence counter reset bug in `find_or_create_wal_file` where a freshly rotated segment with 0 records reset the sequence number counter to 0 upon reboot, colliding with earlier WAL files. The engine now scans existing segments in reverse to maintain sequence number monotonicity.
+- **PostgreSQL Wire Extended Query Parameter Substitution & Bounds Protection**: Fixed query mangling where `$1` corrupted `$10`, `$11`, etc., and string literals containing `'$1'`. Implemented tokenizer-based substitution (`substitute_postgres_params`) matching whole `$N` tokens outside quoted string literals. Added bounds validation on `num_formats` and `num_params` preventing integer underflow panics.
+- **MongoDB Wire Cursor TTL Eviction**: Fixed unbounded memory growth in `CURSOR_CACHE` where abandoned queries left paginated cursors in RAM indefinitely. Added automated reaper evicting cursors older than 10 minutes (600s).
+- **Document Primary Identifier (`_id` / `id`) Query & Sort Resolution**: Fixed filter evaluation and query sorting where referencing `_id` or `id` returned `None` because fields only checked nested document attributes. `Collection::find` and SQL/MongoDB sorting now resolve `doc.id` natively.
+- **Relational Hash Join NULL Key Isolation & Canonical Stringification**: Fixed bug where missing foreign keys (`None`) defaulted to empty string (`""`), causing unrelated records without keys to join. INNER JOIN now strictly rejects NULL/missing keys according to ANSI SQL standards, and formats numeric, boolean, UUID, and datetime keys canonically.
+- **ANSI SQL WHERE Operators (`<>`, `IS NULL`, `IS NOT NULL`, `LIKE`)**: Added support for standard ANSI SQL inequality (`<>`), nullity checks (`IS NULL`, `IS NOT NULL`), and wildcard patterns (`LIKE '%pattern%'`, `'prefix%'`, `'%suffix'`).
 - Repository URL in `Cargo.toml` corrected from `github.com/faizdb/faizdb` → `github.com/ictdothouse/faizdb`
 - Author email corrected from `faiz@faizdb.io` → `faiz@ict.house`
 

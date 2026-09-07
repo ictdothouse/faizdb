@@ -548,9 +548,16 @@ impl Wal {
         wal_files.sort_by_key(|(_, gen_num)| *gen_num);
 
         if let Some((path, gen_num)) = wal_files.last() {
-            // Replay to find the last sequence number
-            let records = Self::replay_single_file(path)?;
-            let last_seq = records.last().map(|r| r.sequence + 1).unwrap_or(0);
+            // Find the highest sequence number across all existing WAL files
+            // (in case the newest file was rotated but had zero records before crash/shutdown)
+            let mut last_seq = 0;
+            for (f_path, _) in wal_files.iter().rev() {
+                let records = Self::replay_single_file(f_path)?;
+                if let Some(last_rec) = records.last() {
+                    last_seq = last_rec.sequence + 1;
+                    break;
+                }
+            }
             Ok((path.clone(), *gen_num, last_seq))
         } else {
             // Create first WAL file
