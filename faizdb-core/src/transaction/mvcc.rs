@@ -287,7 +287,23 @@ impl TransactionManager {
         }
 
         // Remove from active transactions
-        self.active_txns.write().remove(&txn.id);
+        {
+            let mut active = self.active_txns.write();
+            active.remove(&txn.id);
+
+            // Periodically clean up committed write history to prevent unbounded memory growth.
+            // If no other transactions are active, all history can be safely cleared.
+            if active.is_empty() {
+                drop(active);
+                self.committed_writes.write().clear();
+            } else {
+                let committed_len = self.committed_writes.read().len();
+                if committed_len > 10_000 {
+                    drop(active);
+                    self.gc();
+                }
+            }
+        }
 
         txn.mark_committed();
         Ok(())

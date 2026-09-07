@@ -719,163 +719,511 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     })
 }
 
-///// SQL WHERE parser supporting compound conditions, booleans, tautologies (`1=1`), and comparisons
-fn parse_sql_where(where_str: &str) -> Result<FilterExpr, String> {
-    // Split case-insensitively on " AND "
-    let mut and_parts = Vec::new();
-    let mut remaining = where_str.trim();
+/// Finds the index of `keyword` (case-insensitive, whole-word) that is at top-level
+/// (i.e. NOT inside single quotes `'...'`, double quotes `"..."`, backticks `` `...` ``, or parentheses `(...)`).
+pub fn find_keyword_top_level(text: &str, keyword: &str) -> Option<usize> {
+    let kw_len = keyword.len();
+    let bytes = text.as_bytes();
+    let text_len = bytes.len();
+    if kw_len == 0 || text_len < kw_len {
+        return None;
+    }
+
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_backtick = false;
+    let mut paren_depth: usize = 0;
+    let mut i = 0;
+
+    while i < text_len {
+        let b = bytes[i];
+        if b == b'\'' && !in_double && !in_backtick {
+            in_single = !in_single;
+            i += 1;
+            continue;
+        }
+        if b == b'"' && !in_single && !in_backtick {
+            in_double = !in_double;
+            i += 1;
+            continue;
+        }
+        if b == b'`' && !in_single && !in_double {
+            in_backtick = !in_backtick;
+            i += 1;
+            continue;
+        }
+
+        if in_single || in_double || in_backtick {
+            i += 1;
+            continue;
+        }
+
+        if b == b'(' {
+            paren_depth += 1;
+            i += 1;
+            continue;
+        }
+        if b == b')' {
+            paren_depth = paren_depth.saturating_sub(1);
+            i += 1;
+            continue;
+        }
+
+        if paren_depth == 0 && i + kw_len <= text_len && text[i..i + kw_len].eq_ignore_ascii_case(keyword) {
+            // Check word boundaries before and after keyword
+            let before_ok = if i == 0 {
+                true
+            } else {
+                let prev = bytes[i - 1];
+                prev.is_ascii_whitespace() || prev == b';' || prev == b')' || prev == b','
+            };
+            let after_ok = if i + kw_len == text_len {
+                true
+            } else {
+                let next = bytes[i + kw_len];
+                next.is_ascii_whitespace() || next == b';' || next == b'(' || next == b','
+            };
+
+            if before_ok && after_ok {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+
+    None
+}
+
+/// Checks if string is completely enclosed by matching outer parentheses `( ... )`
+fn has_enclosing_parens(s: &str) -> bool {
+    let s = s.trim();
+    if !s.starts_with('(') || !s.ends_with(')') || s.len() < 2 {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    let mut depth: usize = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_backtick = false;
+
+    for &b in bytes.iter().take(bytes.len() - 1) {
+        if b == b'\'' && !in_double && !in_backtick {
+            in_single = !in_single;
+            continue;
+        }
+        if b == b'"' && !in_single && !in_backtick {
+            in_double = !in_double;
+            continue;
+        }
+        if b == b'`' && !in_single && !in_double {
+            in_backtick = !in_backtick;
+            continue;
+        }
+        if in_single || in_double || in_backtick {
+            continue;
+        }
+
+        if b == b'(' {
+            depth += 1;
+        } else if b == b')' {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                // Closed before the final character of string
+                return false;
+            }
+        }
+    }
+    depth == 1 && bytes[bytes.len() - 1] == b')'
+}
+
+/// Split text by a top-level keyword outside quotes and parens
+fn split_top_level<'a>(text: &'a str, keyword: &str) -> Vec<&'a str> {
+    let mut parts = Vec::new();
+    let mut remaining = text.trim();
 
     while !remaining.is_empty() {
-        let upper = remaining.to_uppercase();
-        if let Some(pos) = upper.find(" AND ") {
-            and_parts.push(&remaining[..pos]);
-            remaining = remaining[pos + 5..].trim();
+        if let Some(pos) = find_keyword_top_level(remaining, keyword) {
+            let part = remaining[..pos].trim();
+            if !part.is_empty() {
+                parts.push(part);
+            }
+            remaining = remaining[pos + keyword.len()..].trim();
         } else {
-            and_parts.push(remaining);
+            if !remaining.is_empty() {
+                parts.push(remaining);
+            }
             break;
         }
     }
 
-    let mut exprs = Vec::new();
+    parts
+}
 
-    for part in and_parts {
-        let part = part.trim();
-        if part.is_empty() {
-            continue;
+/// Checks if prefix has a BETWEEN keyword that has not yet been matched by its paired AND keyword
+fn has_unpaired_between(text: &str) -> bool {
+    let mut remaining = text;
+    let mut unpaired = false;
+
+    while !remaining.is_empty() {
+        if !unpaired {
+            if let Some(b_pos) = find_keyword_top_level(remaining, "BETWEEN") {
+                unpaired = true;
+                remaining = &remaining[b_pos + 7..];
+            } else {
+                break;
+            }
+        } else if let Some(a_pos) = find_keyword_top_level(remaining, "AND") {
+            unpaired = false;
+            remaining = &remaining[a_pos + 3..];
+        } else {
+            break;
+        }
+    }
+
+    unpaired
+}
+
+/// Split top-level ANDs, without splitting any `AND` that belongs to a `BETWEEN ... AND ...` construct
+fn split_top_level_and<'a>(text: &'a str) -> Vec<&'a str> {
+    let mut parts = Vec::new();
+    let mut remaining = text.trim();
+
+    while !remaining.is_empty() {
+        let mut found_split = None;
+        let mut scan_offset = 0;
+
+        while let Some(rel_pos) = find_keyword_top_level(&remaining[scan_offset..], "AND") {
+            let candidate_pos = scan_offset + rel_pos;
+            let prefix = &remaining[..candidate_pos];
+            if has_unpaired_between(prefix) {
+                // This AND is the second part of BETWEEN ... AND ..., keep scanning
+                scan_offset = candidate_pos + 3;
+            } else {
+                found_split = Some(candidate_pos);
+                break;
+            }
         }
 
-        // Tautologies and Booleans: "1 = 1", "true", "false", etc.
-        if part.eq_ignore_ascii_case("TRUE") || part == "1" {
-            exprs.push(FilterExpr::AlwaysTrue);
-            continue;
+        if let Some(pos) = found_split {
+            let part = remaining[..pos].trim();
+            if !part.is_empty() {
+                parts.push(part);
+            }
+            remaining = remaining[pos + 3..].trim();
+        } else {
+            if !remaining.is_empty() {
+                parts.push(remaining);
+            }
+            break;
         }
-        if part.eq_ignore_ascii_case("FALSE") || part == "0" {
-            exprs.push(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)));
-            continue;
+    }
+
+    parts
+}
+
+/// Split comma-separated list outside quotes: `a, 'b, c', d` -> `["a", "'b, c'", "d"]`
+fn split_list_outside_quotes(text: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let bytes = text.as_bytes();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_backtick = false;
+    let mut start = 0;
+
+    for i in 0..bytes.len() {
+        let b = bytes[i];
+        if b == b'\'' && !in_double && !in_backtick {
+            in_single = !in_single;
+        } else if b == b'"' && !in_single && !in_backtick {
+            in_double = !in_double;
+        } else if b == b'`' && !in_single && !in_double {
+            in_backtick = !in_backtick;
+        } else if b == b',' && !in_single && !in_double && !in_backtick {
+            let item = text[start..i].trim();
+            if !item.is_empty() {
+                items.push(item);
+            }
+            start = i + 1;
         }
+    }
+    let last = text[start..].trim();
+    if !last.is_empty() {
+        items.push(last);
+    }
+    items
+}
 
-        let extract_field = |raw: &str| -> String {
-            raw.trim()
-                .trim_matches(|c| c == '`' || c == '"' || c == '\'')
-                .to_string()
-        };
+/// Parse a single atomic SQL predicate
+fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
+    let part = part.trim();
+    if part.is_empty() {
+        return Ok(FilterExpr::AlwaysTrue);
+    }
 
-        let upper_part = part.to_uppercase();
-        if let Some(pos) = upper_part.find(" IS NOT NULL") {
+    // 1. Enclosed parens: ( ... )
+    if has_enclosing_parens(part) {
+        return parse_sql_where(&part[1..part.len() - 1]);
+    }
+
+    // 2. Tautologies & booleans: "1 = 1", "true", "false", "1", "0"
+    if part.eq_ignore_ascii_case("TRUE") || part == "1" {
+        return Ok(FilterExpr::AlwaysTrue);
+    }
+    if part.eq_ignore_ascii_case("FALSE") || part == "0" {
+        return Ok(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)));
+    }
+
+    let extract_field = |raw: &str| -> String {
+        raw.trim()
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string()
+    };
+
+    // 3. IS NOT NULL / IS NULL
+    if let Some(pos) = find_keyword_top_level(part, "IS") {
+        let after_is = part[pos + 2..].trim();
+        if after_is.to_uppercase().starts_with("NOT NULL") {
             let field = extract_field(&part[..pos]);
-            exprs.push(FilterExpr::Field {
+            return Ok(FilterExpr::Field {
                 field,
                 op: Operator::Neq,
                 value: Value::Null,
             });
-            continue;
-        } else if let Some(pos) = upper_part.find(" IS NULL") {
+        } else if after_is.to_uppercase().starts_with("NULL") {
             let field = extract_field(&part[..pos]);
-            exprs.push(FilterExpr::Field {
+            return Ok(FilterExpr::Field {
                 field,
                 op: Operator::Eq,
                 value: Value::Null,
             });
-            continue;
-        } else if let Some(pos) = upper_part.find(" LIKE ") {
-            let field = extract_field(&part[..pos]);
-            let pattern_raw = part[pos + 6..].trim().trim_matches(|c| c == '\'' || c == '"');
-            let (op, pattern) = if pattern_raw.starts_with('%') && pattern_raw.ends_with('%') && pattern_raw.len() >= 2 {
-                (Operator::Contains, &pattern_raw[1..pattern_raw.len() - 1])
-            } else if let Some(stripped) = pattern_raw.strip_prefix('%') {
-                (Operator::EndsWith, stripped)
-            } else if let Some(stripped) = pattern_raw.strip_suffix('%') {
-                (Operator::StartsWith, stripped)
-            } else {
-                (Operator::Eq, pattern_raw)
-            };
-            exprs.push(FilterExpr::Field {
-                field,
-                op,
-                value: Value::String(pattern.to_string()),
-            });
-            continue;
         }
+    }
 
-        if let Some((field, val_str)) = part.split_once("<>") {
-            exprs.push(FilterExpr::Field {
-                field: extract_field(field),
-                op: Operator::Neq,
-                value: parse_literal(val_str.trim()),
-            });
-        } else if let Some((field, val_str)) = part.split_once(">=") {
-            exprs.push(FilterExpr::Field {
-                field: extract_field(field),
-                op: Operator::Gte,
-                value: parse_literal(val_str.trim()),
-            });
-        } else if let Some((field, val_str)) = part.split_once("<=") {
-            exprs.push(FilterExpr::Field {
-                field: extract_field(field),
-                op: Operator::Lte,
-                value: parse_literal(val_str.trim()),
-            });
-        } else if let Some((field, val_str)) = part.split_once("!=") {
-            exprs.push(FilterExpr::Field {
-                field: extract_field(field),
-                op: Operator::Neq,
-                value: parse_literal(val_str.trim()),
-            });
-        } else if let Some((field, val_str)) = part.split_once('>') {
-            exprs.push(FilterExpr::Field {
-                field: extract_field(field),
-                op: Operator::Gt,
-                value: parse_literal(val_str.trim()),
-            });
-        } else if let Some((field, val_str)) = part.split_once('<') {
-            exprs.push(FilterExpr::Field {
-                field: extract_field(field),
-                op: Operator::Lt,
-                value: parse_literal(val_str.trim()),
-            });
-        } else if let Some((field, val_str)) = part.split_once('=') {
-            let left = field.trim();
-            let right = val_str.trim();
-
-            // Check if both sides are literals (e.g. 1 = 1, 'a' = 'a')
-            let left_val = parse_literal(left);
-            let right_val = parse_literal(right);
-            let left_is_literal = left.starts_with('\'')
-                || left.starts_with('"')
-                || left.parse::<i64>().is_ok()
-                || left.parse::<f64>().is_ok()
-                || left.eq_ignore_ascii_case("true")
-                || left.eq_ignore_ascii_case("false");
-
-            if left_is_literal {
-                if left_val == right_val {
-                    exprs.push(FilterExpr::AlwaysTrue);
-                } else {
-                    exprs.push(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)));
-                }
-            } else {
-                exprs.push(FilterExpr::Field {
-                    field: extract_field(field),
-                    op: Operator::Eq,
-                    value: right_val,
-                });
+    // 4. NOT BETWEEN ... AND ...
+    if let Some(not_pos) = find_keyword_top_level(part, "NOT") {
+        let after_not = part[not_pos + 3..].trim();
+        if let Some(bet_pos) = find_keyword_top_level(after_not, "BETWEEN") {
+            let field = extract_field(&part[..not_pos]);
+            let between_args = after_not[bet_pos + 7..].trim();
+            if let Some(and_pos) = find_keyword_top_level(between_args, "AND") {
+                let low = parse_literal(between_args[..and_pos].trim());
+                let high = parse_literal(between_args[and_pos + 3..].trim());
+                return Ok(FilterExpr::Or(vec![
+                    FilterExpr::Field {
+                        field: field.clone(),
+                        op: Operator::Lt,
+                        value: low,
+                    },
+                    FilterExpr::Field {
+                        field,
+                        op: Operator::Gt,
+                        value: high,
+                    },
+                ]));
             }
         }
     }
 
-    if exprs.is_empty() {
-        Ok(FilterExpr::AlwaysTrue)
-    } else if exprs.len() == 1 {
-        Ok(exprs.pop().unwrap())
-    } else {
-        Ok(FilterExpr::And(exprs))
+    // 5. BETWEEN ... AND ...
+    if let Some(bet_pos) = find_keyword_top_level(part, "BETWEEN") {
+        let field = extract_field(&part[..bet_pos]);
+        let between_args = part[bet_pos + 7..].trim();
+        if let Some(and_pos) = find_keyword_top_level(between_args, "AND") {
+            let low = parse_literal(between_args[..and_pos].trim());
+            let high = parse_literal(between_args[and_pos + 3..].trim());
+            return Ok(FilterExpr::And(vec![
+                FilterExpr::Field {
+                    field: field.clone(),
+                    op: Operator::Gte,
+                    value: low,
+                },
+                FilterExpr::Field {
+                    field,
+                    op: Operator::Lte,
+                    value: high,
+                },
+            ]));
+        }
     }
+
+    // 6. NOT IN (...)
+    if let Some(not_pos) = find_keyword_top_level(part, "NOT") {
+        let after_not = part[not_pos + 3..].trim();
+        if let Some(in_pos) = find_keyword_top_level(after_not, "IN") {
+            let field = extract_field(&part[..not_pos]);
+            let list_part = after_not[in_pos + 2..].trim();
+            if list_part.starts_with('(') && list_part.ends_with(')') {
+                let inner = &list_part[1..list_part.len() - 1];
+                let items: Vec<Value> = split_list_outside_quotes(inner)
+                    .into_iter()
+                    .map(|s| parse_literal(s.trim()))
+                    .collect();
+                return Ok(FilterExpr::Not(Box::new(FilterExpr::Field {
+                    field,
+                    op: Operator::In,
+                    value: Value::Array(items),
+                })));
+            }
+        }
+    }
+
+    // 7. IN (...)
+    if let Some(in_pos) = find_keyword_top_level(part, "IN") {
+        let field = extract_field(&part[..in_pos]);
+        let list_part = part[in_pos + 2..].trim();
+        if list_part.starts_with('(') && list_part.ends_with(')') {
+            let inner = &list_part[1..list_part.len() - 1];
+            let items: Vec<Value> = split_list_outside_quotes(inner)
+                .into_iter()
+                .map(|s| parse_literal(s.trim()))
+                .collect();
+            return Ok(FilterExpr::Field {
+                field,
+                op: Operator::In,
+                value: Value::Array(items),
+            });
+        }
+    }
+
+    // 8. LIKE
+    if let Some(like_pos) = find_keyword_top_level(part, "LIKE") {
+        let field = extract_field(&part[..like_pos]);
+        let pattern_raw = part[like_pos + 4..].trim().trim_matches(|c| c == '\'' || c == '"');
+        let (op, pattern) = if pattern_raw.starts_with('%') && pattern_raw.ends_with('%') && pattern_raw.len() >= 2 {
+            (Operator::Contains, &pattern_raw[1..pattern_raw.len() - 1])
+        } else if let Some(stripped) = pattern_raw.strip_prefix('%') {
+            (Operator::EndsWith, stripped)
+        } else if let Some(stripped) = pattern_raw.strip_suffix('%') {
+            (Operator::StartsWith, stripped)
+        } else {
+            (Operator::Eq, pattern_raw)
+        };
+        return Ok(FilterExpr::Field {
+            field,
+            op,
+            value: Value::String(pattern.to_string()),
+        });
+    }
+
+    // 9. Binary comparisons: <>, >=, <=, !=, >, <, =
+    if let Some((field, val_str)) = part.split_once("<>") {
+        return Ok(FilterExpr::Field {
+            field: extract_field(field),
+            op: Operator::Neq,
+            value: parse_literal(val_str.trim()),
+        });
+    }
+    if let Some((field, val_str)) = part.split_once(">=") {
+        return Ok(FilterExpr::Field {
+            field: extract_field(field),
+            op: Operator::Gte,
+            value: parse_literal(val_str.trim()),
+        });
+    }
+    if let Some((field, val_str)) = part.split_once("<=") {
+        return Ok(FilterExpr::Field {
+            field: extract_field(field),
+            op: Operator::Lte,
+            value: parse_literal(val_str.trim()),
+        });
+    }
+    if let Some((field, val_str)) = part.split_once("!=") {
+        return Ok(FilterExpr::Field {
+            field: extract_field(field),
+            op: Operator::Neq,
+            value: parse_literal(val_str.trim()),
+        });
+    }
+    if let Some((field, val_str)) = part.split_once('>') {
+        return Ok(FilterExpr::Field {
+            field: extract_field(field),
+            op: Operator::Gt,
+            value: parse_literal(val_str.trim()),
+        });
+    }
+    if let Some((field, val_str)) = part.split_once('<') {
+        return Ok(FilterExpr::Field {
+            field: extract_field(field),
+            op: Operator::Lt,
+            value: parse_literal(val_str.trim()),
+        });
+    }
+    if let Some((field, val_str)) = part.split_once('=') {
+        let left = field.trim();
+        let right = val_str.trim();
+
+        let left_val = parse_literal(left);
+        let right_val = parse_literal(right);
+        let left_is_literal = left.starts_with('\'')
+            || left.starts_with('"')
+            || left.parse::<i64>().is_ok()
+            || left.parse::<f64>().is_ok()
+            || left.eq_ignore_ascii_case("true")
+            || left.eq_ignore_ascii_case("false");
+
+        if left_is_literal {
+            if left_val == right_val {
+                return Ok(FilterExpr::AlwaysTrue);
+            } else {
+                return Ok(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)));
+            }
+        } else {
+            return Ok(FilterExpr::Field {
+                field: extract_field(field),
+                op: Operator::Eq,
+                value: right_val,
+            });
+        }
+    }
+
+    Ok(FilterExpr::AlwaysTrue)
+}
+
+/// SQL WHERE parser supporting compound conditions (AND/OR), parenthesized groups,
+/// BETWEEN, IN, LIKE, IS NULL, booleans, tautologies (`1=1`), and comparisons.
+pub fn parse_sql_where(where_str: &str) -> Result<FilterExpr, String> {
+    let trimmed = where_str.trim();
+    if trimmed.is_empty() {
+        return Ok(FilterExpr::AlwaysTrue);
+    }
+
+    // Outer enclosing parentheses: ( a = 1 OR b = 2 )
+    if has_enclosing_parens(trimmed) {
+        return parse_sql_where(&trimmed[1..trimmed.len() - 1]);
+    }
+
+    // 1. Top-level OR split
+    let or_parts = split_top_level(trimmed, "OR");
+    if or_parts.len() > 1 {
+        let mut branches = Vec::new();
+        for branch in or_parts {
+            branches.push(parse_sql_where(branch)?);
+        }
+        return Ok(FilterExpr::Or(branches));
+    }
+
+    // 2. Top-level AND split (preserving BETWEEN ... AND ...)
+    let and_parts = split_top_level_and(trimmed);
+    if and_parts.len() > 1 {
+        let mut exprs = Vec::new();
+        for part in and_parts {
+            let expr = parse_single_predicate(part)?;
+            exprs.push(expr);
+        }
+        return Ok(FilterExpr::And(exprs));
+    }
+
+    // 3. Atomic single predicate
+    parse_single_predicate(trimmed)
 }
 
 fn parse_literal(s: &str) -> Value {
     let s = s.trim_matches(';').trim();
     if (s.starts_with('\'') && s.ends_with('\'')) || (s.starts_with('"') && s.ends_with('"')) {
         return Value::String(s[1..s.len() - 1].to_string());
+    }
+    if s.eq_ignore_ascii_case("null") {
+        return Value::Null;
     }
     if let Ok(i) = s.parse::<i64>() {
         return Value::Integer(i);
@@ -990,7 +1338,6 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
 /// Parse UPDATE <table> SET col1 = val1, col2 = val2 [WHERE ...]
 fn parse_update_query(input: &str) -> Result<Statement, String> {
     let clean = input.trim_end_matches(';').trim();
-    let upper = clean.to_uppercase();
 
     let tokens: Vec<&str> = clean.split_whitespace().collect();
     if tokens.len() < 4 || !tokens[0].eq_ignore_ascii_case("UPDATE") {
@@ -1002,12 +1349,11 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
         .trim_matches(|c| c == '`' || c == '"' || c == '\'')
         .to_string();
 
-    let set_pos = upper
-        .find("SET")
+    let set_pos = find_keyword_top_level(clean, "SET")
         .ok_or("Expected 'SET' clause in UPDATE statement")?;
     let after_set = clean[set_pos + 3..].trim();
 
-    let (set_part, where_part) = if let Some(where_pos) = after_set.to_uppercase().find("WHERE") {
+    let (set_part, where_part) = if let Some(where_pos) = find_keyword_top_level(after_set, "WHERE") {
         let set_str = after_set[..where_pos].trim();
         let where_str = after_set[where_pos + 5..].trim();
         (set_str, Some(where_str))
@@ -1063,7 +1409,7 @@ fn parse_delete_query(input: &str) -> Result<Statement, String> {
         .trim_matches(';')
         .trim_matches(|c| c == '`' || c == '"' || c == '\'')
         .to_string();
-    let filter = if let Some(where_pos) = input.to_uppercase().find("WHERE") {
+    let filter = if let Some(where_pos) = find_keyword_top_level(input, "WHERE") {
         let where_str = &input[where_pos + 5..].trim_end_matches(';').trim();
         parse_sql_where(where_str)?
     } else {
@@ -1084,7 +1430,7 @@ fn parse_count_query(input: &str) -> Result<Statement, String> {
         .trim_matches(';')
         .trim_matches(|c| c == '`' || c == '"' || c == '\'')
         .to_string();
-    let filter = if let Some(where_pos) = input.to_uppercase().find("WHERE") {
+    let filter = if let Some(where_pos) = find_keyword_top_level(input, "WHERE") {
         let where_str = &input[where_pos + 5..].trim_end_matches(';').trim();
         Some(parse_sql_where(where_str)?)
     } else {
@@ -1097,11 +1443,9 @@ fn parse_count_query(input: &str) -> Result<Statement, String> {
 /// Parse CREATE [UNIQUE] INDEX [idx_name] ON <collection>(<field>) [UNIQUE]
 fn parse_create_index_query(input: &str) -> Result<Statement, String> {
     let clean = input.trim_end_matches(';').trim();
-    let upper = clean.to_uppercase();
-    let unique = upper.contains("UNIQUE");
+    let unique = find_keyword_top_level(clean, "UNIQUE").is_some();
 
-    let on_pos = upper
-        .find("ON")
+    let on_pos = find_keyword_top_level(clean, "ON")
         .ok_or("Expected 'ON <collection>(<field>)' in CREATE INDEX")?;
     let target = clean[on_pos + 2..].trim();
 
@@ -1135,9 +1479,7 @@ fn parse_create_index_query(input: &str) -> Result<Statement, String> {
 /// Parse DROP INDEX [idx_name] ON <collection> or DROP INDEX <field> ON <collection>
 fn parse_drop_index_query(input: &str) -> Result<Statement, String> {
     let clean = input.trim_end_matches(';').trim();
-    let upper = clean.to_uppercase();
-    let on_pos = upper
-        .find("ON")
+    let on_pos = find_keyword_top_level(clean, "ON")
         .ok_or("Expected 'ON <collection>' in DROP INDEX")?;
 
     let index_part = clean[..on_pos].trim();

@@ -345,18 +345,23 @@ async fn handle_postgres_connection(
 
                 let mut param_oids = Vec::new();
                 if cursor + 2 <= body.len() {
-                    let num_params = i16::from_be_bytes([body[cursor], body[cursor + 1]]) as usize;
+                    let raw_num_params = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
                     cursor += 2;
-                    for _ in 0..num_params {
-                        if cursor + 4 <= body.len() {
-                            let oid = i32::from_be_bytes([
-                                body[cursor],
-                                body[cursor + 1],
-                                body[cursor + 2],
-                                body[cursor + 3],
-                            ]);
-                            param_oids.push(oid);
-                            cursor += 4;
+                    if raw_num_params > 0 {
+                        let num_params = (raw_num_params as usize).min(10_000);
+                        for _ in 0..num_params {
+                            if cursor + 4 <= body.len() {
+                                let oid = i32::from_be_bytes([
+                                    body[cursor],
+                                    body[cursor + 1],
+                                    body[cursor + 2],
+                                    body[cursor + 3],
+                                ]);
+                                param_oids.push(oid);
+                                cursor += 4;
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }

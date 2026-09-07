@@ -493,7 +493,7 @@ impl HnswIndex {
         query: &[f32],
         top_k: usize,
     ) -> Result<Vec<VectorSearchResult>, String> {
-        if self.nodes.is_empty() || top_k == 0 {
+        if self.is_empty() || top_k == 0 {
             return Ok(Vec::new());
         }
 
