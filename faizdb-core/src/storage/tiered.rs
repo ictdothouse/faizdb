@@ -111,6 +111,39 @@ impl TieredStorageManager {
         self.tables.insert(path, meta);
     }
 
+    /// Register an existing SSTable in the Cold Tier
+    pub fn register_cold_sstable(&mut self, path: PathBuf, size_bytes: u64) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let meta = TieredSSTableMeta {
+            path: path.clone(),
+            tier: StorageTier::Cold,
+            size_bytes,
+            created_at_sec: now,
+            access_count: 0,
+        };
+
+        self.total_cold_bytes += size_bytes;
+        self.tables.insert(path, meta);
+    }
+
+    /// Remove an SSTable from management (e.g. after compaction or deletion)
+    pub fn remove_sstable(&mut self, path: &Path) {
+        if let Some(meta) = self.tables.remove(path) {
+            match meta.tier {
+                StorageTier::Hot => {
+                    self.total_hot_bytes = self.total_hot_bytes.saturating_sub(meta.size_bytes);
+                }
+                StorageTier::Warm | StorageTier::Cold => {
+                    self.total_cold_bytes = self.total_cold_bytes.saturating_sub(meta.size_bytes);
+                }
+            }
+        }
+    }
+
     /// Record read access on an SSTable
     pub fn record_access(&mut self, path: &Path) {
         if let Some(meta) = self.tables.get_mut(path) {
@@ -120,10 +153,6 @@ impl TieredStorageManager {
 
     /// Check if any SSTables qualify for cold tier migration based on age or capacity threshold
     pub fn evaluate_migration_candidates(&self) -> Vec<PathBuf> {
-        if !self.config.enable_auto_tiering {
-            return Vec::new();
-        }
-
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())

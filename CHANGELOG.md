@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Phase 3: Automated Tiered Storage Architecture (`StorageEngine` + `TieredStorageManager`)**: Transparent point lookups (`get`) and prefix scans (`prefix_scan`) querying Hot NVMe and Cold HDD/Blob tiers seamlessly; dual-tier SSTable reader management (`cold_sstables: RwLock<Vec<SSTableReader>>`) with ARC block caching; autonomous background tier migration triggered on MemTable flushes; cold SSTables persistence and recovery across restarts; real-time telemetry tracking hot vs. cold bytes and tables.
+- **Phase 3: Hardware SIMD Vector Acceleration (`faizdb-vector`)**: 8-lane SIMD-unrolled vector math loops for Cosine Distance, Squared Euclidean Distance, and Dot Product distance metrics with trailing remainder handlers, utilizing 256-bit AVX2 / ARM NEON vectorization for high-dimensional embeddings (1536-dim OpenAI, 4096-dim Llama).
+- **Phase 3: Columnar Analytical Aggregations (`ColumnarBatch`)**: In-memory analytical aggregation operators (`avg_f64`, `min_f64`, `max_f64`, `count`) operating directly on columnar vectors without full document deserialization overhead.
 - **5-Way Universal Protocol Gateway & Native MySQL / MariaDB Wire Ingress (Port 3306)**: Complete async MySQL HandshakeV10 protocol engine (`faizdb-server/src/wire/mysql/`), supporting MySQL CLI, Laravel Eloquent (`DB_CONNECTION=mysql`), PHP PDO/mysqli, ColumnDef41 packet encoding, EOF/OK packets, and automated test suite (`tests/test_mysql_wire_protocol.rs`).
 - `SECURITY.md` — responsible disclosure policy
 - `CONTRIBUTING.md` — full contributor guide

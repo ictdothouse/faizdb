@@ -39,6 +39,8 @@ pub struct StorageConfig {
     pub l0_slowdown_writes_trigger: usize,
     /// Threshold of L0 SSTables to enforce hard write stall protection (default 16)
     pub l0_stop_writes_trigger: usize,
+    /// Optional tiered storage configuration for hot/cold data lifecycle management
+    pub tiered_storage: Option<crate::storage::tiered::TieredStorageConfig>,
 }
 
 impl Default for StorageConfig {
@@ -52,6 +54,7 @@ impl Default for StorageConfig {
             l0_compaction_trigger: 4,
             l0_slowdown_writes_trigger: 8,
             l0_stop_writes_trigger: 16,
+            tiered_storage: None,
         }
     }
 }
@@ -82,6 +85,12 @@ pub struct StorageEngine {
 
     /// SSTable readers (sorted newest to oldest)
     sstables: RwLock<Vec<SSTableReader>>,
+
+    /// Cold SSTable readers (sorted newest to oldest)
+    cold_sstables: RwLock<Vec<SSTableReader>>,
+
+    /// Tiered Storage Manager (coordinates Hot and Cold SSTable placement)
+    tiered_manager: Option<parking_lot::RwLock<crate::storage::tiered::TieredStorageManager>>,
 
     /// SSTable generation counter
     sstable_generation: AtomicU64,
@@ -197,12 +206,59 @@ impl StorageEngine {
         let block_cache =
             parking_lot::Mutex::new(crate::storage::arc_cache::ArcCache::new(cache_capacity));
 
+        // Initialize Tiered Storage Manager and load existing Cold SSTables if configured
+        let mut cold_sstables = Vec::new();
+        let tiered_manager = if let Some(tiered_cfg) = &config.tiered_storage {
+            let mut mgr = crate::storage::tiered::TieredStorageManager::new(tiered_cfg.clone());
+
+            if let Some(ref cold_dir) = tiered_cfg.cold_dir {
+                if cold_dir.exists() {
+                    let mut cold_files: Vec<PathBuf> = fs::read_dir(cold_dir)
+                        .map_err(|e| FaizError::io(cold_dir, e))?
+                        .filter_map(|entry| {
+                            let entry = entry.ok()?;
+                            let path = entry.path();
+                            if path.extension().and_then(|e| e.to_str()) == Some("sst") {
+                                Some(path)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                    cold_files.sort();
+                    cold_files.reverse();
+
+                    for cold_path in cold_files {
+                        let size = fs::metadata(&cold_path).map(|m| m.len()).unwrap_or(0);
+                        mgr.register_cold_sstable(cold_path.clone(), size);
+                        match SSTableReader::open(&cold_path) {
+                            Ok(reader) => cold_sstables.push(reader),
+                            Err(e) => {
+                                tracing::warn!("Failed to open Cold SSTable {}: {e}", cold_path.display());
+                            }
+                        }
+                    }
+                }
+            }
+
+            for sst in &sstables {
+                let size = fs::metadata(sst.path()).map(|m| m.len()).unwrap_or(0);
+                mgr.register_sstable(sst.path().to_path_buf(), size);
+            }
+
+            Some(parking_lot::RwLock::new(mgr))
+        } else {
+            None
+        };
+
         Ok(Self {
             config,
             wal,
             active_memtable: memtable,
             immutable_memtables: RwLock::new(Vec::new()),
             sstables: RwLock::new(sstables),
+            cold_sstables: RwLock::new(cold_sstables),
+            tiered_manager,
             sstable_generation: AtomicU64::new(max_gen),
             block_cache,
             is_compacting: std::sync::atomic::AtomicBool::new(false),
@@ -323,7 +379,7 @@ impl StorageEngine {
             }
         }
 
-        // Step 4: Check SSTables (newest to oldest)
+        // Step 4: Check Hot SSTables (newest to oldest)
         {
             let sstables = self.sstables.read();
             for sst in sstables.iter() {
@@ -333,6 +389,28 @@ impl StorageEngine {
                         MemEntry::Tombstone => None,
                     };
                     self.block_cache.lock().put(key.to_vec(), result.clone());
+                    if let Some(mgr) = &self.tiered_manager {
+                        mgr.write().record_access(sst.path());
+                    }
+                    return Ok(result);
+                }
+            }
+        }
+
+        // Step 5: Check Cold SSTables (newest to oldest)
+        {
+            let cold_sstables = self.cold_sstables.read();
+            for sst in cold_sstables.iter() {
+                if let Some(entry) = sst.get(key)? {
+                    let result = match entry {
+                        MemEntry::Value(v) => Some(v),
+                        MemEntry::Tombstone => None,
+                    };
+                    // Cache in ARC block cache so repeated reads of cold data avoid disk overhead
+                    self.block_cache.lock().put(key.to_vec(), result.clone());
+                    if let Some(mgr) = &self.tiered_manager {
+                        mgr.write().record_access(sst.path());
+                    }
                     return Ok(result);
                 }
             }
@@ -382,7 +460,27 @@ impl StorageEngine {
 
         let mut results = std::collections::BTreeMap::new();
 
-        // Scan SSTables (oldest first, so newer values overwrite)
+        // Scan Cold SSTables first (oldest layer)
+        {
+            let cold_sstables = self.cold_sstables.read();
+            for sst in cold_sstables.iter().rev() {
+                for entry_result in sst.iter()? {
+                    let (key, entry) = entry_result?;
+                    if key.starts_with(prefix) {
+                        match entry {
+                            MemEntry::Value(v) => {
+                                results.insert(key, Some(v));
+                            }
+                            MemEntry::Tombstone => {
+                                results.insert(key, None);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Scan Hot SSTables (oldest hot first, so newer values overwrite cold)
         {
             let sstables = self.sstables.read();
             for sst in sstables.iter().rev() {
@@ -449,12 +547,16 @@ impl StorageEngine {
     /// Get storage engine statistics
     pub fn stats(&self) -> StorageStats {
         let sstables = self.sstables.read();
+        let cold_sstables = self.cold_sstables.read();
+        let total_sstable_entries: u64 = sstables.iter().map(|s| s.entry_count()).sum::<u64>()
+            + cold_sstables.iter().map(|s| s.entry_count()).sum::<u64>();
         StorageStats {
             memtable_size: self.active_memtable.size(),
             memtable_entries: self.active_memtable.entry_count(),
             immutable_memtables: self.immutable_memtables.read().len(),
             sstable_count: sstables.len(),
-            total_sstable_entries: sstables.iter().map(|s| s.entry_count()).sum(),
+            cold_sstable_count: cold_sstables.len(),
+            total_sstable_entries,
             write_stalls: self.write_stalls.load(Ordering::Relaxed),
             compactions_completed: self.compactions_completed.load(Ordering::Relaxed),
         }
@@ -561,6 +663,13 @@ impl StorageEngine {
             let _ = wal.checkpoint();
         }
 
+        // Register with Tiered Storage Manager and evaluate tier migration
+        let sst_size = fs::metadata(&sst_path).map(|m| m.len()).unwrap_or(0);
+        if let Some(mgr) = &self.tiered_manager {
+            mgr.write().register_sstable(sst_path.clone(), sst_size);
+        }
+        let _ = self.maybe_trigger_tier_migration();
+
         // Automatic compaction trigger: when Level 0 accumulates >= l0_compaction_trigger SSTables
         let sst_len = { self.sstables.read().len() };
         if sst_len >= self.config.l0_compaction_trigger
@@ -577,6 +686,75 @@ impl StorageEngine {
         }
 
         Ok(())
+    }
+
+    /// Evaluate and migrate qualifying SSTables from Hot to Cold storage tier.
+    pub fn trigger_tier_migration(&self) -> FaizResult<usize> {
+        let mgr_lock = match &self.tiered_manager {
+            Some(m) => m,
+            None => return Ok(0),
+        };
+
+        let candidates = {
+            let mgr = mgr_lock.read();
+            mgr.evaluate_migration_candidates()
+        };
+
+        if candidates.is_empty() {
+            return Ok(0);
+        }
+
+        let mut migrated_count = 0;
+        for path in candidates {
+            let mut hot_ssts = self.sstables.write();
+            if let Some(idx) = hot_ssts.iter().position(|s| s.path() == path.as_path()) {
+                let _ = hot_ssts.remove(idx);
+                drop(hot_ssts);
+
+                let mut mgr = mgr_lock.write();
+                match mgr.migrate_to_cold(&path) {
+                    Ok(cold_path) => {
+                        match SSTableReader::open(&cold_path) {
+                            Ok(reader) => {
+                                self.cold_sstables.write().push(reader);
+                                migrated_count += 1;
+                                tracing::info!(
+                                    "Migrated SSTable {} -> {}",
+                                    path.display(),
+                                    cold_path.display()
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to open migrated cold SSTable {}: {e}",
+                                    cold_path.display()
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to migrate SSTable to cold storage: {e}");
+                    }
+                }
+            }
+        }
+
+        Ok(migrated_count)
+    }
+
+    /// Check if automated tiering is enabled and trigger migration
+    pub fn maybe_trigger_tier_migration(&self) -> FaizResult<usize> {
+        if let Some(mgr) = &self.tiered_manager {
+            if mgr.read().config.enable_auto_tiering {
+                return self.trigger_tier_migration();
+            }
+        }
+        Ok(0)
+    }
+
+    /// Get telemetry stats for the Tiered Storage subsystem
+    pub fn tiered_stats(&self) -> Option<crate::storage::tiered::TieredStorageStats> {
+        self.tiered_manager.as_ref().map(|m| m.read().stats())
     }
 
     /// Perform LSM-Tree compaction: merge multiple SSTables into a single sorted SSTable,
@@ -634,6 +812,15 @@ impl StorageEngine {
             let _ = std::fs::remove_file(p);
         }
 
+        if let Some(mgr) = &self.tiered_manager {
+            let mut m = mgr.write();
+            for p in &sst_paths {
+                m.remove_sstable(p);
+            }
+            let merged_size = fs::metadata(&merged_path).map(|meta| meta.len()).unwrap_or(0);
+            m.register_sstable(merged_path.clone(), merged_size);
+        }
+
         // Reclaim older WAL segments after compaction
         if let Some(wal) = &self.wal {
             let _ = wal.checkpoint();
@@ -668,6 +855,7 @@ pub struct StorageStats {
     pub memtable_entries: usize,
     pub immutable_memtables: usize,
     pub sstable_count: usize,
+    pub cold_sstable_count: usize,
     pub total_sstable_entries: u64,
     pub write_stalls: u64,
     pub compactions_completed: u64,
@@ -684,8 +872,8 @@ impl std::fmt::Display for StorageStats {
         writeln!(f, "  Immutable MemTables: {}", self.immutable_memtables)?;
         writeln!(
             f,
-            "  SSTables: {} ({} total entries)",
-            self.sstable_count, self.total_sstable_entries
+            "  SSTables: {} Hot, {} Cold ({} total entries)",
+            self.sstable_count, self.cold_sstable_count, self.total_sstable_entries
         )?;
         writeln!(
             f,

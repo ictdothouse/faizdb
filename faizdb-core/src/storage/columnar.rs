@@ -219,6 +219,71 @@ impl ColumnarBatch {
         }
     }
 
+    /// High-Speed Column Average (SIMD-Friendly Columnar Scan)
+    pub fn avg_f64(&self, column_name: &str) -> Option<f64> {
+        if let Some(ColumnData::Float64(vals)) = self.columns.get(column_name) {
+            let non_nulls: Vec<f64> = vals.iter().filter_map(|&v| v).collect();
+            if non_nulls.is_empty() {
+                None
+            } else {
+                let sum: f64 = non_nulls.iter().sum();
+                Some(sum / non_nulls.len() as f64)
+            }
+        } else if let Some(ColumnData::Int64(vals)) = self.columns.get(column_name) {
+            let non_nulls: Vec<f64> = vals.iter().filter_map(|&v| v.map(|i| i as f64)).collect();
+            if non_nulls.is_empty() {
+                None
+            } else {
+                let sum: f64 = non_nulls.iter().sum();
+                Some(sum / non_nulls.len() as f64)
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Column Minimum (SIMD-Friendly Columnar Scan)
+    pub fn min_f64(&self, column_name: &str) -> Option<f64> {
+        if let Some(ColumnData::Float64(vals)) = self.columns.get(column_name) {
+            vals.iter()
+                .filter_map(|&v| v)
+                .min_by(|a, b| a.total_cmp(b))
+        } else if let Some(ColumnData::Int64(vals)) = self.columns.get(column_name) {
+            vals.iter()
+                .filter_map(|&v| v.map(|i| i as f64))
+                .min_by(|a, b| a.total_cmp(b))
+        } else {
+            None
+        }
+    }
+
+    /// Column Maximum (SIMD-Friendly Columnar Scan)
+    pub fn max_f64(&self, column_name: &str) -> Option<f64> {
+        if let Some(ColumnData::Float64(vals)) = self.columns.get(column_name) {
+            vals.iter()
+                .filter_map(|&v| v)
+                .max_by(|a, b| a.total_cmp(b))
+        } else if let Some(ColumnData::Int64(vals)) = self.columns.get(column_name) {
+            vals.iter()
+                .filter_map(|&v| v.map(|i| i as f64))
+                .max_by(|a, b| a.total_cmp(b))
+        } else {
+            None
+        }
+    }
+
+    /// Non-null row count for a column
+    pub fn count(&self, column_name: &str) -> usize {
+        match self.columns.get(column_name) {
+            Some(ColumnData::Int64(v)) => v.iter().filter(|x| x.is_some()).count(),
+            Some(ColumnData::Float64(v)) => v.iter().filter(|x| x.is_some()).count(),
+            Some(ColumnData::String(v)) => v.iter().filter(|x| x.is_some()).count(),
+            Some(ColumnData::Boolean(v)) => v.iter().filter(|x| x.is_some()).count(),
+            Some(ColumnData::Binary(v)) => v.iter().filter(|x| x.is_some()).count(),
+            None => 0,
+        }
+    }
+
     /// Export to CSV string for external Data Science tools
     pub fn to_csv(&self) -> String {
         let mut csv = String::new();
@@ -309,5 +374,18 @@ mod tests {
         assert!(csv.contains("ticker"));
         assert!(csv.contains("price"));
         assert!(csv.contains("125.5"));
+
+        // Test avg, min, max, count
+        let avg_price = batch.avg_f64("price").unwrap();
+        assert!((avg_price - ((125.50 + 440.20 + 220.80) / 3.0)).abs() < 1e-4);
+
+        let min_price = batch.min_f64("price").unwrap();
+        assert!((min_price - 125.50).abs() < 1e-4);
+
+        let max_price = batch.max_f64("price").unwrap();
+        assert!((max_price - 440.20).abs() < 1e-4);
+
+        assert_eq!(batch.count("ticker"), 3);
+        assert_eq!(batch.count("price"), 3);
     }
 }

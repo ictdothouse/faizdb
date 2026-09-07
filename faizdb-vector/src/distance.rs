@@ -50,27 +50,41 @@ impl DistanceMetric {
     }
 }
 
-/// Calculate cosine distance: 1.0 - cosine_similarity (SIMD 8-wide unrolled)
+/// Calculate cosine distance: 1.0 - cosine_similarity (SIMD 8-lane unrolled)
 #[inline]
 pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
     let mut dot0 = 0.0f32;
     let mut dot1 = 0.0f32;
     let mut dot2 = 0.0f32;
     let mut dot3 = 0.0f32;
+    let mut dot4 = 0.0f32;
+    let mut dot5 = 0.0f32;
+    let mut dot6 = 0.0f32;
+    let mut dot7 = 0.0f32;
+
     let mut norm_a0 = 0.0f32;
     let mut norm_a1 = 0.0f32;
     let mut norm_a2 = 0.0f32;
     let mut norm_a3 = 0.0f32;
+    let mut norm_a4 = 0.0f32;
+    let mut norm_a5 = 0.0f32;
+    let mut norm_a6 = 0.0f32;
+    let mut norm_a7 = 0.0f32;
+
     let mut norm_b0 = 0.0f32;
     let mut norm_b1 = 0.0f32;
     let mut norm_b2 = 0.0f32;
     let mut norm_b3 = 0.0f32;
+    let mut norm_b4 = 0.0f32;
+    let mut norm_b5 = 0.0f32;
+    let mut norm_b6 = 0.0f32;
+    let mut norm_b7 = 0.0f32;
 
     let len = a.len();
-    let chunks = len / 4;
+    let chunks = len / 8;
 
     for i in 0..chunks {
-        let idx = i * 4;
+        let idx = i * 8;
         let x0 = a[idx];
         let y0 = b[idx];
         let x1 = a[idx + 1];
@@ -79,6 +93,14 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
         let y2 = b[idx + 2];
         let x3 = a[idx + 3];
         let y3 = b[idx + 3];
+        let x4 = a[idx + 4];
+        let y4 = b[idx + 4];
+        let x5 = a[idx + 5];
+        let y5 = b[idx + 5];
+        let x6 = a[idx + 6];
+        let y6 = b[idx + 6];
+        let x7 = a[idx + 7];
+        let y7 = b[idx + 7];
 
         dot0 += x0 * y0;
         norm_a0 += x0 * x0;
@@ -92,14 +114,26 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
         dot3 += x3 * y3;
         norm_a3 += x3 * x3;
         norm_b3 += y3 * y3;
+        dot4 += x4 * y4;
+        norm_a4 += x4 * x4;
+        norm_b4 += y4 * y4;
+        dot5 += x5 * y5;
+        norm_a5 += x5 * x5;
+        norm_b5 += y5 * y5;
+        dot6 += x6 * y6;
+        norm_a6 += x6 * x6;
+        norm_b6 += y6 * y6;
+        dot7 += x7 * y7;
+        norm_a7 += x7 * x7;
+        norm_b7 += y7 * y7;
     }
 
-    let mut dot = (dot0 + dot1) + (dot2 + dot3);
-    let mut norm_a = (norm_a0 + norm_a1) + (norm_a2 + norm_a3);
-    let mut norm_b = (norm_b0 + norm_b1) + (norm_b2 + norm_b3);
+    let mut dot = ((dot0 + dot1) + (dot2 + dot3)) + ((dot4 + dot5) + (dot6 + dot7));
+    let mut norm_a = ((norm_a0 + norm_a1) + (norm_a2 + norm_a3)) + ((norm_a4 + norm_a5) + (norm_a6 + norm_a7));
+    let mut norm_b = ((norm_b0 + norm_b1) + (norm_b2 + norm_b3)) + ((norm_b4 + norm_b5) + (norm_b6 + norm_b7));
 
     // Remainder tail
-    for idx in (chunks * 4)..len {
+    for idx in (chunks * 8)..len {
         let x = a[idx];
         let y = b[idx];
         dot += x * y;
@@ -122,59 +156,79 @@ pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     squared_euclidean_distance(a, b).sqrt()
 }
 
-/// Calculate Squared Euclidean distance (SIMD 8-wide unrolled)
+/// Calculate Squared Euclidean distance (SIMD 8-lane unrolled)
 #[inline]
 pub fn squared_euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     let mut s0 = 0.0f32;
     let mut s1 = 0.0f32;
     let mut s2 = 0.0f32;
     let mut s3 = 0.0f32;
+    let mut s4 = 0.0f32;
+    let mut s5 = 0.0f32;
+    let mut s6 = 0.0f32;
+    let mut s7 = 0.0f32;
 
     let len = a.len();
-    let chunks = len / 4;
+    let chunks = len / 8;
 
     for i in 0..chunks {
-        let idx = i * 4;
+        let idx = i * 8;
         let d0 = a[idx] - b[idx];
         let d1 = a[idx + 1] - b[idx + 1];
         let d2 = a[idx + 2] - b[idx + 2];
         let d3 = a[idx + 3] - b[idx + 3];
+        let d4 = a[idx + 4] - b[idx + 4];
+        let d5 = a[idx + 5] - b[idx + 5];
+        let d6 = a[idx + 6] - b[idx + 6];
+        let d7 = a[idx + 7] - b[idx + 7];
 
         s0 += d0 * d0;
         s1 += d1 * d1;
         s2 += d2 * d2;
         s3 += d3 * d3;
+        s4 += d4 * d4;
+        s5 += d5 * d5;
+        s6 += d6 * d6;
+        s7 += d7 * d7;
     }
 
-    let mut sum = (s0 + s1) + (s2 + s3);
-    for idx in (chunks * 4)..len {
+    let mut sum = ((s0 + s1) + (s2 + s3)) + ((s4 + s5) + (s6 + s7));
+    for idx in (chunks * 8)..len {
         let diff = a[idx] - b[idx];
         sum += diff * diff;
     }
     sum
 }
 
-/// Calculate Dot Product Distance: -(A · B) (SIMD 8-wide unrolled)
+/// Calculate Dot Product Distance: -(A · B) (SIMD 8-lane unrolled)
 #[inline]
 pub fn dot_product_distance(a: &[f32], b: &[f32]) -> f32 {
     let mut d0 = 0.0f32;
     let mut d1 = 0.0f32;
     let mut d2 = 0.0f32;
     let mut d3 = 0.0f32;
+    let mut d4 = 0.0f32;
+    let mut d5 = 0.0f32;
+    let mut d6 = 0.0f32;
+    let mut d7 = 0.0f32;
 
     let len = a.len();
-    let chunks = len / 4;
+    let chunks = len / 8;
 
     for i in 0..chunks {
-        let idx = i * 4;
+        let idx = i * 8;
         d0 += a[idx] * b[idx];
         d1 += a[idx + 1] * b[idx + 1];
         d2 += a[idx + 2] * b[idx + 2];
         d3 += a[idx + 3] * b[idx + 3];
+        d4 += a[idx + 4] * b[idx + 4];
+        d5 += a[idx + 5] * b[idx + 5];
+        d6 += a[idx + 6] * b[idx + 6];
+        d7 += a[idx + 7] * b[idx + 7];
     }
 
-    let mut dot = (d0 + d1) + (d2 + d3);
-    for idx in (chunks * 4)..len {
+    let mut dot = ((d0 + d1) + (d2 + d3)) + ((d4 + d5) + (d6 + d7));
+    for idx in (chunks * 8)..len {
         dot += a[idx] * b[idx];
     }
     -dot
