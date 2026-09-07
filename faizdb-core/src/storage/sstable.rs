@@ -44,8 +44,9 @@
 
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::error::{FaizError, FaizResult};
 use crate::storage::memtable::MemEntry;
@@ -340,8 +341,8 @@ fn open_options_create(path: &Path) -> FaizResult<File> {
         .map_err(|e| FaizError::io(path, e))
 }
 
-/// SSTable reader — reads entries from an SSTable file.
-#[allow(dead_code)]
+/// SSTable reader — reads entries from an immutable, memory-mapped SSTable file.
+#[derive(Clone)]
 pub struct SSTableReader {
     path: PathBuf,
     entry_count: u64,
@@ -350,67 +351,70 @@ pub struct SSTableReader {
     sparse_index: BTreeMap<Vec<u8>, u64>,
     index_offset: u64,
     bloom_offset: u64,
+    mmap: Arc<memmap2::Mmap>,
 }
 
 impl SSTableReader {
-    /// Open an existing SSTable file for reading
+    /// Open an existing SSTable file for zero-copy memory-mapped reading
     pub fn open(path: impl AsRef<Path>) -> FaizResult<Self> {
         let path = path.as_ref().to_path_buf();
-        let mut file = File::open(&path).map_err(|e| FaizError::io(&path, e))?;
+        let file = File::open(&path).map_err(|e| FaizError::io(&path, e))?;
 
-        // Read and verify header
-        let mut header = [0u8; HEADER_SIZE];
-        file.read_exact(&mut header)
-            .map_err(|e| FaizError::io(&path, e))?;
+        let file_size = file.metadata().map_err(|e| FaizError::io(&path, e))?.len();
+        if file_size < (HEADER_SIZE + FOOTER_SIZE) as u64 {
+            return Err(FaizError::SsTableCorrupted(
+                "File too small for header and footer".into(),
+            ));
+        }
 
-        if &header[0..8] != SSTABLE_MAGIC {
+        // Memory-map the immutable SSTable file
+        let mmap = unsafe {
+            memmap2::MmapOptions::new()
+                .map(&file)
+                .map_err(|e| FaizError::io(&path, e))?
+        };
+
+        // Read and verify header directly from memory map
+        if &mmap[0..8] != SSTABLE_MAGIC {
             return Err(FaizError::InvalidMagicBytes);
         }
 
-        let version = u32::from_le_bytes(header[8..12].try_into().unwrap());
+        let version = u32::from_le_bytes(mmap[8..12].try_into().unwrap());
         if version != SSTABLE_VERSION {
             return Err(FaizError::SsTableCorrupted(format!(
                 "Unsupported version: {version}"
             )));
         }
 
-        let entry_count = u64::from_le_bytes(header[12..20].try_into().unwrap());
-        let data_size = u64::from_le_bytes(header[20..28].try_into().unwrap());
+        let entry_count = u64::from_le_bytes(mmap[12..20].try_into().unwrap());
+        let data_size = u64::from_le_bytes(mmap[20..28].try_into().unwrap());
 
-        // Read footer
-        let file_size = file.metadata().map_err(|e| FaizError::io(&path, e))?.len();
-
-        file.seek(SeekFrom::Start(file_size - FOOTER_SIZE as u64))
-            .map_err(|e| FaizError::io(&path, e))?;
-
-        let mut footer = [0u8; FOOTER_SIZE];
-        file.read_exact(&mut footer)
-            .map_err(|e| FaizError::io(&path, e))?;
+        // Read and verify footer directly from memory map
+        let footer_start = (file_size - FOOTER_SIZE as u64) as usize;
+        let footer = &mmap[footer_start..footer_start + FOOTER_SIZE];
 
         let index_offset = u64::from_le_bytes(footer[0..8].try_into().unwrap());
         let bloom_offset = u64::from_le_bytes(footer[8..16].try_into().unwrap());
 
-        // Read bloom filter
-        file.seek(SeekFrom::Start(bloom_offset))
-            .map_err(|e| FaizError::io(&path, e))?;
+        if (bloom_offset as usize) > footer_start || (index_offset as usize) > (bloom_offset as usize) {
+            return Err(FaizError::SsTableCorrupted(
+                "Corrupted block offsets in footer".into(),
+            ));
+        }
 
-        let bloom_size = (file_size - FOOTER_SIZE as u64) - bloom_offset;
-        let mut bloom_data = vec![0u8; bloom_size as usize];
-        file.read_exact(&mut bloom_data)
-            .map_err(|e| FaizError::io(&path, e))?;
+        // Read bloom filter from memory map
+        let bloom_slice = &mmap[bloom_offset as usize..footer_start];
+        let bloom = BloomFilter::from_bytes(bloom_slice)?;
 
-        let bloom = BloomFilter::from_bytes(&bloom_data)?;
+        // Read sparse index from memory map
+        let index_slice = &mmap[index_offset as usize..bloom_offset as usize];
+        let sparse_index = Self::deserialize_index(index_slice)?;
 
-        // Read sparse index
-        file.seek(SeekFrom::Start(index_offset))
-            .map_err(|e| FaizError::io(&path, e))?;
-
-        let index_size = bloom_offset - index_offset;
-        let mut index_data = vec![0u8; index_size as usize];
-        file.read_exact(&mut index_data)
-            .map_err(|e| FaizError::io(&path, e))?;
-
-        let sparse_index = Self::deserialize_index(&index_data)?;
+        // Advise kernel of random access pattern for fast point lookups
+        #[cfg(unix)]
+        {
+            let _ = mmap.advise(memmap2::Advice::Random);
+        }
 
         Ok(Self {
             path,
@@ -420,6 +424,7 @@ impl SSTableReader {
             sparse_index,
             index_offset,
             bloom_offset,
+            mmap: Arc::new(mmap),
         })
     }
 
@@ -428,41 +433,36 @@ impl SSTableReader {
         self.bloom.may_contain(key)
     }
 
-    /// Look up a key in the SSTable.
+    /// Look up a key in the SSTable via zero-copy memory map traversal.
     ///
     /// Uses the bloom filter for fast negative lookups, then binary
-    /// searches the sparse index to find the approximate location.
+    /// searches the sparse index to find the approximate location and
+    /// scans the mapped slice directly without file syscalls.
     pub fn get(&self, key: &[u8]) -> FaizResult<Option<MemEntry>> {
         // Fast path: bloom filter check
         if !self.bloom.may_contain(key) {
             return Ok(None);
         }
 
-        // Find the approximate position using sparse index
-        let start_offset = self.find_start_offset(key);
-
-        // Scan from the start offset
-        let mut file = File::open(&self.path).map_err(|e| FaizError::io(&self.path, e))?;
-        file.seek(SeekFrom::Start(start_offset))
-            .map_err(|e| FaizError::io(&self.path, e))?;
-
-        let mut reader = BufReader::new(file);
-        let end_offset = self.index_offset;
+        // Find approximate position using sparse index
+        let start_offset = self.find_start_offset(key) as usize;
+        let end_offset = self.index_offset as usize;
 
         let mut current_offset = start_offset;
         while current_offset < end_offset {
-            match Self::read_entry(&mut reader) {
-                Ok((entry_key, entry)) => {
-                    let entry_size =
-                        4 + 4 + 1 + entry_key.len() + entry.as_value().map_or(0, |v| v.len());
-                    current_offset += entry_size as u64;
+            match Self::read_entry_ref(&self.mmap, current_offset) {
+                Ok((entry_key, entry_val, entry_size)) => {
+                    current_offset += entry_size;
 
                     if entry_key == key {
-                        return Ok(Some(entry));
+                        return Ok(Some(match entry_val {
+                            Some(val) => MemEntry::Value(val.to_vec()),
+                            None => MemEntry::Tombstone,
+                        }));
                     }
 
                     // Since entries are sorted, if we've passed the key, it's not here
-                    if entry_key.as_slice() > key {
+                    if entry_key > key {
                         return Ok(None);
                     }
                 }
@@ -473,17 +473,52 @@ impl SSTableReader {
         Ok(None)
     }
 
-    /// Iterate over all entries in the SSTable
+    /// Look up a key returning a borrowed slice directly from the memory map (Zero-Copy).
+    ///
+    /// Returns:
+    /// - `Ok(Some(Some(&[u8])))`: Key found with value bytes
+    /// - `Ok(Some(None))`: Key found as tombstone (deleted)
+    /// - `Ok(None)`: Key does not exist
+    pub fn get_ref(&self, key: &[u8]) -> FaizResult<Option<Option<&[u8]>>> {
+        if !self.bloom.may_contain(key) {
+            return Ok(None);
+        }
+
+        let start_offset = self.find_start_offset(key) as usize;
+        let end_offset = self.index_offset as usize;
+
+        let mut current_offset = start_offset;
+        while current_offset < end_offset {
+            match Self::read_entry_ref(&self.mmap, current_offset) {
+                Ok((entry_key, entry_val, entry_size)) => {
+                    current_offset += entry_size;
+
+                    if entry_key == key {
+                        return Ok(Some(entry_val));
+                    }
+
+                    if entry_key > key {
+                        return Ok(None);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Direct access to the underlying memory-mapped file
+    pub fn mmap(&self) -> &memmap2::Mmap {
+        &self.mmap
+    }
+
+    /// Iterate over all entries in the SSTable via memory-mapped slice
     pub fn iter(&self) -> FaizResult<SSTableIterator> {
-        let file = File::open(&self.path).map_err(|e| FaizError::io(&self.path, e))?;
-        let mut reader = BufReader::new(file);
-
-        reader
-            .seek(SeekFrom::Start(HEADER_SIZE as u64))
-            .map_err(|e| FaizError::io(&self.path, e))?;
-
         Ok(SSTableIterator {
-            reader,
+            mmap: self.mmap.clone(),
+            offset: HEADER_SIZE,
+            end_offset: self.index_offset as usize,
             remaining: self.entry_count,
         })
     }
@@ -491,6 +526,21 @@ impl SSTableReader {
     /// Get the number of entries in this SSTable
     pub fn entry_count(&self) -> u64 {
         self.entry_count
+    }
+
+    /// Get the data size in bytes
+    pub fn data_size(&self) -> u64 {
+        self.data_size
+    }
+
+    /// Get the index block offset
+    pub fn index_offset(&self) -> u64 {
+        self.index_offset
+    }
+
+    /// Get the bloom filter block offset
+    pub fn bloom_offset(&self) -> u64 {
+        self.bloom_offset
     }
 
     /// Get the path of this SSTable
@@ -515,7 +565,38 @@ impl SSTableReader {
         start
     }
 
-    fn read_entry<R: Read>(reader: &mut R) -> FaizResult<(Vec<u8>, MemEntry)> {
+    /// Read an entry as borrowed slices directly from memory map slice (Zero-Copy)
+    pub fn read_entry_ref<'a>(
+        data: &'a [u8],
+        offset: usize,
+    ) -> FaizResult<(&'a [u8], Option<&'a [u8]>, usize)> {
+        if offset + 9 > data.len() {
+            return Err(FaizError::SsTableCorrupted("Entry truncated".into()));
+        }
+
+        let key_len = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+        let val_len =
+            u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let is_tombstone = data[offset + 8] == 1;
+
+        let total_entry_len = 9 + key_len + val_len;
+        if offset + total_entry_len > data.len() {
+            return Err(FaizError::SsTableCorrupted("Entry data truncated".into()));
+        }
+
+        let key = &data[offset + 9..offset + 9 + key_len];
+        let val_start = offset + 9 + key_len;
+        let val = if is_tombstone {
+            None
+        } else {
+            Some(&data[val_start..val_start + val_len])
+        };
+
+        Ok((key, val, total_entry_len))
+    }
+
+    /// Read entry from Read stream (backward compatibility)
+    pub fn read_entry<R: Read>(reader: &mut R) -> FaizResult<(Vec<u8>, MemEntry)> {
         let mut len_buf = [0u8; 4];
 
         reader
@@ -594,9 +675,11 @@ impl SSTableReader {
     }
 }
 
-/// Iterator over SSTable entries
+/// Iterator over memory-mapped SSTable entries (zero-syscall streaming)
 pub struct SSTableIterator {
-    reader: BufReader<File>,
+    mmap: Arc<memmap2::Mmap>,
+    offset: usize,
+    end_offset: usize,
     remaining: u64,
 }
 
@@ -604,12 +687,25 @@ impl Iterator for SSTableIterator {
     type Item = FaizResult<(Vec<u8>, MemEntry)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining == 0 {
+        if self.remaining == 0 || self.offset >= self.end_offset {
             return None;
         }
 
-        self.remaining -= 1;
-        Some(SSTableReader::read_entry(&mut self.reader))
+        match SSTableReader::read_entry_ref(&self.mmap, self.offset) {
+            Ok((key, val, bytes_read)) => {
+                self.offset += bytes_read;
+                self.remaining -= 1;
+                let entry = match val {
+                    Some(v) => MemEntry::Value(v.to_vec()),
+                    None => MemEntry::Tombstone,
+                };
+                Some(Ok((key.to_vec(), entry)))
+            }
+            Err(e) => {
+                self.remaining = 0;
+                Some(Err(e))
+            }
+        }
     }
 }
 
