@@ -140,6 +140,8 @@ pub async fn insert_document(
     let doc_clone = doc.clone();
     match col.insert(doc) {
         Ok(id) => {
+            let doc_val = serde_json::to_value(&doc_clone).ok();
+            let _ = state.db.raft().propose(format!("INSERT {name}"), doc_val);
             state
                 .db
                 .change_stream_bus()
@@ -163,13 +165,11 @@ pub async fn get_collection_documents(
 ) -> impl IntoResponse {
     let col = state.db.get_or_create_collection(&name);
     let skip_count = pagination.offset.or(pagination.skip).unwrap_or(0);
-    let limit_count = pagination.limit.unwrap_or(usize::MAX);
+    let limit_count = pagination.limit.unwrap_or(100);
 
-    let docs = col.find_all(None);
+    let docs = col.find_paginated(skip_count, limit_count);
     let output: Vec<serde_json::Value> = docs
         .into_iter()
-        .skip(skip_count)
-        .take(limit_count)
         .map(|d| {
             let mut val = serde_json::to_value(&d.fields).unwrap_or(serde_json::Value::Null);
             if let Some(obj) = val.as_object_mut() {
@@ -230,6 +230,10 @@ pub async fn delete_document(
     let col = state.db.get_or_create_collection(&name);
     match col.delete_by_id(&id) {
         Ok(_) => {
+            let _ = state
+                .db
+                .raft()
+                .propose(format!("DELETE {name}"), Some(serde_json::json!({ "id": id })));
             state
                 .db
                 .change_stream_bus()
@@ -278,6 +282,10 @@ pub async fn update_document_put(
 
     match res {
         Ok(updated) => {
+            let _ = state
+                .db
+                .raft()
+                .propose(format!("UPDATE {name}"), serde_json::to_value(&updated).ok());
             let mut diff = BTreeMap::new();
             for (k, v) in &updated.fields {
                 diff.insert(k.clone(), v.clone());
@@ -365,6 +373,10 @@ pub async fn update_document_patch(
 
     match res {
         Ok(updated) => {
+            let _ = state
+                .db
+                .raft()
+                .propose(format!("UPDATE {name}"), serde_json::to_value(&updated).ok());
             state.db.change_stream_bus().publish(ChangeEvent::update(
                 &name,
                 &id,

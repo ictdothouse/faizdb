@@ -341,15 +341,46 @@ fn handle_list_columns(db: &Arc<DatabaseContext>, in_txn: bool) -> Vec<u8> {
     ];
     let mut out = encode_row_description(&fields);
     let mut count = 0;
-    for col in &collections {
+    for col_name in &collections {
+        let col = db.get_or_create_collection(col_name);
+        // Primary key _id always present
         let row_id = vec![
-            Some(col.clone()),
+            Some(col_name.clone()),
             Some("_id".to_string()),
             Some("text".to_string()),
             Some("NO".to_string()),
         ];
         out.extend_from_slice(&encode_data_row(&row_id));
         count += 1;
+
+        // Dynamic introspection: sample up to 10 documents to discover actual column names and types
+        let sample_docs = col.find_paginated(0, 10);
+        let mut discovered_fields = std::collections::BTreeMap::new();
+        for doc in &sample_docs {
+            for (k, v) in &doc.fields {
+                if k != "_id" && k != "id" {
+                    discovered_fields.entry(k.clone()).or_insert_with(|| match v {
+                        Value::Boolean(_) => "boolean",
+                        Value::Integer(_) => "bigint",
+                        Value::Float(_) => "double precision",
+                        Value::String(_) => "text",
+                        Value::Array(_) | Value::Object(_) => "jsonb",
+                        _ => "text",
+                    });
+                }
+            }
+        }
+
+        for (col_k, col_type) in discovered_fields {
+            let row = vec![
+                Some(col_name.clone()),
+                Some(col_k),
+                Some(col_type.to_string()),
+                Some("YES".to_string()),
+            ];
+            out.extend_from_slice(&encode_data_row(&row));
+            count += 1;
+        }
     }
     out.extend_from_slice(&encode_command_complete(&format!("SELECT {count}")));
     out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
@@ -381,7 +412,7 @@ fn format_query_result(result: QueryResult, in_txn: bool) -> Vec<u8> {
                 out.extend_from_slice(&encode_row_description(&fields));
                 out.extend_from_slice(&encode_command_complete("SELECT 0"));
             } else {
-                // Infer columns and types from the first document
+                // Infer columns and types across all returned documents (schema union)
                 let mut col_names = Vec::new();
                 let mut col_types = Vec::new();
 
@@ -389,25 +420,29 @@ fn format_query_result(result: QueryResult, in_txn: bool) -> Vec<u8> {
                 col_names.push("_id".to_string());
                 col_types.push(PG_TYPE_TEXT);
 
-                // Add other fields
-                for (k, v) in docs[0].fields.iter() {
-                    if k == "_id" || k == "id" {
-                        continue;
+                let mut seen = std::collections::HashSet::new();
+                seen.insert("_id".to_string());
+                seen.insert("id".to_string());
+
+                for doc in &docs {
+                    for (k, v) in doc.fields.iter() {
+                        if seen.insert(k.clone()) {
+                            col_names.push(k.clone());
+                            let type_oid = match v {
+                                Value::Boolean(_) => PG_TYPE_BOOL,
+                                Value::Integer(_) => PG_TYPE_INT8,
+                                Value::Float(_) => PG_TYPE_FLOAT8,
+                                Value::String(_) => PG_TYPE_TEXT,
+                                Value::Array(_) | Value::Object(_) => PG_TYPE_JSONB,
+                                Value::Binary(_)
+                                | Value::DateTime(_)
+                                | Value::Uuid(_)
+                                | Value::Vector(_)
+                                | Value::Null => PG_TYPE_TEXT,
+                            };
+                            col_types.push(type_oid);
+                        }
                     }
-                    col_names.push(k.clone());
-                    let type_oid = match v {
-                        Value::Boolean(_) => PG_TYPE_BOOL,
-                        Value::Integer(_) => PG_TYPE_INT8,
-                        Value::Float(_) => PG_TYPE_FLOAT8,
-                        Value::String(_) => PG_TYPE_TEXT,
-                        Value::Array(_) | Value::Object(_) => PG_TYPE_JSONB,
-                        Value::Binary(_)
-                        | Value::DateTime(_)
-                        | Value::Uuid(_)
-                        | Value::Vector(_)
-                        | Value::Null => PG_TYPE_TEXT,
-                    };
-                    col_types.push(type_oid);
                 }
 
                 let fields: Vec<PgField> = col_names

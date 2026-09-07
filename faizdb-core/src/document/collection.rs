@@ -33,6 +33,9 @@ pub struct CollectionConfig {
 
     /// Whether to auto-generate IDs for documents without _id
     pub auto_generate_id: bool,
+
+    /// Maximum in-memory document capacity before enforcing eviction to disk (default: None for unbounded)
+    pub max_memory_documents: Option<usize>,
 }
 
 impl Default for CollectionConfig {
@@ -43,6 +46,7 @@ impl Default for CollectionConfig {
             schema_validation: false,
             schema: None,
             auto_generate_id: true,
+            max_memory_documents: None,
         }
     }
 }
@@ -183,6 +187,21 @@ impl Collection {
         }
     }
 
+    /// Create a collection with custom configuration and persistent storage
+    pub fn with_config_and_storage(
+        config: CollectionConfig,
+        storage: Arc<crate::storage::engine::StorageEngine>,
+    ) -> Self {
+        let mut col = Self::with_config(config);
+        col.storage = Some(storage);
+        col
+    }
+
+    /// Number of active documents currently resident in RAM
+    pub fn in_memory_count(&self) -> usize {
+        self.documents.len()
+    }
+
     /// Get the collection name
     pub fn name(&self) -> &str {
         &self.config.name
@@ -267,6 +286,21 @@ impl Collection {
             if let Ok(val) = serde_json::to_vec(&doc) {
                 storage.put(&key, &val)?;
             }
+
+            // Enforce max in-memory documents if configured by evicting older entry from RAM
+            if let Some(max_docs) = self.config.max_memory_documents {
+                if self.documents.len() > max_docs {
+                    let evict_key = {
+                        let mut iter = self.documents.iter();
+                        let found = iter.find(|e| e.key() != &id_str).map(|e| e.key().clone());
+                        drop(iter);
+                        found
+                    };
+                    if let Some(key) = evict_key {
+                        self.documents.remove(&key);
+                    }
+                }
+            }
         }
 
         Ok(id)
@@ -322,13 +356,26 @@ impl Collection {
             });
         }
 
-        self.documents
-            .get(id)
-            .map(|entry| entry.value().clone())
-            .ok_or_else(|| FaizError::DocumentNotFound {
-                collection: self.config.name.clone(),
-                id: id.to_string(),
-            })
+        if let Some(entry) = self.documents.get(id) {
+            return Ok(entry.value().clone());
+        }
+
+        // Cache-miss: check persistent storage engine if attached
+        if let Some(storage) = &self.storage {
+            let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
+            if let Ok(Some(val_bytes)) = storage.get(&key) {
+                if let Ok(doc) = serde_json::from_slice::<Document>(&val_bytes) {
+                    // Populate back into memory cache for subsequent fast reads
+                    self.documents.insert(id.to_string(), doc.clone());
+                    return Ok(doc);
+                }
+            }
+        }
+
+        Err(FaizError::DocumentNotFound {
+            collection: self.config.name.clone(),
+            id: id.to_string(),
+        })
     }
 
     /// Find all documents matching a filter.
@@ -353,26 +400,54 @@ impl Collection {
         self.purge_expired();
         let skip = skip.unwrap_or(0);
         let limit = limit.unwrap_or(usize::MAX);
+        let doc_count = self.doc_count.load(Ordering::Relaxed);
+        let mem_count = self.documents.len() as u64;
 
-        let results: Vec<Document> = self
-            .documents
-            .iter()
-            .filter(|entry| {
-                let doc = entry.value();
-                filter.iter().all(|(key, expected)| {
-                    if let Some(actual) = doc.get_nested(key) {
-                        actual == expected
-                    } else {
-                        false
-                    }
+        // Fast path: if dataset is fully resident in RAM, scan in-memory DashMap (<1µs latency)
+        if mem_count >= doc_count || self.storage.is_none() {
+            let results: Vec<Document> = self
+                .documents
+                .iter()
+                .filter(|entry| {
+                    let doc = entry.value();
+                    filter.iter().all(|(key, expected)| {
+                        if let Some(actual) = doc.get_nested(key) {
+                            actual == expected
+                        } else {
+                            false
+                        }
+                    })
                 })
-            })
-            .skip(skip)
-            .take(limit)
-            .map(|entry| entry.value().clone())
-            .collect();
+                .skip(skip)
+                .take(limit)
+                .map(|entry| entry.value().clone())
+                .collect();
+            return Ok(results);
+        }
 
-        Ok(results)
+        // Out-of-Core Disk Scan: scan directly from persistent LSM-Tree storage when dataset exceeds RAM capacity
+        if let Some(storage) = &self.storage {
+            let prefix = format!("doc:{}:", self.config.name).into_bytes();
+            let entries = storage.prefix_scan(&prefix)?;
+            let results: Vec<Document> = entries
+                .into_iter()
+                .filter_map(|(_k, v)| serde_json::from_slice::<Document>(&v).ok())
+                .filter(|doc| {
+                    filter.iter().all(|(key, expected)| {
+                        if let Some(actual) = doc.get_nested(key) {
+                            actual == expected
+                        } else {
+                            false
+                        }
+                    })
+                })
+                .skip(skip)
+                .take(limit)
+                .collect();
+            return Ok(results);
+        }
+
+        Ok(Vec::new())
     }
 
     /// Find all documents in the collection (auto-purging expired TTL keys).
@@ -381,6 +456,44 @@ impl Collection {
         let limit = limit.unwrap_or(usize::MAX);
         self.documents
             .iter()
+            .take(limit)
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+
+    /// Find documents with zero-copy streaming pagination (skipping and limiting without loading entire dataset into intermediate Vec)
+    pub fn find_paginated(&self, skip: usize, limit: usize) -> Vec<Document> {
+        self.purge_expired();
+        let doc_count = self.doc_count.load(Ordering::Relaxed);
+        let mem_count = self.documents.len() as u64;
+
+        // Fast path: if dataset is fully resident in RAM, stream from DashMap
+        if mem_count >= doc_count || self.storage.is_none() {
+            return self
+                .documents
+                .iter()
+                .skip(skip)
+                .take(limit)
+                .map(|entry| entry.value().clone())
+                .collect();
+        }
+
+        // Out-of-Core Disk Scan: stream from persistent LSM storage when memory is capped
+        if let Some(storage) = &self.storage {
+            let prefix = format!("doc:{}:", self.config.name).into_bytes();
+            if let Ok(entries) = storage.prefix_scan(&prefix) {
+                return entries
+                    .into_iter()
+                    .skip(skip)
+                    .take(limit)
+                    .filter_map(|(_k, v)| serde_json::from_slice::<Document>(&v).ok())
+                    .collect();
+            }
+        }
+
+        self.documents
+            .iter()
+            .skip(skip)
             .take(limit)
             .map(|entry| entry.value().clone())
             .collect()

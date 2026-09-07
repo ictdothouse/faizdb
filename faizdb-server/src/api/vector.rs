@@ -16,6 +16,7 @@ pub struct CreateVectorIndexRequest {
     pub name: String,
     pub dimensions: usize,
     pub metric: Option<String>,
+    pub quantization: Option<String>,
     pub max_m: Option<usize>,
     pub ef_construction: Option<usize>,
 }
@@ -52,11 +53,22 @@ pub async fn create_vector_index(
         _ => DistanceMetric::Cosine,
     };
 
+    let quantization = match payload
+        .quantization
+        .as_deref()
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("scalar8") | Some("sq8") | Some("int8") => QuantizationType::Scalar8,
+        Some("binary1") | Some("bq") | Some("binary") => QuantizationType::Binary1,
+        _ => QuantizationType::None,
+    };
+
     let m = payload.max_m.unwrap_or(16);
     let config = HnswConfig {
         dimensions: payload.dimensions,
         metric,
-        quantization: QuantizationType::None,
+        quantization,
         m,
         m0: m * 2,
         ef_construction: payload.ef_construction.unwrap_or(100),
@@ -100,6 +112,7 @@ pub async fn create_vector_index(
             "index_name": payload.name,
             "dimensions": payload.dimensions,
             "metric": format!("{:?}", metric),
+            "quantization": format!("{:?}", config.quantization),
             "status": "Ready",
         }))),
     )
@@ -289,6 +302,8 @@ pub async fn list_vector_indexes(State(state): State<Arc<AppState>>) -> impl Int
                 "name": entry.key(),
                 "dimensions": idx.config.dimensions,
                 "metric": format!("{:?}", idx.config.metric),
+                "quantization": format!("{:?}", idx.config.quantization),
+                "memory_bytes": idx.memory_bytes(),
                 "total_vectors": idx.len(),
             })
         })

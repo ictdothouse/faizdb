@@ -269,14 +269,31 @@ pub async fn metrics_handler(State(state): State<Arc<AppState>>) -> Response {
 /// GET /v1/system/profile handler returning runtime observability JSON
 pub async fn system_profile_handler(State(state): State<Arc<AppState>>) -> Response {
     let raft_info = state.db.raft().get_info();
-    let col_count = state.db.list_collections().len();
+    let collections = state.db.list_collections();
+    let col_count = collections.len();
     let uptime_sec = state.metrics.start_time.elapsed().as_secs();
+
+    let mut total_docs = 0u64;
+    let mut total_doc_bytes = 0u64;
+    for col_name in &collections {
+        let col = state.db.get_or_create_collection(col_name);
+        let s = col.stats();
+        total_docs += s.document_count;
+        total_doc_bytes += s.total_size;
+    }
 
     let profile = json!({
         "status": "online",
         "version": env!("CARGO_PKG_VERSION"),
         "uptime_seconds": uptime_sec,
         "collections_count": col_count,
+        "storage_architecture": {
+            "model": "RAM-Accelerated In-Memory Primary with Tiered LSM-Tree Persistence",
+            "active_documents_in_ram": total_docs,
+            "active_document_bytes_in_ram": total_doc_bytes,
+            "estimated_ram_usage_mb": (total_doc_bytes as f64 / (1024.0 * 1024.0) * 1.35).round(),
+            "ram_sizing_guideline": "Active working-set resident in RAM; cold records fall back to LSM-Tree disk storage. Sizing: RAM >= Document Bytes * 1.35",
+        },
         "cluster": {
             "node_id": raft_info.node_id,
             "role": format!("{:?}", raft_info.role).to_lowercase(),

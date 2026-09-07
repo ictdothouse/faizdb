@@ -163,10 +163,17 @@ pub fn handle_mysql_query(
                     let rows: Vec<Vec<Option<String>>> = Vec::new();
                     format_result_set(&mut seq, current_db, "", &cols, &rows)
                 } else {
-                    // Collect column names from first doc
-                    let mut cols: Vec<String> = docs[0].fields.keys().cloned().collect();
-                    if !cols.contains(&"_id".to_string()) {
-                        cols.insert(0, "_id".to_string());
+                    // Heterogeneous NoSQL schema union: collect all unique column names across all returned documents
+                    let mut seen = std::collections::HashSet::new();
+                    let mut cols: Vec<String> = vec!["_id".to_string()];
+                    seen.insert("_id".to_string());
+
+                    for doc in &docs {
+                        for k in doc.fields.keys() {
+                            if seen.insert(k.clone()) {
+                                cols.push(k.clone());
+                            }
+                        }
                     }
 
                     let mut rows: Vec<Vec<Option<String>>> = Vec::with_capacity(docs.len());

@@ -303,7 +303,14 @@ impl DatabaseContext {
             .entry(name.to_string())
             .or_insert_with(|| {
                 if let Some(storage) = &self.storage {
-                    Arc::new(Collection::with_storage(name, storage.clone()))
+                    let mut config = faizdb_core::document::collection::CollectionConfig::default();
+                    config.name = name.to_string();
+                    let max_docs = std::env::var("FAIZDB_MAX_MEMORY_DOCS")
+                        .ok()
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .unwrap_or(100_000);
+                    config.max_memory_documents = Some(max_docs);
+                    Arc::new(Collection::with_config_and_storage(config, storage.clone()))
                 } else {
                     Arc::new(Collection::new(name))
                 }
@@ -1075,6 +1082,10 @@ impl DatabaseContext {
                     let id = col.insert(doc).map_err(|e| e.to_string())?;
                     let id_str = id.as_str().to_string();
 
+                    // Propose to Raft consensus replicated log
+                    let doc_val = serde_json::to_value(&doc_clone).ok();
+                    let _ = self.raft.propose(format!("INSERT {collection}"), doc_val);
+
                     // Emit real-time change stream event
                     self.bus
                         .publish(ChangeEvent::insert(&collection, doc_clone));
@@ -1103,6 +1114,10 @@ impl DatabaseContext {
                 let count = matching_ids.len() as u64;
                 for id in matching_ids {
                     if col.delete_by_id(&id).is_ok() {
+                        let _ = self.raft.propose(
+                            format!("DELETE {collection}"),
+                            Some(serde_json::json!({ "id": id })),
+                        );
                         self.bus.publish(ChangeEvent::delete(&collection, &id));
                     }
                 }
@@ -1166,6 +1181,8 @@ impl DatabaseContext {
                     });
                     if res.is_ok() {
                         let updated_doc = col.find_by_id(&id).ok();
+                        let doc_val = updated_doc.as_ref().and_then(|d| serde_json::to_value(d).ok());
+                        let _ = self.raft.propose(format!("UPDATE {collection}"), doc_val);
                         self.bus.publish(ChangeEvent::update(
                             &collection,
                             &id,
