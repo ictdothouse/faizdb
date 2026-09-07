@@ -72,7 +72,33 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
         return parse_mongo_query(trimmed);
     }
 
-    // 2. Index DDL: CREATE [UNIQUE] INDEX ... / DROP INDEX ...
+    // 2. Collection & Table DDL: DROP TABLE / DROP COLLECTION / CREATE TABLE / CREATE COLLECTION
+    if upper.starts_with("DROP TABLE ") || upper.starts_with("DROP COLLECTION ") {
+        let name = if upper.starts_with("DROP TABLE ") {
+            trimmed[11..].trim().trim_end_matches(';').trim().to_string()
+        } else {
+            trimmed[16..].trim().trim_end_matches(';').trim().to_string()
+        };
+        return Ok(Statement::DropCollection { name });
+    }
+
+    if (upper.starts_with("CREATE TABLE ") || upper.starts_with("CREATE COLLECTION "))
+        && !upper.contains("INDEX")
+    {
+        let name = if upper.starts_with("CREATE TABLE ") {
+            let rest = trimmed[13..].trim();
+            if let Some(p_idx) = rest.find('(') {
+                rest[..p_idx].trim().to_string()
+            } else {
+                rest.trim_end_matches(';').trim().to_string()
+            }
+        } else {
+            trimmed[18..].trim().trim_end_matches(';').trim().to_string()
+        };
+        return Ok(Statement::CreateCollection { name });
+    }
+
+    // 3. Index DDL: CREATE [UNIQUE] INDEX ... / DROP INDEX ...
     if upper.starts_with("CREATE") && upper.contains("INDEX") {
         return parse_create_index_query(trimmed);
     }
@@ -301,6 +327,7 @@ fn parse_mongo_query(input: &str) -> Result<Statement, String> {
                 .to_string();
             Ok(Statement::DropIndex { collection, field })
         }
+        "drop" => Ok(Statement::DropCollection { name: collection }),
         _ => Err(format!("Unsupported MongoDB method: '{method}'")),
     }
 }
@@ -1662,7 +1689,6 @@ fn parse_cypher_create(input: &str) -> Result<Statement, String> {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
 

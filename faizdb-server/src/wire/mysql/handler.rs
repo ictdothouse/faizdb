@@ -198,8 +198,8 @@ pub fn handle_mysql_query(
                 format_result_set(&mut seq, current_db, "", &cols, &rows)
             }
             QueryResult::Inserted(ids) => vec![build_ok_packet(seq, ids.len() as u64, 0, "")],
-            QueryResult::Updated(n) => vec![build_ok_packet(seq, n as u64, 0, "")],
-            QueryResult::Deleted(n) => vec![build_ok_packet(seq, n as u64, 0, "")],
+            QueryResult::Updated(n) => vec![build_ok_packet(seq, n, 0, "")],
+            QueryResult::Deleted(n) => vec![build_ok_packet(seq, n, 0, "")],
             QueryResult::Success(msg) => vec![build_ok_packet(seq, 0, 0, &msg)],
             QueryResult::Explain(plan) => {
                 let cols = vec!["EXPLAIN".to_string()];

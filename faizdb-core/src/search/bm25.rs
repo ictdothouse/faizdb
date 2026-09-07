@@ -100,6 +100,14 @@ impl InvertedIndex {
         }
     }
 
+    /// Clear all documents and tokens from the inverted index
+    pub fn clear(&self) {
+        self.postings.clear();
+        self.doc_lengths.clear();
+        self.total_docs.store(0, Ordering::Relaxed);
+        self.total_tokens.store(0, Ordering::Relaxed);
+    }
+
     /// Average document length across index
     pub fn avg_doc_length(&self) -> f64 {
         let n = self.total_docs.load(Ordering::Relaxed);

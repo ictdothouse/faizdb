@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Query Optimizer Resilience**: Hardened floating-point comparisons in Cost-Based Optimizer (CBO) table statistics to guarantee stability across edge-case numerical distributions.
 - **WAL Segment Durability**: Enforced clean segment truncation during WAL log rotation.
 - **Bounded Working-Set Disk Fallback & Data Integrity Hardening**: Closed data-loss edge cases when `max_memory_documents` is enabled by integrating transparent disk fallback across `find_all`, `delete_by_id`, `update_by_id`, `update_many`, and duplicate key validation against disk storage, while strictly enforcing memory caps on cache misses.
+- **Collection Lifecycle & Persistent Storage Purging**: Eliminated zombie records where `DROP TABLE`, `DROP COLLECTION`, or `db.collection.drop()` only evicted RAM structures; now atomically scans and purges all underlying LSM-Tree SSTable/WAL keys matching `doc:{name}:`.
+- **REST Collection Dropping Route**: Introduced `DELETE /v1/collections/{name}` REST endpoint with RBAC write authentication for complete collection lifecycle management.
+- **Memory Cap Enforcement on Recovery**: Hardened `Collection::load_document` with memory cap enforcement preventing out-of-memory blowouts during crash recovery or snapshot restores.
+- **Defensive SSTable & WAL Zero-Copy Bounds**: Hardened SSTable `read_entry_ref` and WAL `from_reader` against integer overflow and unbounded memory allocations via checked arithmetic and `MAX_WAL_SIZE` caps.
+- **Saturating Atomic Counters**: Replaced raw `fetch_sub` with `saturating_sub` across collection document counters and byte sizing, eliminating modulo $2^{64}$ underflow risks.
 - **Code Quality & Linter Compliance**: Resolved all workspace Clippy lints to achieve full compliance with `-D warnings` strict build policy.
 
 ### Changed

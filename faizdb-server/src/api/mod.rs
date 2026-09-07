@@ -141,6 +141,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let write_routes = Router::new()
         .route("/v1/query", post(collections::execute_query))
         .route(
+            "/v1/collections/{name}",
+            delete(collections::drop_collection_handler),
+        )
+        .route(
             "/v1/collections/{name}/documents",
             post(collections::insert_document),
         )

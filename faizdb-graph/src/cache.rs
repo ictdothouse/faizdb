@@ -217,11 +217,12 @@ mod tests {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0];
         let c = vec![0.0, 1.0, 0.0];
-        let d = vec![0.7071, 0.7071, 0.0];
+        let frac = std::f32::consts::FRAC_1_SQRT_2;
+        let d = vec![frac, frac, 0.0];
 
         assert!((cosine_similarity(&a, &b) - 1.0).abs() < 1e-4);
         assert!((cosine_similarity(&a, &c) - 0.0).abs() < 1e-4);
-        assert!((cosine_similarity(&a, &d) - 0.7071).abs() < 1e-3);
+        assert!((cosine_similarity(&a, &d) - frac).abs() < 1e-3);
     }
 
     #[test]

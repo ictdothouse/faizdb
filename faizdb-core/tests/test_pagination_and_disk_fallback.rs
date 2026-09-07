@@ -87,9 +87,11 @@ fn test_bounded_memory_with_out_of_core_disk_streaming() {
         ..Default::default()
     };
     let storage = Arc::new(StorageEngine::open(config).unwrap());
-    let mut col_config = faizdb_core::document::collection::CollectionConfig::default();
-    col_config.name = "bounded_orders".to_string();
-    col_config.max_memory_documents = Some(5); // Cap RAM to only 5 documents!
+    let col_config = faizdb_core::document::collection::CollectionConfig {
+        name: "bounded_orders".to_string(),
+        max_memory_documents: Some(5),
+        ..Default::default()
+    };
 
     let col = Collection::with_config_and_storage(col_config, storage.clone());
 
@@ -130,9 +132,11 @@ fn test_find_all_and_disk_fallback_operations() {
         ..Default::default()
     };
     let storage = Arc::new(StorageEngine::open(config).unwrap());
-    let mut col_config = faizdb_core::document::collection::CollectionConfig::default();
-    col_config.name = "fallback_products".to_string();
-    col_config.max_memory_documents = Some(3); // Extreme cap: only 3 docs in RAM!
+    let col_config = faizdb_core::document::collection::CollectionConfig {
+        name: "fallback_products".to_string(),
+        max_memory_documents: Some(3),
+        ..Default::default()
+    };
 
     let col = Collection::with_config_and_storage(col_config, storage.clone());
 
@@ -198,9 +202,11 @@ fn test_secondary_index_and_bm25_with_evicted_records() {
         ..Default::default()
     };
     let storage = Arc::new(StorageEngine::open(config).unwrap());
-    let mut col_config = faizdb_core::document::collection::CollectionConfig::default();
-    col_config.name = "idx_fallback".to_string();
-    col_config.max_memory_documents = Some(2); // Capped to 2
+    let col_config = faizdb_core::document::collection::CollectionConfig {
+        name: "idx_fallback".to_string(),
+        max_memory_documents: Some(2),
+        ..Default::default()
+    };
 
     let col = Collection::with_config_and_storage(col_config, storage);
 
@@ -239,4 +245,116 @@ fn test_secondary_index_and_bm25_with_evicted_records() {
     assert_eq!(col.stats().document_count, 3);
 }
 
+#[test]
+fn test_collection_clear_and_disk_purge() {
+    let temp_dir = tempdir().unwrap();
+    let config = StorageConfig {
+        data_dir: temp_dir.path().to_path_buf(),
+        sync_writes: true,
+        enable_wal: true,
+        ..Default::default()
+    };
+    let storage = Arc::new(StorageEngine::open(config).unwrap());
+    let col = Collection::with_storage("purge_col", storage.clone());
 
+    let mut ids = Vec::new();
+    for i in 0..10 {
+        let mut doc = Document::new();
+        doc.set("val", i as i64);
+        let id = col.insert(doc).unwrap();
+        ids.push(id.as_str().to_string());
+    }
+
+    assert_eq!(col.stats().document_count, 10);
+    let disk_key = format!("doc:purge_col:{}", ids[0]).into_bytes();
+    assert!(storage.get(&disk_key).unwrap().is_some());
+
+    // Clear collection
+    col.clear().expect("clear succeeds");
+    assert_eq!(col.stats().document_count, 0);
+    assert_eq!(col.in_memory_count(), 0);
+    assert_eq!(col.stats().total_size, 0);
+
+    // Persistent storage must have been purged
+    assert!(storage.get(&disk_key).unwrap().is_none());
+    let prefix = b"doc:purge_col:";
+    let remaining = storage.prefix_scan(prefix).unwrap();
+    assert_eq!(remaining.len(), 0);
+}
+
+#[test]
+fn test_load_document_memory_cap_and_idempotency() {
+    let temp_dir = tempdir().unwrap();
+    let config = StorageConfig {
+        data_dir: temp_dir.path().to_path_buf(),
+        sync_writes: true,
+        enable_wal: true,
+        ..Default::default()
+    };
+    let storage = Arc::new(StorageEngine::open(config).unwrap());
+
+    let col_config = faizdb_core::document::collection::CollectionConfig {
+        name: "load_cap_col".to_string(),
+        max_memory_documents: Some(3),
+        ..Default::default()
+    };
+
+    let col = Collection::with_config_and_storage(col_config, storage.clone());
+
+    // Populate 10 documents into storage and load into collection
+    let mut docs = Vec::new();
+    for i in 0..10 {
+        let mut doc = Document::new();
+        doc.set("seq", i as i64);
+        let key = format!("doc:load_cap_col:{}", doc.id.as_str()).into_bytes();
+        let val = serde_json::to_vec(&doc).unwrap();
+        storage.put(&key, &val).unwrap();
+        docs.push(doc);
+    }
+
+    for doc in &docs {
+        col.load_document(doc.clone());
+    }
+
+    // doc_count should be 10
+    assert_eq!(col.stats().document_count, 10);
+    // in_memory_count MUST obey the max_memory_documents cap of 3!
+    assert!(col.in_memory_count() <= 3);
+
+    // Reloading existing resident document should NOT duplicate doc_count or total_size
+    let count_before = col.stats().document_count;
+    let size_before = col.stats().total_size;
+    col.load_document(docs[9].clone());
+    assert_eq!(col.stats().document_count, count_before);
+    assert_eq!(col.stats().total_size, size_before);
+}
+
+#[test]
+fn test_sstable_corrupted_overflow_protection() {
+    use faizdb_core::storage::sstable::SSTableReader;
+
+    // Craft a byte buffer claiming huge key_len to trigger overflow
+    let mut corrupted = Vec::new();
+    corrupted.extend_from_slice(&u32::MAX.to_le_bytes()); // key_len = u32::MAX
+    corrupted.extend_from_slice(&100u32.to_le_bytes());   // val_len = 100
+    corrupted.push(0); // tombstone
+
+    // Must return Err(SsTableCorrupted), NOT panic or overflow
+    let result = SSTableReader::read_entry_ref(&corrupted, 0);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_wal_corrupted_payload_limit() {
+    use faizdb_core::storage::wal::WalRecord;
+    use std::io::Cursor;
+
+    // Craft a WAL record claiming 2GB payload length
+    let mut corrupted = Vec::new();
+    corrupted.extend_from_slice(&(2_000_000_000u32).to_le_bytes());
+    corrupted.extend_from_slice(&[0u8; 4]); // CRC
+
+    let mut cursor = Cursor::new(corrupted);
+    let result = WalRecord::from_reader(&mut cursor, 0);
+    assert!(result.is_err(), "Must reject payload exceeding MAX_WAL_SIZE");
+}

@@ -226,7 +226,7 @@ impl Collection {
                 let evict_key = {
                     let mut iter = self.documents.iter();
                     let found = iter
-                        .find(|e| keep_id.map_or(true, |kid| e.key() != kid))
+                        .find(|e| keep_id.is_none_or(|kid| e.key() != kid))
                         .map(|e| e.key().clone());
                     drop(iter);
                     found
@@ -345,6 +345,7 @@ impl Collection {
     pub fn load_document(&self, doc: Document) {
         let id_str = doc.id.as_str().to_string();
         let size = doc.size_bytes();
+        let already_present = self.documents.contains_key(&id_str);
 
         for idx_entry in self.secondary_indexes.iter() {
             idx_entry.value().insert(&doc);
@@ -362,9 +363,37 @@ impl Collection {
             }
         }
 
-        self.documents.insert(id_str, doc);
-        self.doc_count.fetch_add(1, Ordering::Relaxed);
-        self.total_size.fetch_add(size as u64, Ordering::Relaxed);
+        self.documents.insert(id_str.clone(), doc);
+        if !already_present {
+            self.doc_count.fetch_add(1, Ordering::Relaxed);
+            self.total_size.fetch_add(size as u64, Ordering::Relaxed);
+        }
+        if self.storage.is_some() {
+            self.enforce_memory_cap(Some(&id_str));
+        }
+    }
+
+    /// Clear all documents and secondary indexes from memory and persistent storage
+    pub fn clear(&self) -> FaizResult<()> {
+        self.documents.clear();
+        self.doc_count.store(0, Ordering::Relaxed);
+        self.total_size.store(0, Ordering::Relaxed);
+        self.text_index.clear();
+        for idx in self.secondary_indexes.iter() {
+            idx.value().clear();
+        }
+        self.index_data.clear();
+
+        // If backed by persistent storage, purge all keys under prefix doc:{name}:
+        if let Some(storage) = &self.storage {
+            let prefix = format!("doc:{}:", self.config.name).into_bytes();
+            if let Ok(entries) = storage.prefix_scan(&prefix) {
+                for (key, _) in entries {
+                    let _ = storage.delete(&key);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Find a document by its ID (with lazy TTL evaluation).
@@ -564,8 +593,11 @@ impl Collection {
                 self.total_size
                     .fetch_add(new_size - old_size, Ordering::Relaxed);
             } else {
-                self.total_size
-                    .fetch_sub(old_size - new_size, Ordering::Relaxed);
+                let _ = self
+                    .total_size
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+                        Some(s.saturating_sub(old_size - new_size))
+                    });
             }
 
             let updated = entry.value().clone();
@@ -598,8 +630,11 @@ impl Collection {
                         self.total_size
                             .fetch_add(new_size - old_size, Ordering::Relaxed);
                     } else {
-                        self.total_size
-                            .fetch_sub(old_size - new_size, Ordering::Relaxed);
+                        let _ = self
+                            .total_size
+                            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+                                Some(s.saturating_sub(old_size - new_size))
+                            });
                     }
 
                     let doc_text = extract_doc_text(&doc);
@@ -729,9 +764,16 @@ impl Collection {
             }
         };
 
-        self.doc_count.fetch_sub(1, Ordering::Relaxed);
-        self.total_size
-            .fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
+        let _ = self
+            .doc_count
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |c| {
+                Some(c.saturating_sub(1))
+            });
+        let _ = self
+            .total_size
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+                Some(s.saturating_sub(doc.size_bytes() as u64))
+            });
 
         // Remove from secondary indexes & text search index
         for idx_entry in self.secondary_indexes.iter() {

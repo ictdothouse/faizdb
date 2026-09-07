@@ -237,6 +237,20 @@ Runs a multi-stage aggregation pipeline across collections with `$lookup` joins,
   }
   ```
 
+### 7. `DELETE /v1/collections/:name`
+Permanently drops the collection, immediately clearing in-memory caches, secondary B-Tree and full-text indexes, and purging all persisted LSM-Tree disk records under the collection prefix. Emits a `drop_collection` ChangeStream event.
+* **Response:**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "dropped": true,
+      "collection": "customers",
+      "was_resident": true
+    }
+  }
+  ```
+
 ---
 
 ## 🧠 6. AI Vector Search & Transactional GraphRAG

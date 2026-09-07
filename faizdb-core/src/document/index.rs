@@ -111,4 +111,10 @@ impl SecondaryIndex {
         let tree = self.tree.read();
         tree.values().map(|s| s.len()).sum()
     }
+
+    /// Clear all entries from the secondary index
+    pub fn clear(&self) {
+        self.tree.write().clear();
+    }
 }
+

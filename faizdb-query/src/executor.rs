@@ -303,13 +303,15 @@ impl DatabaseContext {
             .entry(name.to_string())
             .or_insert_with(|| {
                 if let Some(storage) = &self.storage {
-                    let mut config = faizdb_core::document::collection::CollectionConfig::default();
-                    config.name = name.to_string();
                     let max_docs = std::env::var("FAIZDB_MAX_MEMORY_DOCS")
                         .ok()
                         .and_then(|s| s.parse::<usize>().ok())
                         .unwrap_or(100_000);
-                    config.max_memory_documents = Some(max_docs);
+                    let config = faizdb_core::document::collection::CollectionConfig {
+                        name: name.to_string(),
+                        max_memory_documents: Some(max_docs),
+                        ..Default::default()
+                    };
                     Arc::new(Collection::with_config_and_storage(config, storage.clone()))
                 } else {
                     Arc::new(Collection::new(name))
@@ -318,13 +320,25 @@ impl DatabaseContext {
             .clone()
     }
 
-    /// Drop a collection from DatabaseContext
+    /// Drop a collection from DatabaseContext and purge its persisted disk data
     pub fn drop_collection(&self, name: &str) -> bool {
-        let removed = self.collections.remove(name).is_some();
-        if removed {
+        let col_opt = self.collections.remove(name);
+        if let Some((_, col)) = col_opt {
+            let _ = col.clear();
             self.bus.publish(ChangeEvent::drop_collection(name));
+            true
+        } else {
+            // Even if not currently resident in memory, ensure any persisted disk keys are purged
+            if let Some(storage) = &self.storage {
+                let prefix = format!("doc:{}:", name).into_bytes();
+                if let Ok(entries) = storage.prefix_scan(&prefix) {
+                    for (key, _) in entries {
+                        let _ = storage.delete(&key);
+                    }
+                }
+            }
+            false
         }
-        removed
     }
 
     /// Trigger LSM-Tree compaction on persistent storage engine if open
@@ -1199,9 +1213,12 @@ impl DatabaseContext {
                 Ok(QueryResult::Success(format!("Collection '{name}' created")))
             }
             Statement::DropCollection { name } => {
-                self.collections.remove(&name);
-                self.bus.publish(ChangeEvent::drop_collection(&name));
-                Ok(QueryResult::Success(format!("Collection '{name}' dropped")))
+                let dropped = self.drop_collection(&name);
+                if dropped {
+                    Ok(QueryResult::Success(format!("Collection '{name}' dropped")))
+                } else {
+                    Ok(QueryResult::Success(format!("Collection '{name}' dropped (purged from storage)")))
+                }
             }
             Statement::CreateIndex {
                 collection,
@@ -1582,6 +1599,46 @@ mod tests {
         // Distinct query embedding (cosine similarity ~ 0.0 < 0.90) -> Cache Miss
         let cache_miss = ctx.semantic_cache.get(&[0.0, 1.0, 0.0]);
         assert!(cache_miss.is_none());
+    }
+
+    #[test]
+    fn test_executor_drop_collection_purges_storage() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(
+            faizdb_core::storage::engine::StorageEngine::open(
+                faizdb_core::storage::engine::StorageConfig {
+                    data_dir: temp_dir.path().to_path_buf(),
+                    sync_writes: true,
+                    enable_wal: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        );
+
+        let mut ctx = DatabaseContext::new();
+        ctx.storage = Some(storage.clone());
+
+        // Create collection and insert
+        let col = ctx.get_or_create_collection("temporary_records");
+        let mut doc = Document::new();
+        doc.set("temp_field", "temp_value");
+        let doc_id = col.insert(doc).unwrap();
+
+        // Check exists on disk
+        let disk_key = format!("doc:temporary_records:{}", doc_id.as_str()).into_bytes();
+        assert!(storage.get(&disk_key).unwrap().is_some());
+
+        // Execute DROP COLLECTION SQL
+        let drop_sql = crate::parse_query("DROP COLLECTION temporary_records").unwrap();
+        let res = ctx.execute(drop_sql).unwrap();
+        match res {
+            QueryResult::Success(msg) => assert!(msg.contains("dropped")),
+            _ => panic!("Expected Success on DROP COLLECTION"),
+        }
+
+        // Must be purged from disk
+        assert!(storage.get(&disk_key).unwrap().is_none());
     }
 }
 

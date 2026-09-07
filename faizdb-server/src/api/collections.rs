@@ -858,3 +858,19 @@ pub async fn system_compact(State(state): State<Arc<AppState>>) -> impl IntoResp
         ),
     }
 }
+
+pub async fn drop_collection_handler(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let dropped = state.db.drop_collection(&name);
+    (
+        StatusCode::OK,
+        Json(ApiResponse::ok(serde_json::json!({
+            "dropped": true,
+            "collection": name,
+            "was_resident": dropped,
+        }))),
+    )
+}
+

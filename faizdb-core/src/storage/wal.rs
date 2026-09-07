@@ -135,6 +135,12 @@ impl WalRecord {
             .read_exact(&mut len_buf)
             .map_err(|e| FaizError::io(format!("WAL offset {offset}"), e))?;
         let payload_len = u32::from_le_bytes(len_buf) as usize;
+        if payload_len as u64 > MAX_WAL_SIZE {
+            return Err(FaizError::WalCorrupted {
+                offset,
+                detail: format!("Payload length {payload_len} exceeds maximum WAL size ({MAX_WAL_SIZE})"),
+            });
+        }
 
         // Read CRC
         let mut crc_buf = [0u8; 4];
@@ -180,7 +186,14 @@ impl WalRecord {
         // Key
         let key_len = u32::from_le_bytes(payload[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
-        if pos + key_len + 4 > payload_len {
+        let key_end_with_next_header = pos
+            .checked_add(key_len)
+            .and_then(|p| p.checked_add(4))
+            .ok_or_else(|| FaizError::WalCorrupted {
+                offset,
+                detail: format!("Key length {key_len} arithmetic overflow"),
+            })?;
+        if key_end_with_next_header > payload_len {
             return Err(FaizError::WalCorrupted {
                 offset,
                 detail: format!("Key length {key_len} exceeds payload bounds"),
@@ -192,7 +205,11 @@ impl WalRecord {
         // Value
         let val_len = u32::from_le_bytes(payload[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
-        if pos + val_len != payload_len {
+        let val_end = pos.checked_add(val_len).ok_or_else(|| FaizError::WalCorrupted {
+            offset,
+            detail: format!("Value length {val_len} arithmetic overflow"),
+        })?;
+        if val_end != payload_len {
             return Err(FaizError::WalCorrupted {
                 offset,
                 detail: format!("Value length {val_len} does not match remaining payload (expected {})", payload_len - pos),

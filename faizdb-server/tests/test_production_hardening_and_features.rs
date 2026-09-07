@@ -260,13 +260,13 @@ fn test_vector_distance_clamping_safety() {
     // Test identical vectors: cosine distance must be clamped cleanly to 0.0
     let v1 = vec![0.1234567, 0.9876543, 0.5555555];
     let dist = cosine_distance(&v1, &v1);
-    assert!(dist >= 0.0 && dist <= 1.0);
+    assert!((0.0..=1.0).contains(&dist));
     assert!(dist.abs() < 1e-6);
 
     // Opposite vectors: cosine distance clamped to 2.0
     let v2 = vec![-0.1234567, -0.9876543, -0.5555555];
     let dist_opp = cosine_distance(&v1, &v2);
-    assert!(dist_opp >= 0.0 && dist_opp <= 2.0);
+    assert!((0.0..=2.0).contains(&dist_opp));
     assert!((dist_opp - 2.0).abs() < 1e-6);
 }
 

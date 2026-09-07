@@ -41,7 +41,7 @@ fn test_mmap_sstable_point_lookup() {
     // Open via memory-mapped reader
     let reader = SSTableReader::open(&path).expect("Failed to open mmap SSTable");
     assert_eq!(reader.entry_count(), count as u64);
-    assert!(reader.mmap().len() > 0);
+    assert!(!reader.mmap().is_empty());
 
     // Verify values
     for i in 0..count {

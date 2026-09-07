@@ -566,10 +566,11 @@ impl SSTableReader {
     }
 
     /// Read an entry as borrowed slices directly from memory map slice (Zero-Copy)
-    pub fn read_entry_ref<'a>(
-        data: &'a [u8],
+    #[allow(clippy::type_complexity)]
+    pub fn read_entry_ref(
+        data: &[u8],
         offset: usize,
-    ) -> FaizResult<(&'a [u8], Option<&'a [u8]>, usize)> {
+    ) -> FaizResult<(&[u8], Option<&[u8]>, usize)> {
         if offset + 9 > data.len() {
             return Err(FaizError::SsTableCorrupted("Entry truncated".into()));
         }
@@ -579,17 +580,22 @@ impl SSTableReader {
             u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
         let is_tombstone = data[offset + 8] == 1;
 
-        let total_entry_len = 9 + key_len + val_len;
-        if offset + total_entry_len > data.len() {
+        let total_entry_len = 9usize
+            .checked_add(key_len)
+            .and_then(|l| l.checked_add(val_len))
+            .ok_or_else(|| FaizError::SsTableCorrupted("Entry length overflow".into()))?;
+
+        if offset.checked_add(total_entry_len).is_none_or(|end| end > data.len()) {
             return Err(FaizError::SsTableCorrupted("Entry data truncated".into()));
         }
 
-        let key = &data[offset + 9..offset + 9 + key_len];
-        let val_start = offset + 9 + key_len;
+        let key_start = offset + 9;
+        let key_end = key_start + key_len;
+        let key = &data[key_start..key_end];
         let val = if is_tombstone {
             None
         } else {
-            Some(&data[val_start..val_start + val_len])
+            Some(&data[key_end..key_end + val_len])
         };
 
         Ok((key, val, total_entry_len))

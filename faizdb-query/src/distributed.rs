@@ -323,7 +323,7 @@ mod tests {
             DistributedJoinStrategy::DistributedIndexNestedLoopFallback
         );
         assert_eq!(
-            custom_coord.plan_distributed_join(1 * 1024 * 1024, false),
+            custom_coord.plan_distributed_join(1024 * 1024, false),
             DistributedJoinStrategy::BroadcastHashJoin
         );
     }
