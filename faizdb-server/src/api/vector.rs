@@ -311,3 +311,74 @@ pub async fn list_vector_indexes(State(state): State<Arc<AppState>>) -> impl Int
 
     Json(ApiResponse::ok(indexes))
 }
+
+pub async fn delete_vector(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path((index_name, id)): axum::extract::Path<(String, String)>,
+) -> impl IntoResponse {
+    let index_lock = match state.db.vector_indexes().get(&index_name) {
+        Some(idx) => idx.clone(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::err(format!("Vector index '{index_name}' not found"))),
+            );
+        }
+    };
+
+    let removed = index_lock.write().delete(&id);
+    if removed {
+        if let Some(storage) = state.db.storage() {
+            let key = format!("vec:data:{}:{}", index_name, id);
+            let _ = storage.delete(key.as_bytes());
+        }
+        (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
+                "id": id,
+                "index_name": index_name,
+                "deleted": true,
+            }))),
+        )
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::err(format!(
+                "Vector with id '{id}' not found in index '{index_name}'"
+            ))),
+        )
+    }
+}
+
+pub async fn drop_vector_index(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let removed = state.db.vector_indexes().remove(&name).is_some();
+    if removed {
+        if let Some(storage) = state.db.storage() {
+            let meta_key = format!("vec:meta:{}", name);
+            let _ = storage.delete(meta_key.as_bytes());
+
+            let prefix = format!("vec:data:{}:", name);
+            if let Ok(entries) = storage.prefix_scan(prefix.as_bytes()) {
+                for (k, _) in entries {
+                    let _ = storage.delete(&k);
+                }
+            }
+        }
+        (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
+                "index_name": name,
+                "dropped": true,
+            }))),
+        )
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::err(format!("Vector index '{name}' not found"))),
+        )
+    }
+}
+

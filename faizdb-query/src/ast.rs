@@ -299,6 +299,10 @@ pub enum Statement {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         relation: Option<String>,
     },
+    Set {
+        key: String,
+        value: String,
+    },
     BeginTransaction,
     CommitTransaction,
     RollbackTransaction,

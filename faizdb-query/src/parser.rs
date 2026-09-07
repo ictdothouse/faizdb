@@ -5,7 +5,8 @@ use faizdb_core::document::model::{Document, Value};
 
 /// Parse any supported query string into a [`Statement`]
 pub fn parse_query(input: &str) -> Result<Statement, String> {
-    let trimmed = input.trim();
+    let unaliased = strip_sql_comments(input);
+    let trimmed = unaliased.trim();
     if trimmed.is_empty() {
         return Err("Empty query".to_string());
     }
@@ -74,27 +75,40 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
 
     // 2. Collection & Table DDL: DROP TABLE / DROP COLLECTION / CREATE TABLE / CREATE COLLECTION
     if upper.starts_with("DROP TABLE ") || upper.starts_with("DROP COLLECTION ") {
-        let name = if upper.starts_with("DROP TABLE ") {
-            trimmed[11..].trim().trim_end_matches(';').trim().to_string()
+        let mut raw_name = if upper.starts_with("DROP TABLE ") {
+            trimmed[11..].trim().trim_end_matches(';').trim()
         } else {
-            trimmed[16..].trim().trim_end_matches(';').trim().to_string()
+            trimmed[16..].trim().trim_end_matches(';').trim()
         };
+        if raw_name.to_uppercase().starts_with("IF EXISTS ") {
+            raw_name = raw_name[10..].trim();
+        }
+        let name = raw_name
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string();
         return Ok(Statement::DropCollection { name });
     }
 
     if (upper.starts_with("CREATE TABLE ") || upper.starts_with("CREATE COLLECTION "))
         && !upper.contains("INDEX")
     {
-        let name = if upper.starts_with("CREATE TABLE ") {
+        let raw_name = if upper.starts_with("CREATE TABLE ") {
             let rest = trimmed[13..].trim();
             if let Some(p_idx) = rest.find('(') {
-                rest[..p_idx].trim().to_string()
+                rest[..p_idx].trim()
             } else {
-                rest.trim_end_matches(';').trim().to_string()
+                rest.trim_end_matches(';').trim()
             }
         } else {
-            trimmed[18..].trim().trim_end_matches(';').trim().to_string()
+            trimmed[18..].trim().trim_end_matches(';').trim()
         };
+        let mut name_part = raw_name;
+        if name_part.to_uppercase().starts_with("IF NOT EXISTS ") {
+            name_part = name_part[14..].trim();
+        }
+        let name = name_part
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string();
         return Ok(Statement::CreateCollection { name });
     }
 
@@ -107,17 +121,47 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
         return parse_drop_index_query(trimmed);
     }
 
-    // 3. openCypher graph queries: MATCH ...
+    // 4. Graph DDL/DML: CREATE EDGE ... or DELETE EDGE ...
+    if upper.starts_with("CREATE EDGE ") || upper.starts_with("CREATE EDGE\t") {
+        return parse_create_edge(trimmed);
+    }
+    if upper.starts_with("DELETE EDGE ") || upper.starts_with("DELETE EDGE\t") {
+        return parse_delete_edge(trimmed);
+    }
+
+    // 5. openCypher graph queries: MATCH ...
     if upper.starts_with("MATCH") {
         return parse_cypher_match(trimmed);
     }
 
-    // 4. openCypher graph DDL/DML: CREATE (n:Person ...) or CREATE (a)-[:REL]->(b)
+    // 6. openCypher graph DDL/DML: CREATE (n:Person ...) or CREATE (a)-[:REL]->(b)
     if upper.starts_with("CREATE") && trimmed.contains('(') && !upper.contains("INDEX") {
         return parse_cypher_create(trimmed);
     }
 
-    // 5. SQL / FaizQL format: SELECT / INSERT / DELETE / COUNT
+    // 7. SET session/system variables
+    if upper.starts_with("SET ") || upper == "SET" {
+        let rest = trimmed[3..].trim().trim_end_matches(';').trim();
+        let (key, value) = if let Some((k, v)) = rest.split_once('=') {
+            (
+                k.trim().to_string(),
+                v.trim().trim_matches('\'').trim_matches('"').to_string(),
+            )
+        } else {
+            let parts: Vec<&str> = rest.split_whitespace().collect();
+            if parts.len() >= 2 {
+                (
+                    parts[0].to_string(),
+                    parts[1..].join(" ").trim_matches('\'').trim_matches('"').to_string(),
+                )
+            } else {
+                (rest.to_string(), "".to_string())
+            }
+        };
+        return Ok(Statement::Set { key, value });
+    }
+
+    // 8. SQL / FaizQL format: SELECT / INSERT / DELETE / COUNT
 
     if upper.starts_with("SELECT") || upper.starts_with("FIND") {
         return parse_select_query(trimmed);
@@ -414,7 +458,10 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
         if i < tokens.len() && tokens[i].eq_ignore_ascii_case("FROM") {
             i += 1;
             if i < tokens.len() {
-                collection = tokens[i].trim_matches(';').to_string();
+                collection = tokens[i]
+                    .trim_matches(';')
+                    .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+                    .to_string();
                 i += 1;
             }
         }
@@ -672,49 +719,104 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     })
 }
 
-/// Simple SQL WHERE parser: `field = 'val'` or `age > 25 AND city = 'KL'`
+///// SQL WHERE parser supporting compound conditions, booleans, tautologies (`1=1`), and comparisons
 fn parse_sql_where(where_str: &str) -> Result<FilterExpr, String> {
-    let and_parts: Vec<&str> = where_str.split(" AND ").collect();
+    // Split case-insensitively on " AND "
+    let mut and_parts = Vec::new();
+    let mut remaining = where_str.trim();
+
+    while !remaining.is_empty() {
+        let upper = remaining.to_uppercase();
+        if let Some(pos) = upper.find(" AND ") {
+            and_parts.push(&remaining[..pos]);
+            remaining = remaining[pos + 5..].trim();
+        } else {
+            and_parts.push(remaining);
+            break;
+        }
+    }
+
     let mut exprs = Vec::new();
 
     for part in and_parts {
         let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+
+        // Tautologies and Booleans: "1 = 1", "true", "false", etc.
+        if part.eq_ignore_ascii_case("TRUE") || part == "1" {
+            exprs.push(FilterExpr::AlwaysTrue);
+            continue;
+        }
+        if part.eq_ignore_ascii_case("FALSE") || part == "0" {
+            exprs.push(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)));
+            continue;
+        }
+
+        let extract_field = |raw: &str| -> String {
+            raw.trim()
+                .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+                .to_string()
+        };
+
         if let Some((field, val_str)) = part.split_once(">=") {
             exprs.push(FilterExpr::Field {
-                field: field.trim().to_string(),
+                field: extract_field(field),
                 op: Operator::Gte,
                 value: parse_literal(val_str.trim()),
             });
         } else if let Some((field, val_str)) = part.split_once("<=") {
             exprs.push(FilterExpr::Field {
-                field: field.trim().to_string(),
+                field: extract_field(field),
                 op: Operator::Lte,
                 value: parse_literal(val_str.trim()),
             });
         } else if let Some((field, val_str)) = part.split_once("!=") {
             exprs.push(FilterExpr::Field {
-                field: field.trim().to_string(),
+                field: extract_field(field),
                 op: Operator::Neq,
                 value: parse_literal(val_str.trim()),
             });
         } else if let Some((field, val_str)) = part.split_once('>') {
             exprs.push(FilterExpr::Field {
-                field: field.trim().to_string(),
+                field: extract_field(field),
                 op: Operator::Gt,
                 value: parse_literal(val_str.trim()),
             });
         } else if let Some((field, val_str)) = part.split_once('<') {
             exprs.push(FilterExpr::Field {
-                field: field.trim().to_string(),
+                field: extract_field(field),
                 op: Operator::Lt,
                 value: parse_literal(val_str.trim()),
             });
         } else if let Some((field, val_str)) = part.split_once('=') {
-            exprs.push(FilterExpr::Field {
-                field: field.trim().to_string(),
-                op: Operator::Eq,
-                value: parse_literal(val_str.trim()),
-            });
+            let left = field.trim();
+            let right = val_str.trim();
+
+            // Check if both sides are literals (e.g. 1 = 1, 'a' = 'a')
+            let left_val = parse_literal(left);
+            let right_val = parse_literal(right);
+            let left_is_literal = left.starts_with('\'')
+                || left.starts_with('"')
+                || left.parse::<i64>().is_ok()
+                || left.parse::<f64>().is_ok()
+                || left.eq_ignore_ascii_case("true")
+                || left.eq_ignore_ascii_case("false");
+
+            if left_is_literal {
+                if left_val == right_val {
+                    exprs.push(FilterExpr::AlwaysTrue);
+                } else {
+                    exprs.push(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)));
+                }
+            } else {
+                exprs.push(FilterExpr::Field {
+                    field: extract_field(field),
+                    op: Operator::Eq,
+                    value: right_val,
+                });
+            }
         }
     }
 
@@ -759,7 +861,10 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
         if tokens.len() < 3 || !tokens[1].eq_ignore_ascii_case("INTO") {
             return Err("Expected 'INSERT INTO <collection> ...'".to_string());
         }
-        let collection = tokens[2].to_string();
+        let collection = tokens[2]
+            .trim_matches(';')
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string();
         let json_str = clean[json_start..].trim();
         let val: serde_json::Value =
             serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON insert: {e}"))?;
@@ -782,9 +887,13 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
 
         let collection_token = tokens[2];
         let collection = if let Some(p) = collection_token.find('(') {
-            collection_token[..p].to_string()
+            collection_token[..p]
+                .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+                .to_string()
         } else {
-            collection_token.to_string()
+            collection_token
+                .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+                .to_string()
         };
 
         // Extract column list if provided
@@ -794,9 +903,7 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
                     .split(',')
                     .map(|s| {
                         s.trim()
-                            .trim_matches('"')
-                            .trim_matches('\'')
-                            .trim()
+                            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
                             .to_string()
                     })
                     .collect()
@@ -823,7 +930,7 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
             }
         } else {
             for (idx, val_str) in val_strs.iter().enumerate() {
-                doc.set(format!("col_{}", idx + 1), parse_literal(val_str));
+                doc.set(format!("field_{idx}"), parse_literal(val_str));
             }
         }
 
@@ -833,10 +940,8 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
         });
     }
 
-    Err(
-        "INSERT requires JSON body or VALUES clause: INSERT INTO <table> (cols) VALUES (vals)"
-            .to_string(),
-    )
+    Err("Expected 'INSERT INTO <collection> VALUES (...)' or 'INSERT INTO <collection> {...}'"
+        .to_string())
 }
 
 /// Parse UPDATE <table> SET col1 = val1, col2 = val2 [WHERE ...]
@@ -849,7 +954,10 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
         return Err("Expected 'UPDATE <collection> SET ...'".to_string());
     }
 
-    let collection = tokens[1].trim_matches(';').to_string();
+    let collection = tokens[1]
+        .trim_matches(';')
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
 
     let set_pos = upper
         .find("SET")
@@ -875,8 +983,7 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
             .ok_or_else(|| format!("Expected 'field = value' in SET clause, got '{pair_str}'"))?;
         let field = pair_str[..eq_pos]
             .trim()
-            .trim_matches('"')
-            .trim_matches('\'')
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
             .to_string();
         let val_str = pair_str[eq_pos + 1..].trim();
         let val = parse_literal(val_str);
@@ -902,20 +1009,23 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
     })
 }
 
-/// Parse DELETE FROM <table> WHERE ...
+/// Parse DELETE FROM <table> [WHERE ...]
 fn parse_delete_query(input: &str) -> Result<Statement, String> {
     let tokens: Vec<&str> = input.split_whitespace().collect();
     if tokens.len() < 3 || !tokens[1].eq_ignore_ascii_case("FROM") {
-        return Err("Expected 'DELETE FROM <collection> WHERE ...'".to_string());
+        return Err("Expected 'DELETE FROM <collection> [WHERE ...]'".to_string());
     }
 
-    let collection = tokens[2].to_string();
-    let where_pos = input
-        .to_uppercase()
-        .find("WHERE")
-        .ok_or("DELETE requires WHERE clause")?;
-    let where_str = &input[where_pos + 5..].trim_end_matches(';').trim();
-    let filter = parse_sql_where(where_str)?;
+    let collection = tokens[2]
+        .trim_matches(';')
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
+    let filter = if let Some(where_pos) = input.to_uppercase().find("WHERE") {
+        let where_str = &input[where_pos + 5..].trim_end_matches(';').trim();
+        parse_sql_where(where_str)?
+    } else {
+        FilterExpr::AlwaysTrue
+    };
 
     Ok(Statement::Delete { collection, filter })
 }
@@ -927,7 +1037,10 @@ fn parse_count_query(input: &str) -> Result<Statement, String> {
         return Err("Expected 'COUNT FROM <collection>'".to_string());
     }
 
-    let collection = tokens[2].trim_matches(';').to_string();
+    let collection = tokens[2]
+        .trim_matches(';')
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
     let filter = if let Some(where_pos) = input.to_uppercase().find("WHERE") {
         let where_str = &input[where_pos + 5..].trim_end_matches(';').trim();
         Some(parse_sql_where(where_str)?)
@@ -956,8 +1069,14 @@ fn parse_create_index_query(input: &str) -> Result<Statement, String> {
         .find(')')
         .ok_or("Expected ')' around indexed field name")?;
 
-    let collection = target[..paren_open].trim().to_string();
-    let field = target[paren_open + 1..paren_close].trim().to_string();
+    let collection = target[..paren_open]
+        .trim()
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
+    let field = target[paren_open + 1..paren_close]
+        .trim()
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
 
     if collection.is_empty() || field.is_empty() {
         return Err("Invalid collection or field in CREATE INDEX".to_string());
@@ -983,11 +1102,187 @@ fn parse_drop_index_query(input: &str) -> Result<Statement, String> {
         .split_whitespace()
         .last()
         .unwrap_or("")
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
         .trim_start_matches("idx_")
         .to_string();
-    let collection = clean[on_pos + 2..].trim().to_string();
+    let collection = clean[on_pos + 2..]
+        .trim()
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
 
     Ok(Statement::DropIndex { collection, field })
+}
+
+/// Parse CREATE EDGE [FROM] <from> TO <to> VIA <relation> [WEIGHT <weight>]
+fn parse_create_edge(input: &str) -> Result<Statement, String> {
+    let clean = input.trim_end_matches(';').trim();
+    let mut rest = clean[11..].trim();
+    if rest.to_uppercase().starts_with("FROM ") {
+        rest = rest[5..].trim();
+    }
+
+    let upper_rest = rest.to_uppercase();
+    let to_pos = upper_rest
+        .find(" TO ")
+        .ok_or("Expected 'TO' in CREATE EDGE statement")?;
+    let from_raw = rest[..to_pos].trim();
+    let from = from_raw
+        .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+        .to_string();
+
+    let after_to = rest[to_pos + 4..].trim();
+    let upper_after_to = after_to.to_uppercase();
+
+    let via_pos = upper_after_to
+        .find(" VIA ")
+        .ok_or("Expected 'VIA' in CREATE EDGE statement")?;
+    let to_raw = after_to[..via_pos].trim();
+    let to = to_raw
+        .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+        .to_string();
+
+    let after_via = after_to[via_pos + 5..].trim();
+    let upper_after_via = after_via.to_uppercase();
+
+    let (rel_raw, weight) = if let Some(weight_pos) = upper_after_via.find(" WEIGHT ") {
+        let rel_part = after_via[..weight_pos].trim();
+        let w_part = after_via[weight_pos + 8..].trim();
+        let w: f32 = w_part
+            .parse()
+            .map_err(|e| format!("Invalid weight '{w_part}': {e}"))?;
+        (rel_part, Some(w))
+    } else {
+        (after_via, None)
+    };
+
+    let relation = rel_raw
+        .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+        .to_string();
+
+    Ok(Statement::CreateEdge {
+        from,
+        to,
+        relation,
+        weight,
+        properties: None,
+    })
+}
+
+/// Parse DELETE EDGE [FROM] <from> TO <to> [VIA <relation>]
+fn parse_delete_edge(input: &str) -> Result<Statement, String> {
+    let clean = input.trim_end_matches(';').trim();
+    let mut rest = clean[11..].trim();
+    if rest.to_uppercase().starts_with("FROM ") {
+        rest = rest[5..].trim();
+    }
+
+    let upper_rest = rest.to_uppercase();
+    let to_pos = upper_rest
+        .find(" TO ")
+        .ok_or("Expected 'TO' in DELETE EDGE statement")?;
+    let from_raw = rest[..to_pos].trim();
+    let from = from_raw
+        .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+        .to_string();
+
+    let after_to = rest[to_pos + 4..].trim();
+    let upper_after_to = after_to.to_uppercase();
+
+    let (to_raw, relation) = if let Some(via_pos) = upper_after_to.find(" VIA ") {
+        let to_part = after_to[..via_pos].trim();
+        let rel_part = after_to[via_pos + 5..].trim();
+        let rel = rel_part
+            .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+            .to_string();
+        (to_part, Some(rel))
+    } else {
+        (after_to, None)
+    };
+
+    let to = to_raw
+        .trim_matches(|c| c == '\'' || c == '"' || c == '`')
+        .to_string();
+
+    Ok(Statement::DeleteEdge { from, to, relation })
+}
+
+/// Strips line comments (`-- ...\n`, `# ...\n`) and block comments (`/* ... */`)
+/// while preserving string literals.
+pub fn strip_sql_comments(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let chars: Vec<char> = input.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    while i < len {
+        let c = chars[i];
+        if in_single_quote {
+            out.push(c);
+            if c == '\'' {
+                if i + 1 < len && chars[i + 1] == '\'' {
+                    out.push('\'');
+                    i += 1;
+                } else {
+                    in_single_quote = false;
+                }
+            }
+            i += 1;
+            continue;
+        }
+
+        if in_double_quote {
+            out.push(c);
+            if c == '"' {
+                in_double_quote = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if c == '\'' {
+            in_single_quote = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+
+        if c == '"' {
+            in_double_quote = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Line comment: -- or #
+        if (c == '-' && i + 1 < len && chars[i + 1] == '-') || c == '#' {
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+            if i < len && chars[i] == '\n' {
+                out.push('\n');
+                i += 1;
+            }
+            continue;
+        }
+
+        // Block comment: /* ... */
+        if c == '/' && i + 1 < len && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            i += 2; // skip */
+            out.push(' ');
+            continue;
+        }
+
+        out.push(c);
+        i += 1;
+    }
+
+    out
 }
 
 // =========================================================================

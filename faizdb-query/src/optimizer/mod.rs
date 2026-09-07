@@ -33,6 +33,7 @@ pub struct ColumnHistogram {
 impl ColumnHistogram {
     /// Build an equi-width histogram from numeric samples
     pub fn build_equi_width(mut values: Vec<f64>, bucket_count: usize) -> Option<Self> {
+        values.retain(|v| v.is_finite());
         if values.is_empty() {
             return None;
         }

@@ -251,7 +251,7 @@ pub fn format_result_set(
 
     // 2. Column Definitions
     for col in columns {
-        let col_type = if col.to_uppercase().contains("ID") || col.to_uppercase().contains("COUNT") {
+        let col_type = if col.to_uppercase().contains("COUNT") || col == "1" {
             MYSQL_TYPE_LONGLONG
         } else {
             MYSQL_TYPE_VAR_STRING

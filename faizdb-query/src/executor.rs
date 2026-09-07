@@ -1261,6 +1261,12 @@ impl DatabaseContext {
                 if let Some(props) = properties {
                     edge.properties = props;
                 }
+                if let Some(storage) = &self.storage {
+                    let key = format!("graph:e:{from}:{to}:{relation}");
+                    if let Ok(val) = serde_json::to_vec(&edge) {
+                        let _ = storage.put(key.as_bytes(), &val);
+                    }
+                }
                 self.graph_store.write().add_edge(edge);
                 Ok(QueryResult::Success(format!(
                     "Graph edge from '{from}' to '{to}' via '{relation}' created successfully"
@@ -1276,6 +1282,19 @@ impl DatabaseContext {
                     .write()
                     .remove_edge(&from, &to, relation.as_deref());
                 if removed {
+                    if let Some(storage) = &self.storage {
+                        if let Some(rel) = &relation {
+                            let key = format!("graph:e:{from}:{to}:{rel}");
+                            let _ = storage.delete(key.as_bytes());
+                        } else {
+                            let prefix = format!("graph:e:{from}:{to}:");
+                            if let Ok(entries) = storage.prefix_scan(prefix.as_bytes()) {
+                                for (k, _) in entries {
+                                    let _ = storage.delete(&k);
+                                }
+                            }
+                        }
+                    }
                     Ok(QueryResult::Success(format!(
                         "Graph edge from '{from}' to '{to}' deleted successfully"
                     )))
@@ -1283,6 +1302,9 @@ impl DatabaseContext {
                     Err(format!("Graph edge from '{from}' to '{to}' not found"))
                 }
             }
+            Statement::Set { key, value } => Ok(QueryResult::Success(
+                format!("SET {key} = '{value}' acknowledged"),
+            )),
             Statement::BeginTransaction => Ok(QueryResult::Success(
                 "ACID Transaction initialized (Snapshot Isolation)".into(),
             )),

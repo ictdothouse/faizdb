@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Terminal Tier Cold Compaction**: Added `compact_cold()` to reclaim space and permanently purge tombstones from cold storage without application downtime.
 - **Defensive Vector Slice Clamping**: Guarded SIMD vector distance calculations against out-of-bounds slice indexing via `a.len().min(b.len())`.
 - **Zero-Allocation Columnar Aggregation**: Optimized `avg_f64` to accumulate sums in a single pass without allocating temporary vectors.
+- **SQL DDL Quoting & `IF [NOT] EXISTS` Parsing**: Hardened DDL and DML statements to strip backticks (`` ` ``) and double quotes (`"`), correctly parsing `CREATE TABLE IF NOT EXISTS` and `DROP TABLE IF EXISTS` without corrupting table names.
+- **Graph Edge Query Durability**: Extended FaizQL query execution to write graph edge creations and deletions directly to durable LSM storage (`graph:e:`), guaranteeing edge persistence across reboots. Added native support for `CREATE EDGE [FROM] ... TO ... VIA ... [WEIGHT ...]` and `DELETE EDGE [FROM] ... TO ... [VIA ...]`.
+- **Offline TTL Expiration / Zombie Purge**: Fixed document recovery on restart to compute absolute TTL expiration (`created_at + ttl_secs`); expired documents are purged immediately from storage upon reboot instead of having their TTL reset.
+- **MySQL Wire Protocol Column Typing**: Correctly mapped string/UUID IDs to `MYSQL_TYPE_VAR_STRING (0xFD)` instead of `MYSQL_TYPE_LONGLONG (0x08)`, preventing client drivers (e.g. PHP PDO, Laravel, Go, Python) from failing on UUID v7 strings.
+- **SQL Comment Stripping & Tautology `1 = 1` Predicates**: Implemented robust SQL comment stripping (`--`, `#`, `/* ... */`), case-insensitive ` AND ` compound filters, and instant resolution of boolean/numeric tautologies (`WHERE 1=1`) commonly emitted by ORMs (Prisma, Drizzle, Hibernate).
+- **REST Vector Deletion & Axum 0.7 Routing**: Added `DELETE /v1/vector/{index_name}/{id}` and `DELETE /v1/vector/index/{name}` endpoints with correct Axum 0.7 `{param}` URL syntax.
+- **Histogram NaN Ingestion Guard**: Filtered non-finite floats in cost-based query optimizer histograms to prevent `NaN` step intervals.
 - **Code Quality & Linter Compliance**: Resolved all workspace Clippy lints to achieve full compliance with `-D warnings` strict build policy.
 
 ### Changed

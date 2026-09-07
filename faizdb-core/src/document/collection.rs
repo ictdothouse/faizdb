@@ -358,7 +358,23 @@ impl Collection {
         if let Some(ttl_val) = doc.get("_ttl").or_else(|| doc.get("ttl")) {
             if let Some(secs) = ttl_val.as_i64() {
                 if secs > 0 {
-                    self.ttl.set_expiry(&id_str, secs as u64);
+                    if let Some(ref meta) = doc.metadata {
+                        let created_ms = meta.created_at.timestamp_millis() as u64;
+                        let expire_at_ms = created_ms.saturating_add((secs as u64) * 1000);
+                        let now_ms = crate::ttl::current_time_ms();
+                        if now_ms >= expire_at_ms {
+                            // Document expired while offline/rebooting: do not revive; purge from persistent storage
+                            if let Some(storage) = &self.storage {
+                                let key = format!("doc:{}:{}", self.config.name, id_str).into_bytes();
+                                let _ = storage.delete(&key);
+                            }
+                            return;
+                        } else {
+                            self.ttl.set_expiry_at(&id_str, expire_at_ms);
+                        }
+                    } else {
+                        self.ttl.set_expiry(&id_str, secs as u64);
+                    }
                 }
             }
         }
