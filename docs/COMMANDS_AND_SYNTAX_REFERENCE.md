@@ -92,8 +92,12 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP
 );
 
--- Drop a table
+-- Create a collection (FaizQL / SQL)
+CREATE COLLECTION users;
+
+-- Drop a table or collection (purges both RAM and persistent disk storage)
 DROP TABLE IF EXISTS users;
+DROP COLLECTION users;
 
 -- Create Secondary B-Tree Index for O(log N) lookup
 CREATE INDEX idx_users_score ON users (score);

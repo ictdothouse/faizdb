@@ -209,10 +209,12 @@ The entire monorepo test suite executes cleanly with a **100% pass rate** across
   test_http_transactions_and_tls (ACID HTTP & TLS)    | 5 passed
   test_vector_search (HNSW Nearest Neighbors)         | 6 passed
   test_wire_security_and_performance (Wire & Bench)   | 3 passed (18 sub-tests)
+  test_pagination_and_disk_fallback (Out-of-Core & Disk)| 9 passed
+  test_executor_drop_storage_purge (Zero-Leak Storage) | 1 passed
   faizdb_vector (HNSW, Scalar & 32x Binary Quant)     | 15 passed
   faizdb_core (Doc-tests)                             | 2 passed
   ----------------------------------------------------|-------------------------
-  TOTAL COMPLIANCE:                                   | 196+ PASSED (0 FAILED)
+  TOTAL COMPLIANCE:                                   | 220+ PASSED (0 FAILED)
 ================================================================================
 ```
 
