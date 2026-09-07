@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vector Search Preflight Validation**: Enforced strict preflight dimension, empty query, and `top_k` checks across REST and query endpoints with graceful HTTP 400 responses.
 - **Query Optimizer Resilience**: Hardened floating-point comparisons in Cost-Based Optimizer (CBO) table statistics to guarantee stability across edge-case numerical distributions.
 - **WAL Segment Durability**: Enforced clean segment truncation during WAL log rotation.
+- **Bounded Working-Set Disk Fallback & Data Integrity Hardening**: Closed data-loss edge cases when `max_memory_documents` is enabled by integrating transparent disk fallback across `find_all`, `delete_by_id`, `update_by_id`, `update_many`, and duplicate key validation against disk storage, while strictly enforcing memory caps on cache misses.
 - **Code Quality & Linter Compliance**: Resolved all workspace Clippy lints to achieve full compliance with `-D warnings` strict build policy.
 
 ### Changed

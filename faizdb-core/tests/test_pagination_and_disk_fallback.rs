@@ -119,3 +119,124 @@ fn test_bounded_memory_with_out_of_core_disk_streaming() {
     assert_eq!(filtered.len(), 1);
     assert_eq!(filtered[0].get("amount").unwrap().as_i64(), Some(150));
 }
+
+#[test]
+fn test_find_all_and_disk_fallback_operations() {
+    let temp_dir = tempdir().unwrap();
+    let config = StorageConfig {
+        data_dir: temp_dir.path().to_path_buf(),
+        sync_writes: true,
+        enable_wal: true,
+        ..Default::default()
+    };
+    let storage = Arc::new(StorageEngine::open(config).unwrap());
+    let mut col_config = faizdb_core::document::collection::CollectionConfig::default();
+    col_config.name = "fallback_products".to_string();
+    col_config.max_memory_documents = Some(3); // Extreme cap: only 3 docs in RAM!
+
+    let col = Collection::with_config_and_storage(col_config, storage.clone());
+
+    // Insert 10 documents
+    let mut ids = Vec::new();
+    for i in 0..10 {
+        let mut doc = Document::new();
+        doc.set("sku", format!("SKU_{i:02}"));
+        doc.set("stock", (i + 1) * 10);
+        let id = col.insert(doc).unwrap();
+        ids.push(id.as_str().to_string());
+    }
+
+    // 1. Verify RAM is strictly capped at 3
+    assert!(col.in_memory_count() <= 3);
+    assert_eq!(col.stats().document_count, 10);
+
+    // 2. Verify find_all(None) retrieves ALL 10 documents from disk
+    let all_docs = col.find_all(None);
+    assert_eq!(all_docs.len(), 10);
+
+    // 3. Verify duplicate key rejection against disk-resident record
+    let evicted_id = &ids[0]; // first inserted was evicted
+    let mut duplicate_doc = Document::new();
+    duplicate_doc.id = faizdb_core::document::model::DocumentId::from_string(evicted_id.clone());
+    duplicate_doc.set("sku", "SKU_DUPLICATE");
+    let insert_res = col.insert(duplicate_doc);
+    assert!(insert_res.is_err(), "Must reject duplicate key for disk-resident doc");
+
+    // 4. Verify update_by_id on disk-resident record
+    let updated = col.update_by_id(evicted_id, |d| {
+        d.set("stock", 9999);
+    }).expect("update_by_id succeeds on evicted record");
+    assert_eq!(updated.get("stock").unwrap().as_i64(), Some(9999));
+
+    // Verify update persisted to disk
+    let disk_key = format!("doc:fallback_products:{evicted_id}").into_bytes();
+    let disk_bytes = storage.get(&disk_key).unwrap().unwrap();
+    let from_disk: Document = serde_json::from_slice(&disk_bytes).unwrap();
+    assert_eq!(from_disk.get("stock").unwrap().as_i64(), Some(9999));
+
+    // 5. Verify delete_by_id on disk-resident record
+    let deleted = col.delete_by_id(evicted_id).expect("delete_by_id succeeds on evicted record");
+    assert_eq!(deleted.id.as_str(), evicted_id.as_str());
+    assert_eq!(col.stats().document_count, 9);
+    assert!(col.find_by_id(evicted_id).is_err());
+    assert!(storage.get(&disk_key).unwrap().is_none());
+
+    // 6. Verify cache-miss repopulation respects memory cap
+    for id in &ids[1..6] {
+        let _ = col.find_by_id(id);
+    }
+    assert!(col.in_memory_count() <= 3, "RAM cache must not exceed max_memory_documents");
+}
+
+#[test]
+fn test_secondary_index_and_bm25_with_evicted_records() {
+    let temp_dir = tempdir().unwrap();
+    let config = StorageConfig {
+        data_dir: temp_dir.path().to_path_buf(),
+        sync_writes: true,
+        enable_wal: true,
+        ..Default::default()
+    };
+    let storage = Arc::new(StorageEngine::open(config).unwrap());
+    let mut col_config = faizdb_core::document::collection::CollectionConfig::default();
+    col_config.name = "idx_fallback".to_string();
+    col_config.max_memory_documents = Some(2); // Capped to 2
+
+    let col = Collection::with_config_and_storage(col_config, storage);
+
+    // Insert 6 articles
+    for i in 0..6 {
+        let mut doc = Document::new();
+        doc.set("category", if i % 2 == 0 { "tech" } else { "news" });
+        doc.set("content", format!("Deep quantum computing tutorial article {i}"));
+        col.insert(doc).unwrap();
+    }
+
+    assert_eq!(col.stats().document_count, 6);
+    assert!(col.in_memory_count() <= 2);
+
+    // 1. Create secondary index AFTER documents are already evicted to disk
+    col.create_secondary_index("category", false).expect("Index created");
+
+    // 2. Query secondary index for "tech" (should return 3 items, even though resident RAM is <=2)
+    let tech_docs = col
+        .find_by_secondary_index("category", &faizdb_core::document::model::Value::String("tech".into()))
+        .expect("Index lookup succeeds");
+    assert_eq!(tech_docs.len(), 3, "Secondary index must retrieve all 3 tech articles across disk");
+
+    // 3. BM25 Full-Text Search across disk-evicted documents
+    let search_results = col.search_text("quantum", false, 10);
+    assert_eq!(search_results.len(), 6, "BM25 search must find all 6 articles including disk-evicted ones");
+
+    // 4. Count with filter across disk-evicted documents
+    let filter = vec![("category".to_string(), faizdb_core::document::model::Value::String("news".into()))];
+    let news_count = col.count(&filter);
+    assert_eq!(news_count, 3, "Count with filter must accurately count disk records");
+
+    // 5. Delete many with filter across disk-evicted documents
+    let deleted_count = col.delete_many(&filter).expect("delete_many succeeds");
+    assert_eq!(deleted_count, 3);
+    assert_eq!(col.stats().document_count, 3);
+}
+
+

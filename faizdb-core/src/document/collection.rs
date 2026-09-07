@@ -219,6 +219,27 @@ impl Collection {
         }
     }
 
+    /// Enforce max in-memory documents if configured by evicting older entries from RAM
+    fn enforce_memory_cap(&self, keep_id: Option<&str>) {
+        if let Some(max_docs) = self.config.max_memory_documents {
+            while self.documents.len() > max_docs {
+                let evict_key = {
+                    let mut iter = self.documents.iter();
+                    let found = iter
+                        .find(|e| keep_id.map_or(true, |kid| e.key() != kid))
+                        .map(|e| e.key().clone());
+                    drop(iter);
+                    found
+                };
+                if let Some(key) = evict_key {
+                    self.documents.remove(&key);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
     // ── CRUD Operations ──────────────────────────────────────────
 
     /// Insert a document into the collection.
@@ -242,13 +263,25 @@ impl Collection {
         let id = doc.id.clone();
         let id_str = id.as_str().to_string();
 
-        // Check for duplicate key on primary ID
+        // Check for duplicate key on primary ID in RAM
         if self.documents.contains_key(&id_str) {
             return Err(FaizError::DuplicateKey {
                 collection: self.config.name.clone(),
                 field: "_id".into(),
                 value: id_str,
             });
+        }
+
+        // Check for duplicate key on primary ID in persistent storage
+        if let Some(storage) = &self.storage {
+            let key = format!("doc:{}:{}", self.config.name, id_str).into_bytes();
+            if let Ok(Some(_)) = storage.get(&key) {
+                return Err(FaizError::DuplicateKey {
+                    collection: self.config.name.clone(),
+                    field: "_id".into(),
+                    value: id_str,
+                });
+            }
         }
 
         // Check unique constraints across all active secondary indexes BEFORE mutating
@@ -288,19 +321,7 @@ impl Collection {
             }
 
             // Enforce max in-memory documents if configured by evicting older entry from RAM
-            if let Some(max_docs) = self.config.max_memory_documents {
-                if self.documents.len() > max_docs {
-                    let evict_key = {
-                        let mut iter = self.documents.iter();
-                        let found = iter.find(|e| e.key() != &id_str).map(|e| e.key().clone());
-                        drop(iter);
-                        found
-                    };
-                    if let Some(key) = evict_key {
-                        self.documents.remove(&key);
-                    }
-                }
-            }
+            self.enforce_memory_cap(Some(&id_str));
         }
 
         Ok(id)
@@ -365,8 +386,9 @@ impl Collection {
             let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
             if let Ok(Some(val_bytes)) = storage.get(&key) {
                 if let Ok(doc) = serde_json::from_slice::<Document>(&val_bytes) {
-                    // Populate back into memory cache for subsequent fast reads
+                    // Populate back into memory cache for subsequent fast reads with memory cap enforcement
                     self.documents.insert(id.to_string(), doc.clone());
+                    self.enforce_memory_cap(Some(id));
                     return Ok(doc);
                 }
             }
@@ -454,6 +476,31 @@ impl Collection {
     pub fn find_all(&self, limit: Option<usize>) -> Vec<Document> {
         self.purge_expired();
         let limit = limit.unwrap_or(usize::MAX);
+        let doc_count = self.doc_count.load(Ordering::Relaxed);
+        let mem_count = self.documents.len() as u64;
+
+        // Fast path: if dataset is fully resident in RAM, stream from DashMap
+        if mem_count >= doc_count || self.storage.is_none() {
+            return self
+                .documents
+                .iter()
+                .take(limit)
+                .map(|entry| entry.value().clone())
+                .collect();
+        }
+
+        // Out-of-Core Disk Scan: stream from persistent LSM storage when memory is capped
+        if let Some(storage) = &self.storage {
+            let prefix = format!("doc:{}:", self.config.name).into_bytes();
+            if let Ok(entries) = storage.prefix_scan(&prefix) {
+                return entries
+                    .into_iter()
+                    .filter_map(|(_k, v)| serde_json::from_slice::<Document>(&v).ok())
+                    .take(limit)
+                    .collect();
+            }
+        }
+
         self.documents
             .iter()
             .take(limit)
@@ -507,35 +554,74 @@ impl Collection {
         id: &str,
         update_fn: impl FnOnce(&mut Document),
     ) -> FaizResult<Document> {
-        let mut entry = self
-            .documents
-            .get_mut(id)
-            .ok_or_else(|| FaizError::DocumentNotFound {
-                collection: self.config.name.clone(),
-                id: id.to_string(),
-            })?;
+        if let Some(mut entry) = self.documents.get_mut(id) {
+            let old_size = entry.size_bytes() as u64;
+            update_fn(entry.value_mut());
+            let new_size = entry.size_bytes() as u64;
 
-        let old_size = entry.size_bytes() as u64;
-        update_fn(entry.value_mut());
-        let new_size = entry.size_bytes() as u64;
+            // Update total size
+            if new_size > old_size {
+                self.total_size
+                    .fetch_add(new_size - old_size, Ordering::Relaxed);
+            } else {
+                self.total_size
+                    .fetch_sub(old_size - new_size, Ordering::Relaxed);
+            }
 
-        // Update total size
-        if new_size > old_size {
-            self.total_size
-                .fetch_add(new_size - old_size, Ordering::Relaxed);
-        } else {
-            self.total_size
-                .fetch_sub(old_size - new_size, Ordering::Relaxed);
+            let updated = entry.value().clone();
+            drop(entry);
+
+            // Re-index for full-text search & secondary indexes
+            let doc_text = extract_doc_text(&updated);
+            self.text_index.index_document(id, &doc_text);
+            self.update_indexes_insert(&updated);
+
+            if let Some(storage) = &self.storage {
+                let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
+                let val = serde_json::to_vec(&updated)?;
+                storage.put(&key, &val)?;
+            }
+
+            return Ok(updated);
         }
 
-        let updated = entry.value().clone();
+        // Out-of-Core Disk Fallback: if document was evicted to persistent storage
         if let Some(storage) = &self.storage {
             let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
-            let val = serde_json::to_vec(&updated)?;
-            storage.put(&key, &val)?;
+            if let Ok(Some(val_bytes)) = storage.get(&key) {
+                if let Ok(mut doc) = serde_json::from_slice::<Document>(&val_bytes) {
+                    let old_size = doc.size_bytes() as u64;
+                    update_fn(&mut doc);
+                    let new_size = doc.size_bytes() as u64;
+
+                    if new_size > old_size {
+                        self.total_size
+                            .fetch_add(new_size - old_size, Ordering::Relaxed);
+                    } else {
+                        self.total_size
+                            .fetch_sub(old_size - new_size, Ordering::Relaxed);
+                    }
+
+                    let doc_text = extract_doc_text(&doc);
+                    self.text_index.index_document(id, &doc_text);
+                    self.update_indexes_insert(&doc);
+
+                    let val = serde_json::to_vec(&doc)?;
+                    storage.put(&key, &val)?;
+
+                    // Put back to RAM cache with cap enforcement
+                    self.documents.insert(id.to_string(), doc.clone());
+                    self.enforce_memory_cap(Some(id));
+
+                    return Ok(doc);
+                }
+            }
         }
 
-        Ok(updated)
+        Err(FaizError::DocumentNotFound {
+            collection: self.config.name.clone(),
+            id: id.to_string(),
+        })
     }
 
     /// Update documents matching a filter using field-level updates.
@@ -561,7 +647,50 @@ impl Collection {
                 for (key, value) in updates {
                     doc.set(key.clone(), value.clone());
                 }
+                let updated = doc.clone();
+                if let Some(storage) = &self.storage {
+                    let key = format!("doc:{}:{}", self.config.name, updated.id.as_str()).into_bytes();
+                    if let Ok(val) = serde_json::to_vec(&updated) {
+                        let _ = storage.put(&key, &val);
+                    }
+                }
                 count += 1;
+            }
+        }
+
+        // Out-of-Core Disk Scan: update disk-resident documents when memory is capped
+        if let Some(storage) = &self.storage {
+            let doc_count = self.doc_count.load(Ordering::Relaxed);
+            let mem_count = self.documents.len() as u64;
+            if mem_count < doc_count {
+                let prefix = format!("doc:{}:", self.config.name).into_bytes();
+                if let Ok(entries) = storage.prefix_scan(&prefix) {
+                    for (_k, v) in entries {
+                        if let Ok(mut doc) = serde_json::from_slice::<Document>(&v) {
+                            let id_str = doc.id.as_str().to_string();
+                            if self.documents.contains_key(&id_str) {
+                                continue; // Already processed in RAM loop
+                            }
+                            let matches = filter.iter().all(|(key, expected)| {
+                                if let Some(actual) = doc.get_nested(key) {
+                                    actual == expected
+                                } else {
+                                    false
+                                }
+                            });
+                            if matches {
+                                for (key, value) in updates {
+                                    doc.set(key.clone(), value.clone());
+                                }
+                                let key = format!("doc:{}:{}", self.config.name, id_str).into_bytes();
+                                if let Ok(val) = serde_json::to_vec(&doc) {
+                                    let _ = storage.put(&key, &val);
+                                }
+                                count += 1;
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -570,13 +699,35 @@ impl Collection {
 
     /// Delete a document by ID.
     pub fn delete_by_id(&self, id: &str) -> FaizResult<Document> {
-        let (_, doc) = self
-            .documents
-            .remove(id)
-            .ok_or_else(|| FaizError::DocumentNotFound {
-                collection: self.config.name.clone(),
-                id: id.to_string(),
-            })?;
+        let doc_opt = self.documents.remove(id).map(|(_, d)| d);
+
+        let doc = match doc_opt {
+            Some(d) => d,
+            None => {
+                // Out-of-Core Disk Fallback: check persistent storage engine
+                if let Some(storage) = &self.storage {
+                    let key = format!("doc:{}:{}", self.config.name, id).into_bytes();
+                    if let Ok(Some(val_bytes)) = storage.get(&key) {
+                        serde_json::from_slice::<Document>(&val_bytes).map_err(|_| {
+                            FaizError::DocumentNotFound {
+                                collection: self.config.name.clone(),
+                                id: id.to_string(),
+                            }
+                        })?
+                    } else {
+                        return Err(FaizError::DocumentNotFound {
+                            collection: self.config.name.clone(),
+                            id: id.to_string(),
+                        });
+                    }
+                } else {
+                    return Err(FaizError::DocumentNotFound {
+                        collection: self.config.name.clone(),
+                        id: id.to_string(),
+                    });
+                }
+            }
+        };
 
         self.doc_count.fetch_sub(1, Ordering::Relaxed);
         self.total_size
@@ -609,8 +760,8 @@ impl Collection {
         let mut out = Vec::new();
 
         for res in results {
-            if let Some(entry) = self.documents.get(&res.doc_id) {
-                out.push((entry.value().clone(), res.score, res.matched_terms));
+            if let Ok(doc) = self.find_by_id(&res.doc_id) {
+                out.push((doc, res.score, res.matched_terms));
             }
         }
 
@@ -621,13 +772,7 @@ impl Collection {
     pub fn purge_expired(&self) -> Vec<String> {
         let expired_ids = self.ttl.purge_expired(crate::ttl::current_time_ms());
         for id in &expired_ids {
-            if let Some((_, doc)) = self.documents.remove(id) {
-                self.doc_count.fetch_sub(1, Ordering::Relaxed);
-                self.total_size
-                    .fetch_sub(doc.size_bytes() as u64, Ordering::Relaxed);
-                self.update_indexes_delete(&doc);
-                self.text_index.remove_document(id);
-            }
+            let _ = self.delete_by_id(id);
         }
         expired_ids
     }
@@ -639,29 +784,13 @@ impl Collection {
 
     /// Delete all documents matching a filter.
     pub fn delete_many(&self, filter: &[(String, Value)]) -> FaizResult<u64> {
-        let ids_to_delete: Vec<String> = self
-            .documents
-            .iter()
-            .filter(|entry| {
-                let doc = entry.value();
-                filter.iter().all(|(key, expected)| {
-                    if let Some(actual) = doc.get_nested(key) {
-                        actual == expected
-                    } else {
-                        false
-                    }
-                })
-            })
-            .map(|entry| entry.key().clone())
-            .collect();
-
+        let docs = self.find(filter, None, None)?;
         let mut count = 0u64;
-        for id in ids_to_delete {
-            if self.delete_by_id(&id).is_ok() {
+        for doc in docs {
+            if self.delete_by_id(doc.id.as_str()).is_ok() {
                 count += 1;
             }
         }
-
         Ok(count)
     }
 
@@ -671,19 +800,29 @@ impl Collection {
             return self.doc_count.load(Ordering::Relaxed);
         }
 
-        self.documents
-            .iter()
-            .filter(|entry| {
-                let doc = entry.value();
-                filter.iter().all(|(key, expected)| {
-                    if let Some(actual) = doc.get_nested(key) {
-                        actual == expected
-                    } else {
-                        false
-                    }
+        let doc_count = self.doc_count.load(Ordering::Relaxed);
+        let mem_count = self.documents.len() as u64;
+
+        if mem_count >= doc_count || self.storage.is_none() {
+            return self
+                .documents
+                .iter()
+                .filter(|entry| {
+                    let doc = entry.value();
+                    filter.iter().all(|(key, expected)| {
+                        if let Some(actual) = doc.get_nested(key) {
+                            actual == expected
+                        } else {
+                            false
+                        }
+                    })
                 })
-            })
-            .count() as u64
+                .count() as u64;
+        }
+
+        self.find(filter, None, None)
+            .map(|docs| docs.len() as u64)
+            .unwrap_or(0)
     }
 
     // ── Index Operations ─────────────────────────────────────────
@@ -704,11 +843,10 @@ impl Collection {
 
         let index = Arc::new(crate::document::index::SecondaryIndex::new(def));
 
-        // Index and validate all existing documents
-        for entry in self.documents.iter() {
-            let doc = entry.value();
-            index.check_unique(doc)?;
-            index.insert(doc);
+        // Index and validate all existing documents (RAM + Disk)
+        for doc in self.find_all(None) {
+            index.check_unique(&doc)?;
+            index.insert(&doc);
         }
 
         self.secondary_indexes.insert(index_name.clone(), index);
@@ -723,8 +861,8 @@ impl Collection {
 
         let mut docs = Vec::with_capacity(doc_ids.len());
         for id in doc_ids {
-            if let Some(entry) = self.documents.get(&id) {
-                docs.push(entry.value().clone());
+            if let Ok(doc) = self.find_by_id(&id) {
+                docs.push(doc);
             }
         }
         Some(docs)
@@ -767,11 +905,10 @@ impl Collection {
             return Ok(()); // Idempotent — no error if already exists
         }
 
-        // Build the index data from existing documents
+        // Build the index data from existing documents (RAM + Disk)
         let mut index_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-        for entry in self.documents.iter() {
-            let doc = entry.value();
+        for doc in self.find_all(None) {
             for (field, _) in &index_def.fields {
                 if let Some(value) = doc.get_nested(field) {
                     let key = format!("{value}");
