@@ -240,33 +240,34 @@ FaizDB provides **Snapshot Isolation (SI)**:
 FaizDB eliminates the architectural divide between relational tables, JSON documents, graph networks, and high-dimensional vector embeddings.
 
 ```mermaid
-flowchart TD
-    subgraph SingleQuery["Single Transactional Query Frame"]
-        RawQuery["SELECT * FROM research_papers<br/>TRAVERSE FROM 'node_alpha' DEPTH 2 VIA 'cites'<br/>VECTOR [0.12, 0.45, 0.88, ...] USING INDEX 'paper_hnsw'<br/>WHERE status = 'published' LIMIT 5;"]
+flowchart LR
+    subgraph QueryBlock["1. Converged Multi-Model Query"]
+        RawQuery["<code>SELECT * FROM papers<br/>TRAVERSE FROM 'alpha' DEPTH 2<br/>VECTOR [...] USING 'hnsw'<br/>WHERE status='published' LIMIT 5</code>"]
     end
 
-    subgraph Step1["Step 1: Graph Topo Filtering"]
-        GraphEngine["faizdb-graph (In-Memory Multi-Graph)"]
-        GraphEngine -->|"BFS Traversal (Max Depth 2)"| CandidateSet["Candidate IDs: {id_1, id_4, id_9, id_12}"]
+    subgraph Step1["2. Graph Filtering"]
+        direction TB
+        GraphEngine["faizdb-graph (Multi-Graph)"]
+        GraphEngine -->|"BFS Traversal"| Cands["Candidate IDs<br/>{id_1, id_4, id_9, id_12}"]
     end
 
-    subgraph Step2["Step 2: SIMD Vector Scoring"]
-        VectorEngine["faizdb-vector (HNSW + AVX2 SIMD)"]
-        CandidateSet -->|"Mask HNSW Search"| VectorEngine
-        VectorEngine -->|"Rank Top-K Cosine Similarities"| RankedSet["Ranked IDs: [id_4, id_1, id_12]"]
+    subgraph Step2["3. SIMD Vector Scoring"]
+        direction TB
+        VectorEngine["faizdb-vector (HNSW + AVX2)"]
+        VectorEngine -->|"Cosine Top-K"| Ranked["Ranked IDs<br/>[id_4, id_1, id_12]"]
     end
 
-    subgraph Step3["Step 3: Relational & Document Projection"]
-        StorageEngine["faizdb-core (LSM-Tree + MemTable)"]
-        RankedSet -->|"Fetch Document Fields"| StorageEngine
-        StorageEngine -->|"Apply Filter: status = 'published'"| FinalOutput["Final Result (5 Materialized Records)"]
+    subgraph Step3["4. Relational Projection"]
+        direction TB
+        StorageEngine["faizdb-core (LSM-Tree)"]
+        StorageEngine -->|"Field Projection"| Output["Materialized Results<br/>(5 Records)"]
     end
 
-    RawQuery --> Step1
-    Step1 --> Step2
-    Step2 --> Step3
+    QueryBlock --> Step1
+    Cands --> VectorEngine
+    Ranked --> StorageEngine
 
-    style SingleQuery fill:#edf2f7,stroke:#cbd5e0;
+    style QueryBlock fill:#edf2f7,stroke:#cbd5e0;
     style Step1 fill:#e6fffa,stroke:#319795;
     style Step2 fill:#feebc8,stroke:#dd6b20;
     style Step3 fill:#c6f6d5,stroke:#38a169;
