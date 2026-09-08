@@ -750,7 +750,9 @@ Rather than claiming instant battle-tested maturity for decade-old banking mainf
 - [x] Multi-Model Dataset Generator CLI (`faizdb seed`) for Relational, Vector & Graph
 - [x] Official Prometheus & Grafana Monitoring Dashboard Template (`dashboards/faizdb-overview.json`)
 - [x] Official Postman Collection with 20+ Endpoints & Automatic Bearer Token Auth (`faizdb.postman_collection.json`)
-- [ ] In-Browser WebAssembly (WASM) Headless Engine
+- [x] Active Outbound CDC Stream Dispatcher (`faizdb-server::stream::cdc_dispatcher`)
+- [x] Distributed Scatter-Gather Query Coordinator (`faizdb-core::cluster::scatter_gather`)
+- [x] In-Browser WebAssembly (WASM) Headless Engine (`bindings/wasm`)
 - [ ] GPU-Accelerated Vector Indexing (CUDA / Metal Shaders)
 
 

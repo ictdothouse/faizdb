@@ -8,6 +8,7 @@ members = [
     "faizdb-security",
     "faizdb-server",
     "faizdb-cli",
+    "bindings/wasm",
 ]
 
 [workspace.package]

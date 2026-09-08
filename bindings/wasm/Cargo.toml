@@ -1,0 +1,22 @@
+[package]
+name = "faizdb-wasm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ahmad Faiz <faiz@ict.house>"]
+license = "Apache-2.0"
+description = "WebAssembly (WASM) in-browser headless database engine for FaizDB"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+faizdb-core = { path = "../../faizdb-core" }
+faizdb-query = { path = "../../faizdb-query" }
+faizdb-vector = { path = "../../faizdb-vector" }
+wasm-bindgen = "0.2.127"
+serde = { workspace = true }
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

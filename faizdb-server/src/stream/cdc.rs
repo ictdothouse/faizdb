@@ -86,6 +86,71 @@ impl CdcEnvelope {
         }
     }
 
+    /// Create a new CDC event for an update operation
+    pub fn new_update(
+        collection: &str,
+        _doc_id: &str,
+        before: Option<serde_json::Value>,
+        after: serde_json::Value,
+        lsn: u64,
+    ) -> Self {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        Self {
+            payload: CdcPayload {
+                before,
+                after: Some(after),
+                source: CdcSource {
+                    version: "0.1.0".to_string(),
+                    connector: "faizdb-cdc".to_string(),
+                    name: "faizdb_cluster".to_string(),
+                    ts_ms: now_ms,
+                    snapshot: false,
+                    db: "default".to_string(),
+                    collection: collection.to_string(),
+                    lsn,
+                },
+                op: CdcOp::Update,
+                ts_ms: now_ms,
+            },
+        }
+    }
+
+    /// Create a new CDC event for a delete operation
+    pub fn new_delete(
+        collection: &str,
+        _doc_id: &str,
+        before: Option<serde_json::Value>,
+        lsn: u64,
+    ) -> Self {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        Self {
+            payload: CdcPayload {
+                before,
+                after: None,
+                source: CdcSource {
+                    version: "0.1.0".to_string(),
+                    connector: "faizdb-cdc".to_string(),
+                    name: "faizdb_cluster".to_string(),
+                    ts_ms: now_ms,
+                    snapshot: false,
+                    db: "default".to_string(),
+                    collection: collection.to_string(),
+                    lsn,
+                },
+                op: CdcOp::Delete,
+                ts_ms: now_ms,
+            },
+        }
+    }
+
     /// Serialize to JSON string for Kafka producer ingestion
     pub fn to_kafka_message(&self) -> Result<String, String> {
         serde_json::to_string(self).map_err(|e| format!("Failed to serialize CDC message: {e}"))
