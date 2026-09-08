@@ -448,13 +448,22 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
 
     let mut collection = String::new();
     let mut i = 0;
+    let mut is_count_query = false;
 
     if tokens[i].eq_ignore_ascii_case("SELECT") {
         i += 1;
-        // Skip columns up to FROM
+        // Inspect columns up to FROM (e.g. SELECT COUNT(*), SELECT count(1), SELECT * FROM ...)
+        let mut col_tokens = Vec::new();
         while i < tokens.len() && !tokens[i].eq_ignore_ascii_case("FROM") {
+            col_tokens.push(tokens[i]);
             i += 1;
         }
+        let col_str = col_tokens.join(" ");
+        let upper_cols = col_str.to_uppercase();
+        if upper_cols.contains("COUNT(") {
+            is_count_query = true;
+        }
+
         if i < tokens.len() && tokens[i].eq_ignore_ascii_case("FROM") {
             i += 1;
             if i < tokens.len() {
@@ -705,6 +714,10 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
         } else {
             i += 1;
         }
+    }
+
+    if is_count_query {
+        return Ok(Statement::Count { collection, filter });
     }
 
     Ok(Statement::Find {
@@ -2877,5 +2890,27 @@ mod tests {
             _ => panic!("Expected Statement::Find"),
         }
     }
+
+    #[test]
+    fn test_parse_select_count() {
+        let stmt1 = parse_query("SELECT COUNT(*) FROM users").unwrap();
+        match stmt1 {
+            Statement::Count { collection, filter } => {
+                assert_eq!(collection, "users");
+                assert!(filter.is_none());
+            }
+            _ => panic!("Expected Statement::Count"),
+        }
+
+        let stmt2 = parse_query("SELECT count(1) FROM orders WHERE price > 100").unwrap();
+        match stmt2 {
+            Statement::Count { collection, filter } => {
+                assert_eq!(collection, "orders");
+                assert!(filter.is_some());
+            }
+            _ => panic!("Expected Statement::Count"),
+        }
+    }
 }
+
 

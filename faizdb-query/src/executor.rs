@@ -882,7 +882,14 @@ impl DatabaseContext {
 
                 // Graph traversal filtering if specified
                 if let Some(ref t_clause) = traverse {
-                    let paths = self.graph_store.read().traverse_bfs(
+                    let graph = self.graph_store.read();
+                    if graph.get_vertex(&t_clause.start_id).is_none() {
+                        return Err(format!(
+                            "Traversal start vertex '{}' not found in graph",
+                            t_clause.start_id
+                        ));
+                    }
+                    let paths = graph.traverse_bfs(
                         &t_clause.start_id,
                         t_clause.max_depth,
                         t_clause.relation.as_deref(),
@@ -943,6 +950,20 @@ impl DatabaseContext {
                         });
                         filtered.truncate(v_clause.top_k);
                     } else {
+                        // Check if collection documents have vector/embedding fields before brute force
+                        let has_doc_vectors = filtered.iter().any(|doc| {
+                            doc.get("vector").or_else(|| doc.get("embedding")).is_some()
+                        });
+
+                        if !has_doc_vectors {
+                            let available: Vec<String> =
+                                self.vector_indexes.iter().map(|e| e.key().clone()).collect();
+                            return Err(format!(
+                                "Vector search failed: No vector index matches collection '{collection}' (available indexes: [{}]) and collection documents do not contain 'vector' or 'embedding' fields. Use 'USING INDEX <name>' to specify the target index.",
+                                available.join(", ")
+                            ));
+                        }
+
                         let mut scored: Vec<(Document, f32)> = filtered
                             .into_iter()
                             .filter_map(|doc| {

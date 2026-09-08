@@ -874,3 +874,32 @@ pub async fn drop_collection_handler(
     )
 }
 
+/// Zero-copy vectorized ColumnarBatch export for analytics and OLAP interop
+pub async fn get_collection_columnar(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let col = state.db.get_or_create_collection(&name);
+    match col.to_columnar_batch() {
+        Ok(batch) => (
+            StatusCode::OK,
+            Json(ApiResponse::ok(serde_json::json!({
+                "collection": name,
+                "row_count": batch.row_count,
+                "columns": batch.schema.fields.iter().map(|(f, t)| {
+                    serde_json::json!({
+                        "name": f,
+                        "type": format!("{t:?}"),
+                    })
+                }).collect::<Vec<_>>(),
+                "batch": batch,
+            }))),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::err(e)),
+        ),
+    }
+}
+
+

@@ -47,6 +47,7 @@ pub use cluster::{NodeRole, RaftNode, ShardDistribution, ShardRouter};
 pub use document::{Document, DocumentId, Value};
 pub use error::{FaizError, FaizResult};
 pub use search::{InvertedIndex, SearchResult};
+pub use storage::columnar::{ColumnData, ColumnDataType, ColumnarBatch, ColumnarSchema};
 pub use storage::engine::StorageEngine;
 pub use stream::{ChangeEvent, ChangeStreamBus, OperationType};
 pub use ttl::{TtlManager, TtlStats};

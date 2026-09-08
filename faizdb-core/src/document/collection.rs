@@ -552,6 +552,16 @@ impl Collection {
             .collect()
     }
 
+    /// Export collection documents into a zero-copy vectorized ColumnarBatch (Arrow / Analytical layout)
+    pub fn to_columnar_batch(&self) -> Result<crate::storage::columnar::ColumnarBatch, String> {
+        let docs: Vec<serde_json::Value> = self
+            .find_all(None)
+            .into_iter()
+            .map(|d| d.to_json_value())
+            .collect();
+        crate::storage::columnar::ColumnarBatch::from_json_documents(&docs)
+    }
+
     /// Find documents with zero-copy streaming pagination (skipping and limiting without loading entire dataset into intermediate Vec)
     pub fn find_paginated(&self, skip: usize, limit: usize) -> Vec<Document> {
         self.purge_expired();

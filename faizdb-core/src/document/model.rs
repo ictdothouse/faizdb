@@ -474,6 +474,11 @@ impl Document {
         serde_json::to_string(self)
     }
 
+    /// Convert to serde_json::Value
+    pub fn to_json_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_else(|_| serde_json::json!({}))
+    }
+
     /// Convert to pretty JSON string
     pub fn to_json_pretty(&self) -> serde_json::Result<String> {
         serde_json::to_string_pretty(self)

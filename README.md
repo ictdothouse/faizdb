@@ -192,11 +192,20 @@ In traditional enterprise AI architectures, teams are forced into a painful **du
 ### Multi-Hop Graph Traversal + Vector Search in One Query:
 
 ```sql
--- FaizQL: Traverse multi-hop knowledge graph, then rank matching context by vector similarity
+-- FaizQL / SQL: Traverse multi-hop knowledge graph, then rank matching context by vector similarity
 FIND research_papers 
 TRAVERSE FROM "paper_01" DEPTH 2 VIA "cites" 
 VECTOR [0.12, 0.45, 0.88, 0.05] USING INDEX paper_embeddings 
 LIMIT 5;
+
+-- Or via standard SQL on PostgreSQL Wire (Port 5432) or MySQL Wire (Port 3306):
+SELECT * FROM research_papers 
+TRAVERSE FROM "paper_01" DEPTH 2 VIA "cites" 
+VECTOR [0.12, 0.45, 0.88, 0.05] USING INDEX paper_embeddings 
+LIMIT 5;
+
+-- Standard ANSI SQL Aggregates & Relational Queries (psql / ORMs / DBeaver):
+SELECT COUNT(*) FROM orders WHERE total_price >= 100.0;
 ```
 
 Or via standard MongoDB drivers:
@@ -648,7 +657,8 @@ index.insert("article_01", embedding_vec)?;
 // 2. Zero-Copy ColumnarBatch (Arrow / Parquet / DuckDB / Spark Interoperability)
 use faizdb_core::storage::columnar::ColumnarBatch;
 
-let batch = ColumnarBatch::from_json_documents(&documents)?;
+// Direct analytical export from live collection or JSON documents:
+let batch = collection.to_columnar_batch()?;
 let total_volume = batch.sum_f64("trade_volume").unwrap(); // SIMD Columnar Scan
 let projected = batch.project(&["ticker", "price"])?; // Zero-Copy Column Slice
 

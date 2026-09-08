@@ -109,6 +109,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(collections::collection_stats),
         )
         .route(
+            "/v1/collections/{name}/columnar",
+            get(collections::get_collection_columnar),
+        )
+        .route(
             "/v1/collections/{name}/indexes",
             get(collections::get_collection_indexes),
         )

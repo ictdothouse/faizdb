@@ -173,6 +173,15 @@ pub async fn traverse_graph(
     let depth = query.depth.unwrap_or(3);
     let store = state.db.graph_store();
     let graph = store.read();
+    if graph.get_vertex(&query.start).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(format!(
+                "Starting vertex '{}' not found in graph",
+                query.start
+            ))),
+        );
+    }
     let paths = graph.traverse_bfs(&query.start, depth, query.relation.as_deref());
 
     (
