@@ -884,7 +884,7 @@ fn has_unpaired_between(text: &str) -> bool {
 }
 
 /// Split top-level ANDs, without splitting any `AND` that belongs to a `BETWEEN ... AND ...` construct
-fn split_top_level_and<'a>(text: &'a str) -> Vec<&'a str> {
+fn split_top_level_and(text: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut remaining = text.trim();
 

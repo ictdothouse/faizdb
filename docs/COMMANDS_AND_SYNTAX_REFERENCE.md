@@ -128,17 +128,32 @@ WHERE score >= 9000 AND role = 'Architect';
 
 -- Select with sorting and pagination
 SELECT name, role, score FROM users 
-WHERE role != 'Suspended'
+WHERE role <> 'Suspended' AND role != 'Banned'
 ORDER BY score DESC 
 LIMIT 20 OFFSET 0;
+
+-- Range Evaluation (BETWEEN & NOT BETWEEN)
+SELECT * FROM users WHERE score BETWEEN 8000 AND 9500;
+SELECT * FROM users WHERE score NOT BETWEEN 1000 AND 4999;
+
+-- Set Membership (IN & NOT IN)
+SELECT * FROM users WHERE role IN ('Architect', 'Principal', 'Fellow');
+SELECT * FROM users WHERE role NOT IN ('Guest', 'Suspended', 'Trial');
+
+-- Nullity Testing (IS NULL & IS NOT NULL)
+SELECT * FROM users WHERE email IS NOT NULL;
+SELECT * FROM users WHERE deleted_at IS NULL;
+
+-- Compound Boolean Logic with Parentheses & OR
+SELECT * FROM users 
+WHERE (role = 'Architect' OR role = 'Principal') AND score >= 9000;
 
 -- String Matching Operators
 SELECT * FROM users WHERE name LIKE '%Faiz%';
 SELECT * FROM users WHERE email ENDS_WITH '@ict.house';
 SELECT * FROM users WHERE role STARTS_WITH 'Lead';
-SELECT * FROM users WHERE role IN ('Architect', 'Principal', 'Fellow');
 
--- Update Records
+-- Update Records (Arithmetic & Assignment)
 UPDATE users 
 SET role = 'Distinguished Architect', score = score + 500 
 WHERE email = 'faiz@ict.house';
@@ -147,8 +162,9 @@ WHERE email = 'faiz@ict.house';
 DELETE FROM users 
 WHERE score < 5000 AND role = 'Trial';
 
--- Record Counting
+-- Record Counting & Vectorized Columnar Analytics
 SELECT COUNT(*) FROM users WHERE score >= 8000;
+SELECT COUNT(*), AVG(score), MIN(score), MAX(score) FROM users;
 ```
 
 ### C. Multi-Table Relational Hash Joins
@@ -212,9 +228,13 @@ FaizDB provides a high-performance in-memory and disk-backed **Directional Graph
 ### A. Graph Edge Creation
 
 ```cypher
--- Create nodes and directional relationships with edge weights and attributes
+-- 1. openCypher pattern syntax:
 CREATE (a:Person {id: 'p1', name: 'Alice'})-[:KNOWS {weight: 1.0}]->(b:Person {id: 'p2', name: 'Bob'});
 CREATE (b:Person {id: 'p2'})-[:WORKS_AT {since: 2024}]->(c:Company {id: 'c1', name: 'ICT House'});
+
+-- 2. Direct DDL edge creation:
+CREATE EDGE FROM 'p1' TO 'p2' VIA 'KNOWS' WEIGHT 1.0;
+CREATE EDGE FROM 'p2' TO 'c1' VIA 'WORKS_AT';
 ```
 
 ### B. Graph Pattern Matching & Multi-Hop Traversal

@@ -480,6 +480,7 @@
       <div class="sidebar-group">
         <div class="sidebar-title">Protocols & Dialects</div>
         <a href="https://github.com/ictdothouse/faizdb/blob/main/docs/COMMANDS_AND_SYNTAX_REFERENCE.md" target="_blank" class="sidebar-link" style="color: #6366f1; font-weight: 700;">📖 Master Syntax &amp; Commands Manual ↗</a>
+        <a href="#mysql-wire" class="sidebar-link">🐬 MySQL Wire (Port 3306)</a>
         <a href="#mongo-wire" class="sidebar-link">🍃 MongoDB Wire (Port 27017)</a>
         <a href="#postgres-wire" class="sidebar-link">🐘 PostgreSQL Wire (Port 5432)</a>
         <a href="#grpc-wire" class="sidebar-link">⚡ gRPC & Protobuf (Port 50051)</a>
@@ -1244,6 +1245,57 @@ const collection = client.db('app_db').collection('users');
 
 await collection.insertOne({ name: 'Faiz Aziz', tier: 'Enterprise', _ttl: 60 });
 console.log('Saved with 60-second auto-expiry TTL!');</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: MySQL Wire Protocol -->
+      <section id="mysql-wire">
+        <h2>🐬 MySQL Wire Protocol HandshakeV10 (Port 3306)</h2>
+        <p class="lead">
+          FaizDB provides native MySQL Wire Protocol emulation on standard port <code>3306</code>. Plug your existing PHP, Laravel Eloquent, WordPress, or Python MySQL applications directly into FaizDB without rewriting queries or database drivers.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card">
+            <div class="feature-title">🐬 Native HandshakeV10 &amp; Fast Auth</div>
+            <div class="feature-desc">Full support for MySQL client handshake, capability flags negotiation, <code>mysql_native_password</code> authentication, and COM_QUERY / COM_PING execution.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-title">⚡ Laravel &amp; PHP PDO Zero-Change Integration</div>
+            <div class="feature-desc">Works seamlessly with standard Laravel <code>.env</code> MySQL database configurations, PHP PDO, and Python <code>mysqlclient</code> / <code>PyMySQL</code>.</div>
+          </div>
+        </div>
+
+        <h3>1. Connect with <code>mysql</code> CLI</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>bash / mysql</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Connect with standard official MySQL CLI terminal client:
+mysql -h 127.0.0.1 -P 3306 -u root faizdb
+
+-- Run relational SQL queries with new range &amp; membership predicates:
+SELECT name, price, stock FROM products WHERE price BETWEEN 500 AND 2000;
+SELECT * FROM users WHERE role IN ('Admin', 'Architect') AND status &lt;&gt; 'Banned';</code></pre>
+        </div>
+
+        <h3>2. Connect with Laravel Eloquent (<code>.env</code>)</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <span>laravel / env</span>
+            <button class="btn-copy" onclick="copyCode(this)">Copy</button>
+          </div>
+          <pre><code># Standard MySQL driver in Laravel:
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=faizdb
+DB_USERNAME=root
+DB_PASSWORD=
+
+# Run migrations and Eloquent queries out-of-the-box:
+# php artisan migrate</code></pre>
         </div>
       </section>
 

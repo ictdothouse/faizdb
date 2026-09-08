@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge&logo=githubactions)](https://github.com/ictdothouse/faizdb/actions)
 [![Security](https://img.shields.io/badge/security-EdDSA_Ed25519_%7C_AES--256--GCM-red.svg?style=for-the-badge)](../SECURITY.md)
-[![Protocols](https://img.shields.io/badge/gateways-Mongo_%7C_PostgreSQL_%7C_gRPC_%7C_REST-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
+[![Protocols](https://img.shields.io/badge/gateways-MySQL_%7C_PostgreSQL_%7C_MongoDB_%7C_gRPC_%7C_REST-cyan.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 [![Architecture](https://img.shields.io/badge/consensus-Raft_%7C_CRDT_Geo_Replication-purple.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
 
 <br/>
@@ -107,10 +107,10 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 | **Multi-Protocol Gateways** | MongoDB only | PostgreSQL only | Redis RESP only | **5-Way Native: MySQL (3306), Postgres (5432), MongoDB (27017), gRPC (50051), REST/WS (27018)** |
 | **Wire Protocol Security** | Mongo SCRAM-SHA | Postgres MD5/SCRAM | Redis AUTH | **Centralized Zero-Trust across all 5 Gateways (Argon2id + Ed25519 JWT RBAC: Admin/RO/RW)** |
 | **Document Memory & Payload** | 16 MB hard ceiling (C++ buffer bloat) | 1 GB (TOAST out-of-line disk overhead) | N/A | **Zero-Copy Byte Slices (Safe 16MB default, scalable for AI Context)** |
-| **AI Vector Search (ANN)** | Add-on / Atlas Cloud only | Requires `pgvector` extension | Requires RedisSearch | **Native HNSW (Cosine, L2, Dot) < 1ms with 32x Binary Quantization** |
+| **AI Vector Search (ANN)** | Add-on / Atlas Cloud only | Requires `pgvector` extension | Requires RedisSearch | **Native HNSW (Cosine, L2, Dot) < 1ms with 8-Lane SIMD (AVX2/NEON) & 32x Binary Quantization** |
 | **Graph, openCypher & GraphRAG** | Separate graph DB needed | Requires AGE extension | Requires RedisGraph | **Transactional GraphRAG: Native openCypher MATCH parser + TRAVERSE + VECTOR ranking + In-Memory Semantic Caching in 1 ACID binary** |
-| **Storage Engine & Compaction** | WiredTiger (LRU only) | Shared buffers (Clock-sweep) | In-memory only | **LSM-Tree + Self-Tuning ARC + Anti-Stall Backpressure & Torn-Write Resilient WAL (Auto-merge >= 4, Soft-yield >= 8, Hard-stall >= 16 Level-0 tables)** |
-| **Query Engine & Mutation** | JSON query language | SQL only | Key-Value commands | **Unified SQL + MongoDB + openCypher: arithmetic UPDATE, multi-hop MATCH, multi-type ORDER BY, .sort() & $set** |
+| **Storage Engine & Compaction** | WiredTiger (LRU only) | Shared buffers (Clock-sweep) | In-memory only | **LSM-Tree + Self-Tuning ARC + Anti-Stall Backpressure & Torn-Write WAL + Phase 3 Tiered Storage (Hot NVMe + Cold HDD/Blob migration)** |
+| **Query Engine & Mutation** | JSON query language | SQL only | Key-Value commands | **Unified SQL + MongoDB + openCypher: BETWEEN / IN / OR / IS NULL, Columnar Batch Aggregations (AVG/MIN/MAX/COUNT), arithmetic UPDATE, multi-hop MATCH, .sort() & $set** |
 | **Full-Text Search Engine** | Basic text index | `tsvector` (Complex) | Requires plugin | **Native Okapi BM25 with Fuzzy Typo Tolerance** |
 | **In-Memory Cache (TTL)** | TTL index (slow sweeper) | Unsuitable for sub-ms cache | In-memory only | **Unified Cache (Min-Heap $O(\log N)$) + Autonomous 30s Background TTL Sweeper** |
 | **Secondary Indexing & Constraints** | Standard B-Tree | B-Tree / GIN / GiST | Limited | **High-Speed B-Tree + Strict Unique Constraints ($O(\log N)$)** |
@@ -282,7 +282,7 @@ bash scripts/measure_memory.sh
 # 4. Run multi-protocol wire gateway security and performance benchmark suite:
 cargo test -p faizdb-server --test test_wire_security_and_performance
 
-# 5. Run full automated workspace test suite across all 26 suites (196+ tests passing, 100% pass rate)
+# 5. Run full automated workspace test suite across all 26 suites (188/188 tests passing, 100% pass rate)
 cargo test --workspace
 ```
 
@@ -295,13 +295,12 @@ faizdb/
 ├── .github/workflows/  # 🤖 Automated CI/CD Pipeline (fmt, clippy, test, cargo-audit, MSRV)
 ├── proto/              # ⚡ Official Protocol Buffers v3 Schema (faizdb.proto)
 ├── bindings/           # 📦 Polyglot SDKs: Python (pyproject.toml), Node.js (npm), Go, and PHP
-├── faizdb-core/        # 🌲 LSM-Tree, MemTable, Streaming Compaction, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs
-├── faizdb-vector/      # 🎯 HNSW Multi-Layer Vector Index with Persistence (Cosine, L2, Dot Product)
+├── faizdb-core/        # 🌲 LSM-Tree, MemTable, Streaming Compaction, WAL, MVCC ACID, BM25, TTL, Raft, CRDTs, Automated Tiered Storage
+├── faizdb-vector/      # 🎯 HNSW Multi-Layer Vector Index with Persistence, 8-Lane SIMD (AVX2/NEON), 32x Binary Quantization
 ├── faizdb-graph/       # 🕸️ Knowledge Graph, Multi-Hop Traversal & GraphRAG Engine + In-Memory Semantic Cache
-├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, openCypher, FaizQL) & Cost Optimizer
-
+├── faizdb-query/       # 🧠 Multi-Dialect Parser (SQL, MongoDB JSON, openCypher, FaizQL), Columnar Batch Analytics & Cost Optimizer
 ├── faizdb-security/    # 🔒 Zero-Trust AES-256-GCM Encryption, Argon2id & EdDSA (Ed25519) JWT RBAC
-├── faizdb-server/      # 🌐 Modular Multi-Protocol Server (MongoDB 27017, Postgres 5432, gRPC 50051, REST 27018)
+├── faizdb-server/      # 🌐 Modular Multi-Protocol Server (MySQL 3306, Postgres 5432, MongoDB 27017, gRPC 50051, REST 27018)
 ├── faizdb-cli/         # 💻 Production CLI, Interactive REPL Shell, Backup & Restore Tools
 ├── studio/             # 🎛️ Modern Web Management Studio (React + Vite + TailwindCSS)
 ├── docs/               # 📚 Comprehensive Guides, Competitive Analysis & API References

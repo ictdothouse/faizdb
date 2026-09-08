@@ -71,7 +71,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/faizdb serve --wire-port 27017 --http-port 27018 --host 0.0.0.0
+ExecStart=/usr/local/bin/faizdb serve --host 0.0.0.0 --mysql-port 3306 --pg-port 5432 --mongo-port 27017 --http-port 27018 --grpc-port 50051 --data-dir /var/lib/faizdb
 Restart=always
 RestartSec=3
 LimitNOFILE=65535

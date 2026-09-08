@@ -685,6 +685,7 @@ curl -fsSL https://raw.githubusercontent.com/ictdothouse/faizdb/main/scripts/ins
             <div class="code-tabs">
               <button class="code-tab active" onclick="switchTab(this, 'c2-mongo')">1. MongoDB Insert</button>
               <button class="code-tab" onclick="switchTab(this, 'c2-sql')">2. SQL Query</button>
+              <button class="code-tab" onclick="switchTab(this, 'c2-advanced')">3. Range, IN &amp; Analytics</button>
               <button class="code-tab" onclick="switchTab(this, 'c2-python')">Python (PyMongo)</button>
             </div>
             <button class="btn-copy" onclick="copyCode(this)">Copy</button>
@@ -702,6 +703,16 @@ SELECT name, price, stock
 FROM inventory 
 WHERE category = 'Hardware' AND price > 1000 
 ORDER BY price DESC;</code></pre>
+          <pre id="c2-advanced" style="display:none;"><code>-- Advanced range, membership, and boolean filtering:
+SELECT name, price, stock 
+FROM inventory 
+WHERE price BETWEEN 1000 AND 2500 
+  AND category IN ('Hardware', 'Electronics') 
+  AND (stock > 10 OR sku = 'GPU-5090');
+
+-- High-speed vectorized columnar batch aggregations:
+SELECT COUNT(*), AVG(price), MIN(price), MAX(price) 
+FROM inventory;</code></pre>
           <pre id="c2-python" style="display:none;"><code>from pymongo import MongoClient
 
 # Connect directly using official PyMongo driver on port 27017:
@@ -1162,13 +1173,14 @@ SELECT * FROM articles;</code></pre>
             `✨ All 5 universal gateways healthy and responsive!`;
         } else if (step === 2) {
           out.innerText = `[SQL Execution Result]\n` +
-            `Query: SELECT name, price, stock FROM inventory WHERE category = 'Hardware'\n` +
+            `Query: SELECT name, price, stock FROM inventory WHERE price BETWEEN 1000 AND 2500 AND category IN ('Hardware')\n` +
             `------------------------------------------------------------------------\n` +
             `| sku       | name            | price      | stock | format_origin      |\n` +
             `------------------------------------------------------------------------\n` +
             `| GPU-5090  | NVIDIA RTX 5090 | $1,999.00  | 42    | MongoDB Document   |\n` +
             `------------------------------------------------------------------------\n` +
-            `1 row retrieved in 74 µs (0.074ms). Zero ETL conversion required.`;
+            `1 row retrieved in 74 µs (0.074ms). Zero ETL conversion required.\n` +
+            `Vectorized Analytics: COUNT=1 | AVG=$1,999.00 | MIN=$1,999.00 | MAX=$1,999.00 (ColumnarBatch)`;
         } else if (step === 3) {
           out.innerText = `[MVCC ACID Concurrency Simulation]\n` +
             `Starting concurrent transactions: 5,000 requests for remaining seats: 2\n` +
@@ -1177,12 +1189,12 @@ SELECT * FROM articles;</code></pre>
             `--> Request #3..5000: Condition (seats > 0) unsatisfied -> ATOMIC ROLLBACK (4,998 requests)\n` +
             `Result: EXACTLY 2 TICKETS SOLD. OOM/Oversell Errors: 0. Integrity: 100% Guaranteed.`;
         } else if (step === 4) {
-          out.innerText = `[HNSW Vector Similarity Search]\n` +
+          out.innerText = `[HNSW Vector Similarity Search (8-Lane SIMD AVX2/NEON)]\n` +
             `Query Vector: [0.92, 0.88, 0.08, 0.06] (Metric: Cosine Similarity)\n` +
             `Top-2 Nearest Neighbors:\n` +
             `  #1: ID='doc_ai_database' | Similarity=0.9999 | Distance=0.0001 | Latency: 0.28ms\n` +
             `  #2: ID='doc_rust_engine' | Similarity=0.9984 | Distance=0.0016 | Latency: 0.31ms\n` +
-            `HNSW Graph visited 18 nodes across 3 layers. Zero GC lag.`;
+            `HNSW Graph visited 18 nodes across 3 layers. 8-lane SIMD hardware loop unrolled. Zero GC lag.`;
         } else if (step === 5) {
           out.innerText = `[GraphRAG Knowledge Graph Traversal]\n` +
             `Root Node: 'developer_faiz' | Max Depth: 2 Hops\n` +
