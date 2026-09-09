@@ -5,6 +5,7 @@
 
 pub mod aggregation;
 pub mod ast;
+pub mod cache;
 pub mod distributed;
 pub mod executor;
 pub mod optimizer;
@@ -14,6 +15,7 @@ pub use aggregation::{
     execute_pipeline, execute_pipeline_with_collections, parse_pipeline, Accumulator, PipelineStage,
 };
 pub use ast::{FilterExpr, Operator, Statement, TraverseClause, VectorSearchClause};
+pub use cache::{QueryCache, QueryCacheStats};
 pub use distributed::{
     DistributedQueryCoordinator, DistributedQueryResult, ScatterGatherPlan, ShardTarget,
 };

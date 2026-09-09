@@ -99,3 +99,26 @@ func main() {
 	fmt.Printf("Found %d vector matches\n", len(hits))
 }
 ```
+
+---
+
+## 🚀 4. Zero-Dependency REST Quickstart Clients
+
+For rapid prototyping without compiling native gRPC extensions, use the zero-dependency REST clients located in `examples/sdk-quickstart/`:
+
+- **Python Quickstart Client:** `examples/sdk-quickstart/python/faizdb_client.py`
+  ```python
+  from faizdb_client import FaizDBClient
+  client = FaizDBClient("http://127.0.0.1:27018")
+  doc_id = client.insert("articles", {"title": "AI & Graphs", "tags": ["rust", "ai"]})
+  results = client.vector_search("article_embeddings", [0.1, 0.2, 0.9], top_k=3)
+  graph_context = client.extract_graphrag_context(root_id=doc_id, max_depth=2)
+  ```
+
+- **Node.js Quickstart Client (Native fetch):** `examples/sdk-quickstart/nodejs/faizdb_client.js`
+  ```javascript
+  const { FaizDBClient } = require('./faizdb_client');
+  const client = new FaizDBClient('http://127.0.0.1:27018');
+  await client.insert('articles', { title: 'AI & Graphs' });
+  const hits = await client.vectorSearch('article_embeddings', [0.1, 0.2, 0.9]);
+  ```

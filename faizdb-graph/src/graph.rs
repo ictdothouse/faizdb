@@ -439,6 +439,68 @@ impl GraphStore {
             formatted_markdown: md,
         }
     }
+
+    /// Return list of all vertex IDs
+    pub fn all_vertex_ids(&self) -> Vec<String> {
+        self.vertices.keys().cloned().collect()
+    }
+
+    /// Find vertices matching a given label
+    pub fn find_vertices_by_label(&self, label: &str) -> Vec<String> {
+        self.vertices
+            .values()
+            .filter(|v| v.label == label)
+            .map(|v| v.id.clone())
+            .collect()
+    }
+
+    /// Find vertices matching a property key and string value
+    pub fn find_vertices_by_property(&self, key: &str, value: &str) -> Vec<String> {
+        self.vertices
+            .values()
+            .filter(|v| {
+                v.properties
+                    .get(key)
+                    .is_some_and(|val| val.to_string() == value)
+            })
+            .map(|v| v.id.clone())
+            .collect()
+    }
+
+    /// Weighted shortest path using Dijkstra's algorithm
+    pub fn dijkstra(&self, from: &str, to: &str) -> Option<crate::algorithms::ShortestPathResult> {
+        crate::algorithms::dijkstra_shortest_path(self, from, to)
+    }
+
+    /// PageRank centrality scoring
+    pub fn pagerank(
+        &self,
+        damping_factor: f32,
+        max_iterations: usize,
+        tolerance: f32,
+    ) -> HashMap<String, f32> {
+        crate::algorithms::pagerank(self, damping_factor, max_iterations, tolerance)
+    }
+
+    /// Weakly Connected Components (WCC) for community detection
+    pub fn weakly_connected_components(&self) -> Vec<Vec<String>> {
+        crate::algorithms::weakly_connected_components(self)
+    }
+
+    /// Degree centrality for a vertex
+    pub fn degree_centrality(&self, vertex_id: &str) -> Option<crate::algorithms::DegreeCentrality> {
+        crate::algorithms::degree_centrality(self, vertex_id)
+    }
+
+    /// Save graph snapshot to disk with CRC32 verification
+    pub fn save_to_file(&self, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+        crate::persistence::save_snapshot(self, path)
+    }
+
+    /// Load graph snapshot from disk with CRC32 verification
+    pub fn load_from_file(path: impl AsRef<std::path::Path>) -> std::io::Result<Self> {
+        crate::persistence::load_snapshot(path)
+    }
 }
 
 
@@ -544,6 +606,111 @@ mod tests {
         assert!(ctx.formatted_markdown.contains("# Knowledge Graph Context for: `doc_1`"));
         assert!(ctx.formatted_markdown.contains("- **Document** (`doc_1`)"));
         assert!(ctx.formatted_markdown.contains("- (`doc_1`) -[:EXPLAINS]-> (`doc_2`)"));
+    }
+
+    #[test]
+    fn test_dijkstra_weighted_shortest_path() {
+        let mut graph = GraphStore::new();
+
+        // Node A -> B (weight 5.0)
+        // Node A -> C (weight 1.0)
+        // Node C -> B (weight 2.0)
+        // Shortest weighted path A -> B is A -> C -> B (cost 3.0), not direct A -> B (cost 5.0)
+        graph.add_edge(Edge::with_weight("A", "B", "LINK", 5.0));
+        graph.add_edge(Edge::with_weight("A", "C", "LINK", 1.0));
+        graph.add_edge(Edge::with_weight("C", "B", "LINK", 2.0));
+
+        let res = graph.dijkstra("A", "B").expect("Path should exist");
+        assert_eq!(res.path, vec!["A", "C", "B"]);
+        assert_eq!(res.total_cost, 3.0);
+    }
+
+    #[test]
+    fn test_pagerank_scoring() {
+        let mut graph = GraphStore::new();
+
+        // Star topology where A, B, C all point to Center
+        graph.add_edge(Edge::new("A", "Center", "POINTS"));
+        graph.add_edge(Edge::new("B", "Center", "POINTS"));
+        graph.add_edge(Edge::new("C", "Center", "POINTS"));
+
+        let scores = graph.pagerank(0.85, 20, 1e-4);
+        assert_eq!(scores.len(), 4);
+
+        let center_score = scores.get("Center").copied().unwrap();
+        let a_score = scores.get("A").copied().unwrap();
+
+        assert!(
+            center_score > a_score,
+            "Center node must have higher PageRank than leaf nodes (Center={center_score}, A={a_score})"
+        );
+    }
+
+    #[test]
+    fn test_weakly_connected_components() {
+        let mut graph = GraphStore::new();
+
+        // Cluster 1: A <-> B
+        graph.add_edge(Edge::new("A", "B", "CONNECT"));
+
+        // Cluster 2: X <-> Y <-> Z
+        graph.add_edge(Edge::new("X", "Y", "CONNECT"));
+        graph.add_edge(Edge::new("Y", "Z", "CONNECT"));
+
+        let wcc = graph.weakly_connected_components();
+        assert_eq!(wcc.len(), 2);
+        // Larger component first
+        assert_eq!(wcc[0].len(), 3);
+        assert_eq!(wcc[1].len(), 2);
+    }
+
+    #[test]
+    fn test_graph_pattern_query() {
+        let mut graph = GraphStore::new();
+
+        let mut p1 = Vertex::new("u1", "Person");
+        p1.properties.set("role", "Engineer");
+        graph.add_vertex(p1);
+
+        let mut p2 = Vertex::new("u2", "Person");
+        p2.properties.set("role", "Manager");
+        graph.add_vertex(p2);
+
+        let mut repo = Vertex::new("repo1", "Repository");
+        repo.properties.set("lang", "Rust");
+        graph.add_vertex(repo);
+
+        graph.add_edge(Edge::new("u1", "repo1", "CONTRIBUTES_TO"));
+        graph.add_edge(Edge::new("u2", "repo1", "MANAGES"));
+
+        // Query: MATCH (p:Person)-[:CONTRIBUTES_TO]->(r:Repository)
+        let query = crate::query::GraphQuery::new()
+            .match_source_label("Person")
+            .via_relation("CONTRIBUTES_TO")
+            .match_target_label("Repository");
+
+        let matches = query.execute(&graph);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].from.id, "u1");
+        assert_eq!(matches[0].to.id, "repo1");
+    }
+
+    #[test]
+    fn test_snapshot_persistence() {
+        let mut graph = GraphStore::new();
+        graph.add_vertex(Vertex::new("node_alpha", "Test"));
+        graph.add_vertex(Vertex::new("node_beta", "Test"));
+        graph.add_edge(Edge::new("node_alpha", "node_beta", "CONNECTED"));
+
+        let temp_file = std::env::temp_dir().join(format!("faizdb_graph_test_{}.bin", uuid::Uuid::new_v4()));
+        graph.save_to_file(&temp_file).expect("Snapshot save must succeed");
+
+        let restored = GraphStore::load_from_file(&temp_file).expect("Snapshot load must succeed");
+        assert_eq!(restored.vertex_count(), 2);
+        assert_eq!(restored.edge_count(), 1);
+        assert!(restored.get_vertex("node_alpha").is_some());
+
+        let _ = std::fs::remove_file(temp_file);
     }
 }
 

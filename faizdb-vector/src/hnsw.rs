@@ -578,6 +578,78 @@ impl HnswIndex {
             .collect()
     }
 
+    /// Search K nearest neighbors with predicate filter on external ID (Filtered Vector Search)
+    pub fn search_with_filter<F>(&self, query: &[f32], top_k: usize, filter: F) -> Vec<VectorSearchResult>
+    where
+        F: Fn(&str) -> bool,
+    {
+        if self.is_empty() || top_k == 0 {
+            return Vec::new();
+        }
+
+        assert_eq!(
+            query.len(),
+            self.config.dimensions,
+            "Query vector dimension mismatch"
+        );
+
+        let ep = match self.entry_point {
+            Some(ep) if !self.deleted.contains(&ep) => ep,
+            _ => match self.id_to_idx.values().copied().next() {
+                Some(valid_ep) => valid_ep,
+                None => return Vec::new(),
+            },
+        };
+
+        let mut curr_ep = ep;
+        let mut curr_dist = self.dist(query, curr_ep);
+
+        // Top layers: 1-NN greedy jump
+        for lc in (1..=self.max_level).rev() {
+            let mut changed = true;
+            while changed {
+                changed = false;
+                if lc < self.nodes[curr_ep].neighbors.len() {
+                    for &neighbor in &self.nodes[curr_ep].neighbors[lc] {
+                        let d = self.dist(query, neighbor);
+                        if d < curr_dist {
+                            curr_dist = d;
+                            curr_ep = neighbor;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Layer 0: Search with expanded ef to account for filtered out elements
+        let ef = self
+            .config
+            .ef_search
+            .max(top_k * 4 + self.deleted.len().min(self.config.ef_search));
+        let candidates = self.search_layer(query, &[curr_ep], ef, 0);
+
+        candidates
+            .into_iter()
+            .filter(|c| !self.deleted.contains(&c.idx))
+            .filter(|c| filter(&self.nodes[c.idx].id))
+            .take(top_k)
+            .map(|c| {
+                let id = self.nodes[c.idx].id.clone();
+                let distance = c.distance;
+                let similarity = match self.config.metric {
+                    DistanceMetric::Cosine => (1.0 - distance).clamp(0.0, 1.0),
+                    _ => 1.0 / (1.0 + distance),
+                };
+                VectorSearchResult {
+                    id,
+                    distance,
+                    similarity,
+                }
+            })
+            .collect()
+    }
+
     /// Serialize the HNSW index graph to JSON bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
         serde_json::to_vec(self).map_err(|e| format!("Failed to serialize HNSW index: {e}"))
@@ -664,6 +736,14 @@ impl ConcurrentHnswIndex {
         self.inner.read().search(query, top_k)
     }
 
+    /// Search the k nearest neighbors with a predicate filter (multiple concurrent readers allowed)
+    pub fn search_with_filter<F>(&self, query: &[f32], top_k: usize, filter: F) -> Vec<VectorSearchResult>
+    where
+        F: Fn(&str) -> bool,
+    {
+        self.inner.read().search_with_filter(query, top_k, filter)
+    }
+
     /// Save the HNSW index to a disk file path
     pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), String> {
         self.inner.read().save_to_file(path)
@@ -709,6 +789,11 @@ mod tests {
         let results = index.search(&[0.0, 0.95, 0.05], 2);
         assert_eq!(results.len(), 2);
         assert!(results[0].id == "cooking" || results[0].id == "baking");
+
+        // Filtered Query: only find items with 'ml' (exclude 'ai')
+        let filtered = index.search_with_filter(&[0.99, 0.01, 0.0], 2, |id| id == "ml");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, "ml");
     }
 
     #[test]

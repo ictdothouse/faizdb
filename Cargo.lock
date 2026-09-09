@@ -735,12 +735,14 @@ dependencies = [
 name = "faizdb-graph"
 version = "0.1.0"
 dependencies = [
+ "crc32fast",
  "faizdb-core",
  "parking_lot",
  "serde",
  "serde_json",
  "thiserror",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -764,8 +766,10 @@ name = "faizdb-security"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "chrono",
  "faizdb-core",
  "jsonwebtoken",
+ "parking_lot",
  "pem",
  "rand_core 0.6.4",
  "rcgen",
@@ -776,6 +780,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

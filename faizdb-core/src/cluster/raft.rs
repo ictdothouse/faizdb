@@ -76,6 +76,29 @@ pub struct AppendEntriesReply {
     pub match_index: LogIndex,
 }
 
+/// Install snapshot RPC payload (for lagging nodes or log compaction recovery)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallSnapshotArgs {
+    pub term: Term,
+    pub leader_id: String,
+    pub last_included_index: LogIndex,
+    pub last_included_term: Term,
+    pub data: Vec<u8>,
+}
+
+/// Install snapshot reply RPC payload
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallSnapshotReply {
+    pub term: Term,
+}
+
+/// Metadata stored on disk alongside state machine snapshot
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaftSnapshotMeta {
+    pub last_included_index: LogIndex,
+    pub last_included_term: Term,
+}
+
 /// Node status overview
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterNodeInfo {
@@ -256,6 +279,86 @@ impl RaftDiskStore {
 
         Ok(entries)
     }
+
+    fn snapshot_path(&self) -> PathBuf {
+        self.data_dir.join("raft_snapshot.bin")
+    }
+
+    fn snapshot_meta_path(&self) -> PathBuf {
+        self.data_dir.join("raft_snapshot_meta.json")
+    }
+
+    /// Save state machine snapshot and metadata to disk with CRC32 verification
+    pub fn save_snapshot(
+        &self,
+        last_included_index: LogIndex,
+        last_included_term: Term,
+        data: &[u8],
+    ) -> std::io::Result<()> {
+        let meta = RaftSnapshotMeta {
+            last_included_index,
+            last_included_term,
+        };
+        let meta_json = serde_json::to_string_pretty(&meta)?;
+        let temp_meta = self.data_dir.join("raft_snapshot_meta.tmp");
+        fs::write(&temp_meta, meta_json)?;
+        fs::rename(temp_meta, self.snapshot_meta_path())?;
+
+        let temp_data = self.data_dir.join("raft_snapshot.tmp");
+        let mut file = File::create(&temp_data)?;
+        let mut hasher = Hasher::new();
+        hasher.update(data);
+        let checksum = hasher.finalize();
+
+        let len = data.len() as u32;
+        file.write_all(&len.to_le_bytes())?;
+        file.write_all(&checksum.to_le_bytes())?;
+        file.write_all(data)?;
+        file.flush()?;
+        drop(file);
+
+        fs::rename(temp_data, self.snapshot_path())?;
+        Ok(())
+    }
+
+    /// Load state machine snapshot and metadata from disk
+    pub fn load_snapshot(&self) -> std::io::Result<Option<(LogIndex, Term, Vec<u8>)>> {
+        let meta_path = self.snapshot_meta_path();
+        let snap_path = self.snapshot_path();
+        if !meta_path.exists() || !snap_path.exists() {
+            return Ok(None);
+        }
+
+        let meta_content = fs::read_to_string(meta_path)?;
+        let meta: RaftSnapshotMeta = serde_json::from_str(&meta_content)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        let file = File::open(snap_path)?;
+        let mut reader = BufReader::new(file);
+        let mut len_buf = [0u8; 4];
+        let mut crc_buf = [0u8; 4];
+        reader.read_exact(&mut len_buf)?;
+        reader.read_exact(&mut crc_buf)?;
+
+        let len = u32::from_le_bytes(len_buf) as usize;
+        let expected_crc = u32::from_le_bytes(crc_buf);
+
+        let mut data = vec![0u8; len];
+        reader.read_exact(&mut data)?;
+
+        let mut hasher = Hasher::new();
+        hasher.update(&data);
+        let actual_crc = hasher.finalize();
+
+        if actual_crc != expected_crc {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Corrupted Raft snapshot CRC32 mismatch",
+            ));
+        }
+
+        Ok(Some((meta.last_included_index, meta.last_included_term, data)))
+    }
 }
 
 // ── In-Memory & Dynamic Cluster State ────────────────────────────────────────
@@ -267,6 +370,8 @@ struct RaftState {
     commit_index: LogIndex,
     #[allow(dead_code)]
     last_applied: LogIndex,
+    last_snapshot_index: LogIndex,
+    last_snapshot_term: Term,
     role: NodeRole,
     leader_id: Option<String>,
     last_heartbeat: DateTime<Utc>,
@@ -309,6 +414,8 @@ impl RaftNode {
         let mut initial_term = 1;
         let mut initial_voted_for = None;
         let mut initial_log = Vec::new();
+        let mut initial_snapshot_index = 0;
+        let mut initial_snapshot_term = 0;
 
         if let Some(ref store) = disk_store {
             if let Ok((term, voted_for)) = store.load_meta() {
@@ -317,6 +424,10 @@ impl RaftNode {
             }
             if let Ok(entries) = store.load_log() {
                 initial_log = entries;
+            }
+            if let Ok(Some((snap_idx, snap_term, _))) = store.load_snapshot() {
+                initial_snapshot_index = snap_idx;
+                initial_snapshot_term = snap_term;
             }
         }
 
@@ -340,7 +451,7 @@ impl RaftNode {
             config.election_timeout_max_ms,
         );
 
-        let initial_commit_index = initial_log.len().saturating_sub(1) as u64;
+        let initial_commit_index = initial_snapshot_index.max(initial_log.last().map(|e| e.index).unwrap_or(0));
 
         let initial_state = RaftState {
             current_term: initial_term,
@@ -348,6 +459,8 @@ impl RaftNode {
             log: initial_log,
             commit_index: initial_commit_index,
             last_applied: initial_commit_index,
+            last_snapshot_index: initial_snapshot_index,
+            last_snapshot_term: initial_snapshot_term,
             role: NodeRole::Leader, // Standalone node starts as leader
             leader_id: Some(node_id.clone()),
             last_heartbeat: Utc::now(),
@@ -716,6 +829,138 @@ impl RaftNode {
             self.node_id, state.current_term
         );
     }
+
+    /// Take a snapshot of the state machine up to current commit_index and compact log
+    pub fn take_snapshot(&self, snapshot_data: Vec<u8>) -> std::io::Result<(LogIndex, Term)> {
+        let mut state = self.state.write();
+        let commit_idx = state.commit_index;
+
+        let commit_term = state
+            .log
+            .iter()
+            .find(|e| e.index == commit_idx)
+            .map(|e| e.term)
+            .unwrap_or(state.current_term);
+
+        if let Some(ref store) = self.disk_store {
+            store.save_snapshot(commit_idx, commit_term, &snapshot_data)?;
+        }
+
+        // Compact log: retain only entries with index >= commit_idx
+        state.log.retain(|e| e.index >= commit_idx);
+        if let Some(ref store) = self.disk_store {
+            store.rewrite_log(&state.log)?;
+        }
+
+        state.last_snapshot_index = commit_idx;
+        state.last_snapshot_term = commit_term;
+
+        info!(
+            "Node '{}' created Raft snapshot at index {} (term {}), log compacted to {} entries",
+            self.node_id, commit_idx, commit_term, state.log.len()
+        );
+
+        Ok((commit_idx, commit_term))
+    }
+
+    /// Restore state machine from a snapshot
+    pub fn restore_snapshot(
+        &self,
+        last_index: LogIndex,
+        last_term: Term,
+        snapshot_data: &[u8],
+    ) -> std::io::Result<()> {
+        let mut state = self.state.write();
+        if let Some(ref store) = self.disk_store {
+            store.save_snapshot(last_index, last_term, snapshot_data)?;
+        }
+
+        let sentinel = LogEntry {
+            index: last_index,
+            term: last_term,
+            timestamp: Utc::now(),
+            command: "SNAPSHOT_SENTINEL".to_string(),
+            payload: None,
+        };
+
+        state.log.clear();
+        state.log.push(sentinel);
+        if let Some(ref store) = self.disk_store {
+            store.rewrite_log(&state.log)?;
+        }
+
+        state.last_snapshot_index = last_index;
+        state.last_snapshot_term = last_term;
+        state.commit_index = last_index;
+        state.last_applied = last_index;
+
+        info!(
+            "Node '{}' restored state machine from snapshot at index {} (term {})",
+            self.node_id, last_index, last_term
+        );
+
+        Ok(())
+    }
+
+    /// Handle incoming InstallSnapshot RPC from leader
+    pub fn handle_install_snapshot(&self, args: InstallSnapshotArgs) -> InstallSnapshotReply {
+        let mut state = self.state.write();
+
+        if args.term < state.current_term {
+            return InstallSnapshotReply {
+                term: state.current_term,
+            };
+        }
+
+        if args.term > state.current_term {
+            state.current_term = args.term;
+            state.role = NodeRole::Follower;
+            state.voted_for = None;
+            if let Some(ref store) = self.disk_store {
+                let _ = store.save_meta(state.current_term, None);
+            }
+        }
+
+        state.leader_id = Some(args.leader_id.clone());
+        state.last_heartbeat = Utc::now();
+
+        if args.last_included_index > state.commit_index {
+            if let Some(ref store) = self.disk_store {
+                let _ = store.save_snapshot(
+                    args.last_included_index,
+                    args.last_included_term,
+                    &args.data,
+                );
+            }
+
+            let sentinel = LogEntry {
+                index: args.last_included_index,
+                term: args.last_included_term,
+                timestamp: Utc::now(),
+                command: "SNAPSHOT_SENTINEL".to_string(),
+                payload: None,
+            };
+            state.log.clear();
+            state.log.push(sentinel);
+            if let Some(ref store) = self.disk_store {
+                let _ = store.rewrite_log(&state.log);
+            }
+
+            state.last_snapshot_index = args.last_included_index;
+            state.last_snapshot_term = args.last_included_term;
+            state.commit_index = args.last_included_index;
+            state.last_applied = args.last_included_index;
+
+            info!(
+                "Node '{}' installed snapshot from leader '{}' at index {}",
+                self.node_id, args.leader_id, args.last_included_index
+            );
+        }
+
+        InstallSnapshotReply {
+            term: state.current_term,
+        }
+    }
 }
 
 // ── Network RPC Transport Abstraction ───────────────────────────────────────
@@ -899,5 +1144,57 @@ mod tests {
 
         assert!(reply.vote_granted);
         assert_eq!(reply.term, 5);
+    }
+
+    #[test]
+    fn test_raft_snapshot_compaction_and_recovery() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config = RaftConfig {
+            data_dir: Some(temp_dir.path().to_path_buf()),
+            ..Default::default()
+        };
+
+        let node = RaftNode::with_config("leader_node", "127.0.0.1:28010", config.clone());
+
+        // Propose 10 entries
+        for i in 1..=10 {
+            node.propose(format!("CMD_{i}"), None).unwrap();
+        }
+
+        assert_eq!(node.get_info().persistent_log_entries, 11); // genesis (0) + 10 = 11
+
+        // Take snapshot with state data
+        let state_bytes = b"SNAPSHOT_STATE_PAYLOAD_V1".to_vec();
+        let (snap_idx, snap_term) = node.take_snapshot(state_bytes.clone()).unwrap();
+        assert_eq!(snap_idx, 10);
+        assert_eq!(snap_term, 1);
+
+        // Compacted log now only retains the entry at commit_idx (index 10)
+        assert_eq!(node.get_info().persistent_log_entries, 1);
+
+        // Crash and recover a new node instance from the same data dir
+        let recovered_node = RaftNode::with_config("leader_node", "127.0.0.1:28010", config);
+        let info = recovered_node.get_info();
+        assert_eq!(info.commit_index, 10);
+        assert_eq!(info.persistent_log_entries, 1);
+    }
+
+    #[test]
+    fn test_raft_install_snapshot_rpc() {
+        let follower = RaftNode::new("follower_node", "127.0.0.1:28011");
+        assert_eq!(follower.get_info().commit_index, 0);
+
+        let args = InstallSnapshotArgs {
+            term: 3,
+            leader_id: "leader_node".to_string(),
+            last_included_index: 50,
+            last_included_term: 3,
+            data: b"STATE_DATA_CHUNK".to_vec(),
+        };
+
+        let reply = follower.handle_install_snapshot(args);
+        assert_eq!(reply.term, 3);
+        assert_eq!(follower.get_info().commit_index, 50);
+        assert_eq!(follower.get_info().role, NodeRole::Follower);
     }
 }

@@ -185,10 +185,71 @@ impl FaizDbWasm {
             .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
     }
 
+    /// Export all collections and their documents to a serialized JSON string for persistence
+    /// (e.g. saving to browser IndexedDB, OPFS, or LocalStorage)
+    #[wasm_bindgen]
+    pub fn export_state(&self) -> Result<String, JsValue> {
+        let cols = self.collections.read();
+        let mut export_map: HashMap<String, Vec<Document>> = HashMap::new();
+
+        for (name, col) in cols.iter() {
+            let docs = col
+                .find(&[], None, None)
+                .map_err(|e| JsValue::from_str(&format!("Export error: {e}")))?;
+            export_map.insert(name.clone(), docs);
+        }
+
+        serde_json::to_string(&export_map)
+            .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
+    }
+
+    /// Import state from a JSON string, restoring all collections and documents
+    #[wasm_bindgen]
+    pub fn import_state(&self, json_str: &str) -> Result<bool, JsValue> {
+        let import_map: HashMap<String, Vec<Document>> = serde_json::from_str(json_str)
+            .map_err(|e| JsValue::from_str(&format!("Deserialization error: {e}")))?;
+
+        let mut cols = self.collections.write();
+        for (name, docs) in import_map {
+            let collection = cols
+                .entry(name.clone())
+                .or_insert_with(|| Collection::new(&name));
+
+            for doc in docs {
+                let _ = collection.insert(doc);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Export HNSW vector index definition & vectors as JSON
+    #[wasm_bindgen]
+    pub fn export_vectors(&self, index_name: &str) -> Result<String, JsValue> {
+        let idxs = self.vector_indexes.read();
+        let index = idxs
+            .get(index_name)
+            .ok_or_else(|| JsValue::from_str(&format!("Vector index '{index_name}' not found")))?;
+
+        serde_json::to_string(index)
+            .map_err(|e| JsValue::from_str(&format!("Vector export error: {e}")))
+    }
+
+    /// Import HNSW vector index from JSON
+    #[wasm_bindgen]
+    pub fn import_vectors(&self, index_name: &str, json_str: &str) -> Result<bool, JsValue> {
+        let index: HnswIndex = serde_json::from_str(json_str)
+            .map_err(|e| JsValue::from_str(&format!("Vector import error: {e}")))?;
+
+        let mut idxs = self.vector_indexes.write();
+        idxs.insert(index_name.to_string(), index);
+        Ok(true)
+    }
+
     /// Return engine version and capabilities
     #[wasm_bindgen]
     pub fn version(&self) -> String {
-        "FaizDB WebAssembly Engine v0.1.0 (Headless in-browser preview)".to_string()
+        "FaizDB WebAssembly Engine v0.1.0 (Headless universal browser/edge persistence)".to_string()
     }
 }
 
@@ -228,5 +289,22 @@ mod tests {
 
         let results_json = db.vector_search("embeddings", &[1.0, 0.0, 0.0, 0.0], 2).unwrap();
         assert!(results_json.contains("doc_1"));
+    }
+
+    #[test]
+    fn test_wasm_engine_persistence_export_import() {
+        let db = FaizDbWasm::new();
+        db.create_collection("products").unwrap();
+        db.insert("products", r#"{"title": "Database Book", "price": 49}"#).unwrap();
+        assert_eq!(db.count("products").unwrap(), 1);
+
+        // Export state (like saving to localStorage / IndexedDB)
+        let exported_json = db.export_state().unwrap();
+        assert!(exported_json.contains("Database Book"));
+
+        // Hydrate into fresh DB instance
+        let new_db = FaizDbWasm::new();
+        assert!(new_db.import_state(&exported_json).unwrap());
+        assert_eq!(new_db.count("products").unwrap(), 1);
     }
 }
