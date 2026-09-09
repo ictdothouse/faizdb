@@ -1,7 +1,8 @@
-//! Integration tests for Forensic Hardening Round 4
-//! Verifies fixes for:
-//! 1. MVCC atomic commit under race conditions
-//! 2. WAL sequence continuity across empty rotated segments
+//! Enterprise Integration Tests: MVCC Concurrency, WAL Durability, and SQL Operators
+//!
+//! Validates:
+//! 1. MVCC atomic commit under concurrent write races (Strict Snapshot Isolation)
+//! 2. WAL sequence continuity across rotated disk segments
 //! 3. PostgreSQL extended query parameter substitution ($1 vs $10) and string safety
 //! 4. Collection _id / id find and query sorting
 //! 5. Hash Join NULL/missing key isolation and canonical stringification

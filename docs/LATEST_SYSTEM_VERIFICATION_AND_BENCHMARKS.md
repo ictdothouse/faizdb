@@ -3,7 +3,7 @@
 **Classification:** Technical Reference & Empirical Verification Record  
 **Target System:** FaizDB Multi-Model AI-Native Database Engine (`ictdothouse/faizdb`)  
 **Workspace Test Suite:** `cargo test --workspace` (196+ Tests Passing — 100% Certified)  
-**Primary Test Suites:** [`test_wire_security_and_performance.rs`](../faizdb-server/tests/test_wire_security_and_performance.rs) & [`test_audit_gap_remediation.rs`](../faizdb-server/tests/test_audit_gap_remediation.rs)
+**Primary Test Suites:** [`test_wire_security_and_performance.rs`](../faizdb-server/tests/test_wire_security_and_performance.rs) & [`test_storage_consistency_and_indexing.rs`](../faizdb-server/tests/test_storage_consistency_and_indexing.rs)
 
 ---
 
@@ -200,9 +200,9 @@ The entire monorepo test suite executes cleanly with a **100% pass rate** across
   test_auth_flow (Tamper Rejection & Expiration)      | 5 passed
   test_tls_transport (Self-Signed & PEM Server Config)| 2 passed
   faizdb_server (Prometheus & Wire Handshake)         | 5 passed
-  test_audit_gap_remediation (UPDATE, Sort, Compact)  | 5 passed
-  test_audit_security_and_correctness (Zero Regression| 3 passed
-  test_competitor_vulnerabilities_remediation (Joins) | 6 passed
+  test_storage_consistency_and_indexing (UPDATE, Sort, Compact)  | 5 passed
+  test_security_and_system_correctness (Zero Regression) | 3 passed
+  test_enterprise_engine_capabilities (Joins, Wire, Raft) | 6 passed
   test_production_hardening_and_features (Hardening)  | 4 passed
   test_crud_and_wire_auth (REST Patch & Postgres Auth)| 4 passed
   test_graph_and_vector_api (REST Lifecycles)         | 2 passed
@@ -233,8 +233,8 @@ cargo test --workspace
 # 2. Run the Multi-Protocol Security & Performance benchmark suite:
 cargo test -p faizdb-server --test test_wire_security_and_performance -- --nocapture
 
-# 3. Run the SQL & Mongo Query, Compaction, and Pagination verification suite:
-cargo test -p faizdb-server --test test_audit_gap_remediation -- --nocapture
+# 3. Run the Storage Consistency, Compaction, and Pagination verification suite:
+cargo test -p faizdb-server --test test_storage_consistency_and_indexing -- --nocapture
 
 # 4. Run the Chaos & WAL Fault-Tolerance test suite:
 cargo test -p faizdb-server --test test_chaos_fault_tolerance -- --nocapture

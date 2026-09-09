@@ -1,11 +1,11 @@
-//! Forensic Hardening Integration Tests - Round 5
+//! Enterprise Integration Tests: SQL Keyword Boundary Isolation, Compound Operators, and Vector Bounds
 //!
 //! Validates:
 //! 1. Keyword boundary isolation: `UPDATE settings`, `UPDATE assets`, `CREATE INDEX idx_location ON ...`, `DELETE FROM warehouse`.
 //! 2. SQL `WHERE col BETWEEN val1 AND val2` & `NOT BETWEEN`.
 //! 3. SQL `WHERE col IN (...)` & `NOT IN (...)`.
 //! 4. Compound `OR` & nested parenthesized conditions: `(status = 'active' OR role = 'admin') AND age >= 18`.
-//! 5. `HnswIndex::try_search` consistency when all vectors are tombstoned.
+//! 5. `HnswIndex::try_search` boundary consistency when all vectors are tombstoned.
 //! 6. MVCC `committed_writes` automated pruning on commit when inactive.
 
 use std::sync::Arc;

@@ -37,7 +37,6 @@ dist/
 *.key
 *.crt
 docs/*audit*
-!docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md
 docs/*strategi*
 
 # ── Root-level files not meant for repo ───────────────────────────

@@ -261,10 +261,10 @@ FaizDB is engineered around concrete, real-world systems principles:
 | **Query Engine Drop & Storage Purge** | [`tests/test_executor_drop_collection_purges_storage.rs`](../faizdb-query/tests/test_executor_drop_collection_purges_storage.rs) | **PASS (1/1)** | SQL DROP TABLE, DROP COLLECTION, Prefix Purge Verification |
 | **Enterprise Production Hardening** | [`tests/test_production_hardening_and_features.rs`](../faizdb-server/tests/test_production_hardening_and_features.rs) | **PASS (9/9)** | WAL Checkpoints, Limit Pushdown, Reaper, Float Clamping, Graph Budget, K8s Probes, Connection Governor |
 | **Distributed Chaos & Jepsen Verification** | [`tests/test_jepsen_distributed_chaos.rs`](../faizdb-server/tests/test_jepsen_distributed_chaos.rs) | **PASS (5/5)** | Torn-Write Recovery, Raft Split-Brain, CRDT Clock Skew, LSM Anti-Stall, Catalog Introspection |
-| **Extended Query & Hash Joins** | [`tests/test_competitor_vulnerabilities_remediation.rs`](../faizdb-server/tests/test_competitor_vulnerabilities_remediation.rs) | **PASS (6/6)** | PG Extended Wire ($1, $2), Mongo Stateful Cursors, HNSW Tombstones, Raft Quorum |
+| **Extended Query & Hash Joins** | [`tests/test_enterprise_engine_capabilities.rs`](../faizdb-server/tests/test_enterprise_engine_capabilities.rs) | **PASS (6/6)** | PG Extended Wire ($1, $2), Mongo Stateful Cursors, HNSW Tombstones, Raft Quorum |
 | **Multi-Protocol Security & Throughput** | [`tests/test_wire_security_and_performance.rs`](../faizdb-server/tests/test_wire_security_and_performance.rs) | **PASS (3/3)** | gRPC RBAC, Mongo RBAC, Multi-Protocol Benchmark |
 | **Storage Durability & Crash Recovery** | [`tests/test_durability_and_mvcc.rs`](../faizdb-server/tests/test_durability_and_mvcc.rs) | **PASS (5/5)** | WAL Replay, Crash Safety, Snapshot Isolation |
-| **Audit Security & Correctness** | [`tests/test_audit_security_and_correctness.rs`](../faizdb-server/tests/test_audit_security_and_correctness.rs) | **PASS (3/3)** | CBO Float Bounds, Safe System Table Routing, Vector Validation |
+| **Security & Protocol Correctness** | [`tests/test_security_and_system_correctness.rs`](../faizdb-server/tests/test_security_and_system_correctness.rs) | **PASS (3/3)** | CBO Float Bounds, Safe System Table Routing, Vector Validation |
 | **Workspace Test Suite Total** | `cargo test --workspace` | **100% PASS** | **220+ Tests Across All Workspace Crates** |
 | **Static Executable Density** | `target/release/faizdb` (LTO, Stripped) | **7.70 MB** | Standalone Single Binary with 0 External Dependencies |
 

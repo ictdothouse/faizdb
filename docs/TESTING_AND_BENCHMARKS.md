@@ -23,7 +23,7 @@ The following metrics represent verified test runs conducted against the optimiz
 * **Compilation Status:** **0 Errors, 0 Warnings** (Strict Clean Build under `cargo clippy -- -D warnings`)
 * **Tested Monorepo Suites & Crates:**
   * `faizdb-core` (86 tests: Dynamic LSM-Tree Anti-Stall Compaction, MemTable, WAL with Torn-Write Recovery, MVCC ACID, BM25, TTL, Raft Disk Consensus, Storage Durability, Storage Fuzzing, Backup PITR AES-256-GCM)
-  * `faizdb-server` (66+ tests: Jepsen Distributed Chaos Suite, Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, PostgreSQL Virtual Catalog & Extended Query Protocol, MongoDB Stateful Cursors & O(1) Lookup, Audit Remediation Suite, Production Hardening & Operational Standards, TLS / HTTPS Transport)
+  * `faizdb-server` (66+ tests: Jepsen Distributed Chaos Suite, Multi-Protocol Handshake, Auth Flow, Chaos CRDT Partition Healing, Document CRUD, Durability & Transaction Write Staging, Vector & Graph REST API, Vector Search, Wire Protocol Security & Performance Benchmarks, PostgreSQL Virtual Catalog & Extended Query Protocol, MongoDB Stateful Cursors & O(1) Lookup, Enterprise Consistency & Indexing Suite, Production Hardening & Operational Standards, TLS / HTTPS Transport)
   * `faizdb-vector` (16 tests: Multi-Layer HNSW, Cosine/L2/Manhattan, Scalar & Binary 32x Quantization, GDPR Tombstone Deletion, In-Place Mutation)
   * `faizdb-query` (35 tests: openCypher Parser, Hybrid Cypher-GraphRAG + Vector Executor, AST Parser, SQL & Mongo UPDATE, Multi-Table Hash INNER/LEFT JOIN, ORDER BY ASC/DESC, Distributed Scatter-Gather Reduction, Cost-Based CBO Optimizer, $unwind Aggregation Pipeline)
   * `faizdb-security` (14 tests: AES-256-GCM AEAD, Argon2id, Ed25519 JWT RBAC, Rustls / Ring TLS Self-Signed & PEM Server Config, Central UserStore)
@@ -107,11 +107,11 @@ cargo run --release --bin faizdb -- benchmark --count 50000
 python scripts/benchmark.py
 ```
 
-### Option C: Via Official Scientific Systems Audit Suite
+### Option C: Via Official Scientific Systems Verification Suite
 ```bash
 # Runs full empirical verification: ELF byte analysis, live Linux kernel memory (VmRSS),
 # 5,000 document ingestion, HNSW vector ANN latency, and GraphRAG traversal:
-bash scripts/run_scientific_audit.sh
+bash scripts/run_verification_suite.sh
 ```
 
 ---

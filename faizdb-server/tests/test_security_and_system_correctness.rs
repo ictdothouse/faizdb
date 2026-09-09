@@ -1,4 +1,4 @@
-//! Comprehensive Regression Test Suite for Audit Findings
+//! Comprehensive Enterprise Verification Test Suite for Wire Protocols, API Guards & Optimizer Stability
 //!
 //! Validates:
 //! 1. PostgreSQL Wire Protocol table queries (e.g. `SELECT * FROM users`) are never intercepted

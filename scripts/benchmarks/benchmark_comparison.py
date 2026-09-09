@@ -246,7 +246,7 @@ def main():
         "faizdb_live": faiz_results,
         "instructions": {
             "microbenchmark": "cargo bench -p faizdb-core",
-            "full_verification": "bash scripts/audit_verify_all.sh"
+            "full_verification": "bash scripts/verify_all.sh"
         }
     }
 

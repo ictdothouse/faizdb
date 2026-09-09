@@ -176,7 +176,7 @@ FaizDB is engineered not only for laboratory speed, but for **uncompromising ope
 
 </div>
 
-> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](../docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**../docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md**](../docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md).
+> 📖 **Full Engineering Specification:** For in-depth architectural details, configuration parameters, and Kubernetes StatefulSet templates, see [**docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md**](../docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) and [**../docs/ENTERPRISE_STANDARDS.md**](../docs/ENTERPRISE_STANDARDS.md).
 
 ---
 
@@ -270,8 +270,8 @@ Measured over live TCP network sockets with authenticated pipelines:
 Anyone can independently reproduce and verify these performance numbers on their own hardware with 100% empirical evidence:
 
 ```bash
-# 1. Run official Scientific Systems Performance & Memory Audit Suite:
-bash scripts/run_scientific_audit.sh
+# 1. Run official Scientific Systems Performance & Verification Suite:
+bash scripts/run_verification_suite.sh
 
 # 2. Run built-in 50,000 document release benchmark (in-memory + durable disk):
 ./target/release/faizdb benchmark --count 50000
@@ -672,7 +672,7 @@ let kafka_json = cdc_event.to_kafka_message()?;
 
 * [🛡️ Enterprise Production Standards & Operational Hardening Reference](../docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) — Comprehensive technical reference for connection governors, WAL group commits, Kubernetes native health probes, autonomous snapshot daemon, open data portability, and wire protocol hardening `[LATEST - ENTERPRISE 2026]`.
 * [🏛️ Latest System Capabilities, Architecture & Verification Reference](../docs/LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) — Comprehensive technical reference, 4-gateway wire protocol throughput & latency benchmarks, query capabilities, and workspace test certification.
-* [🏆 Production Hardening & Enterprise Verification Record](../docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md) — 100% compliant verification across all enterprise durability, consensus, and performance criteria.
+* [🏆 Enterprise Standards & Architectural Verification Specification](../docs/ENTERPRISE_STANDARDS.md) — 100% compliant verification across all enterprise durability, consensus, and performance criteria.
 * [📖 Installation & Deployment Guide](../docs/INSTALLATION.md) — 1-line curl/PowerShell, systemd daemon, and Docker Compose.
 * [🏛️ Tier-1 Engineering & Architecture Guide](../docs/TIER1_ENGINEERING_GUIDE.md) — SIMD Vector Math, Adaptive Replacement Cache (ARC), Prometheus telemetry, Chaos Testing, and YCSB.
 * [🤖 AI, LLM, LangGraph & Real-Time Gaming Use Cases](../docs/USE_CASES_AND_SOLUTIONS.md) — LangGraph unified backend checkpointer, Semantic caching (cut 70%+ LLM tokens), Agentic 3-tier memory (Postgres+Redis+Pinecone+Neo4j in 1), GraphRAG, PyTorch training streaming, and real-time multiplayer gaming.

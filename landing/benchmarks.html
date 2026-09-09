@@ -298,8 +298,8 @@
       <h2 class="type-subhead">Run Automated Independent Verification</h2>
       <p class="type-body" style="margin-top: 6px;">Anyone can reproduce and verify these performance numbers on their local machine with empirical proof:</p>
       <div class="code-block" style="line-height: 1.8;">
-        <div><span class="c-comment"># 1. Run official Scientific Systems Performance & Memory Audit Suite</span></div>
-        <div><span class="c-cmd">bash</span> scripts/run_scientific_audit.sh</div>
+        <div><span class="c-comment"># 1. Run official Scientific Systems Performance & Verification Suite</span></div>
+        <div><span class="c-cmd">bash</span> scripts/run_verification_suite.sh</div>
         <div style="margin-top: 8px;"><span class="c-comment"># 2. Run built-in 50,000 document release benchmark (in-memory + durable)</span></div>
         <div><span class="c-cmd">./target/release/faizdb</span> benchmark --count 50000</div>
         <div style="margin-top: 8px;"><span class="c-comment"># 3. Measure kernel resident memory (VmRSS) directly from /proc/&lt;pid&gt;/status</span></div>

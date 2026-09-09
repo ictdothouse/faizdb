@@ -413,7 +413,7 @@ async fn test_mongo_wire_o1_lookup_and_cursor_pagination() {
 // ── 3. HNSW Vector Tombstone Deletion & In-Place Mutation ────────────────────
 
 #[test]
-fn test_hnsw_vector_tombstone_and_update_remediation() {
+fn test_hnsw_vector_tombstone_and_mutation() {
     let dim = 4;
     let config = HnswConfig::new(dim, DistanceMetric::Euclidean);
     let mut index = HnswIndex::new(config);
@@ -452,7 +452,7 @@ fn test_hnsw_vector_tombstone_and_update_remediation() {
 // ── 4. Relational SQL Multi-Table JOIN Verification ──────────────────────────
 
 #[test]
-fn test_sql_inner_and_left_join_remediation() {
+fn test_sql_inner_and_left_join_execution() {
     let ctx = DatabaseContext::new();
     let customers = ctx.get_or_create_collection("customers");
     let orders = ctx.get_or_create_collection("orders");
@@ -511,7 +511,7 @@ fn test_sql_inner_and_left_join_remediation() {
 // ── 5. Knowledge Graph Deduplication & Deletion Verification ─────────────────
 
 #[test]
-fn test_graph_deduplication_and_dangling_pruning_remediation() {
+fn test_graph_deduplication_and_edge_management() {
     let mut graph = GraphStore::new();
 
     // 1. Deduplication check

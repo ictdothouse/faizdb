@@ -1,9 +1,11 @@
-//! Integration tests verifying remediation of all audit gaps:
+//! Enterprise Integration Tests: Storage Consistency, Query Ordering, and Compaction
+//!
+//! Validates:
 //! 1. SQL & Mongo UPDATE parsing and arithmetic execution.
 //! 2. SQL ORDER BY and Mongo .sort() execution.
 //! 3. REST API pagination on GET /v1/collections/{name}/documents.
-//! 4. MongoDB Wire protocol: real drop, dynamic listCollections, query-filtered count, and sort.
-//! 5. Persistent StorageEngine SSTable compaction.
+//! 4. MongoDB Wire protocol: collection drop, dynamic listCollections, query-filtered count, and sort.
+//! 5. Persistent StorageEngine SSTable compaction and level merging.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -58,7 +60,7 @@ async fn send_op_msg(stream: &mut TcpStream, body: BsonDocument) -> BsonDocument
 fn setup_test_app() -> (axum::Router, Arc<AppState>, String) {
     let db = Arc::new(DatabaseContext::new());
     let auth = Arc::new(faizdb_security::auth::AuthManager::new(
-        b"test-secret-key-remediation-1234",
+        b"test-secret-key-enterprise-1234",
     ));
     let user_store = Arc::new(UserStore::new());
     let geo = Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(
@@ -233,7 +235,7 @@ async fn test_mongo_wire_drop_list_collections_count_and_sort() {
     let db = Arc::new(DatabaseContext::new());
     let user_store = Arc::new(UserStore::new());
     user_store
-        .create_user("remediation_admin", "admin-pass-2026", Role::Admin)
+        .create_user("enterprise_admin", "admin-pass-2026", Role::Admin)
         .unwrap();
 
     // Seed collections
@@ -268,7 +270,7 @@ async fn test_mongo_wire_drop_list_collections_count_and_sort() {
         &mut stream,
         doc! {
             "authenticate": 1,
-            "user": "remediation_admin",
+            "user": "enterprise_admin",
             "pwd": "admin-pass-2026"
         },
     )
