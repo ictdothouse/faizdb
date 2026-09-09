@@ -71,7 +71,7 @@ impl CdcEnvelope {
                 before: None,
                 after: Some(document),
                 source: CdcSource {
-                    version: "0.1.0".to_string(),
+                    version: faizdb_core::VERSION.to_string(),
                     connector: "faizdb-cdc".to_string(),
                     name: "faizdb_cluster".to_string(),
                     ts_ms: now_ms,
@@ -104,7 +104,7 @@ impl CdcEnvelope {
                 before,
                 after: Some(after),
                 source: CdcSource {
-                    version: "0.1.0".to_string(),
+                    version: faizdb_core::VERSION.to_string(),
                     connector: "faizdb-cdc".to_string(),
                     name: "faizdb_cluster".to_string(),
                     ts_ms: now_ms,
@@ -136,7 +136,7 @@ impl CdcEnvelope {
                 before,
                 after: None,
                 source: CdcSource {
-                    version: "0.1.0".to_string(),
+                    version: faizdb_core::VERSION.to_string(),
                     connector: "faizdb-cdc".to_string(),
                     name: "faizdb_cluster".to_string(),
                     ts_ms: now_ms,

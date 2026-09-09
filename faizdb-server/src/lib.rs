@@ -19,14 +19,15 @@ pub use wire::{
     run_postgres_server_with_shutdown, run_wire_server, run_wire_server_with_shutdown,
 };
 
-/// Run the 5-way Multi-Protocol FaizDB server (MongoDB + PostgreSQL + MySQL + gRPC + HTTP/WS)
-pub async fn run_multi_protocol_server(
-    wire_addr: &str,
-    pg_addr: &str,
-    mysql_addr: &str,
-    grpc_addr: &str,
-    http_addr: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Initialise shared server state (DatabaseContext, AuthManager, UserStore, GeoReplication).
+///
+/// This is the single source of truth for all server entry points so that
+/// configuration and security policy is applied consistently.
+fn init_server_state() -> (
+    std::sync::Arc<faizdb_query::DatabaseContext>,
+    std::sync::Arc<faizdb_security::UserStore>,
+    std::sync::Arc<AppState>,
+) {
     let data_dir = std::env::var("FAIZDB_DATA_DIR")
         .unwrap_or_else(|_| faizdb_core::DEFAULT_DATA_DIR.to_string());
     let db = std::sync::Arc::new(
@@ -39,8 +40,13 @@ pub async fn run_multi_protocol_server(
     );
 
     // Initialise AuthManager with JWT secret from env
-    let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
-        .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
+    let jwt_secret = std::env::var("FAIZDB_JWT_SECRET").unwrap_or_else(|_| {
+        tracing::warn!(
+            "⚠️  FAIZDB_JWT_SECRET is not set — using insecure default. \
+             Set FAIZDB_JWT_SECRET in production to prevent unauthorized access!"
+        );
+        "faizdb-jwt-secret-change-in-production".to_string()
+    });
     let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(
         jwt_secret.as_bytes(),
     ));
@@ -62,6 +68,19 @@ pub async fn run_multi_protocol_server(
         geo_replication,
         metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
     });
+
+    (db, user_store, state)
+}
+
+/// Run the 5-way Multi-Protocol FaizDB server (MongoDB + PostgreSQL + MySQL + gRPC + HTTP/WS)
+pub async fn run_multi_protocol_server(
+    wire_addr: &str,
+    pg_addr: &str,
+    mysql_addr: &str,
+    grpc_addr: &str,
+    http_addr: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (db, user_store, state) = init_server_state();
 
     // Create unified shutdown broadcast channel across all 5 entry gateways
     let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
@@ -190,7 +209,7 @@ pub async fn run_multi_protocol_server(
     let user_store_for_grpc = user_store.clone();
     let mut rx_grpc = shutdown_tx.subscribe();
 
-    // 4. Spawn gRPC / Protocol Buffers server (Port 50051) with graceful drain
+    // 5. Spawn gRPC / Protocol Buffers server (Port 50051) with graceful drain
     let grpc_handle = tokio::spawn(async move {
         let shutdown_fut = async move {
             let _ = rx_grpc.recv().await;
@@ -373,40 +392,7 @@ pub async fn run_dual_server(
 
 /// Run only the HTTP & WebSocket server
 pub async fn run_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let data_dir = std::env::var("FAIZDB_DATA_DIR")
-        .unwrap_or_else(|_| faizdb_core::DEFAULT_DATA_DIR.to_string());
-    let db = std::sync::Arc::new(
-        faizdb_query::DatabaseContext::with_storage_dir(&data_dir).unwrap_or_else(|e| {
-            tracing::warn!(
-                "Persistent storage not initialized at '{data_dir}' ({e}); running in-memory"
-            );
-            faizdb_query::DatabaseContext::new()
-        }),
-    );
-
-    let jwt_secret = std::env::var("FAIZDB_JWT_SECRET")
-        .unwrap_or_else(|_| "faizdb-jwt-secret-change-in-production".to_string());
-    let auth = std::sync::Arc::new(faizdb_security::auth::AuthManager::new(
-        jwt_secret.as_bytes(),
-    ));
-    let user_store = std::sync::Arc::new(faizdb_security::UserStore::new());
-
-    let local_region =
-        std::env::var("FAIZDB_REGION").unwrap_or_else(|_| "default-region".to_string());
-    let geo_replication = std::sync::Arc::new(faizdb_core::cluster::GeoReplicationEngine::new(
-        local_region,
-    ));
-
-    let state = std::sync::Arc::new(AppState {
-        db,
-        auth,
-        user_store,
-        backup_schedule: std::sync::Arc::new(parking_lot::RwLock::new(
-            api::BackupScheduleConfig::default(),
-        )),
-        geo_replication,
-        metrics: std::sync::Arc::new(api::metrics::MetricsCollector::default()),
-    });
+    let (_db, _user_store, state) = init_server_state();
     let app = create_router(state);
 
     if let Some(tls_config) = get_server_tls_config().await {

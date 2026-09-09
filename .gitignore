@@ -20,7 +20,7 @@ backups/*.enc.json
 # ── Standalone Binaries & Libraries ───────────────────────────────
 /faizdb
 /faizdb.exe
-/dist_local/faizdb
+/dist_local/
 *.so
 *.dylib
 *.dll
@@ -38,8 +38,11 @@ dist/
 *.crt
 docs/*audit*
 !docs/AUDIT_REMEDIATION_AND_VERIFICATION_RECORD.md
-docs/faizdb-audit-report.md
 docs/*strategi*
+
+# ── Root-level files not meant for repo ───────────────────────────
+/index.html
+/faizdb.postman_collection.json
 
 # ── Frontend & Studio ─────────────────────────────────────────────
 node_modules/
