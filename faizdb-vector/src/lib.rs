@@ -17,7 +17,7 @@ pub use distance::{
     cosine_distance, dot_product_distance, euclidean_distance, manhattan_distance, normalize,
     normalize_in_place, squared_euclidean_distance, DistanceMetric,
 };
-pub use hnsw::{HnswConfig, HnswIndex, VectorSearchResult};
+pub use hnsw::{ConcurrentHnswIndex, HnswConfig, HnswIndex, VectorSearchResult};
 pub use quantization::{
     BinaryQuantizedVector, BinaryQuantizer, QuantizationType, QuantizedVector, ScalarQuantizer,
 };

@@ -1041,9 +1041,11 @@ fn extract_doc_text(doc: &Document) -> String {
     parts.join(" ")
 }
 
-// Make Collection safely shareable across threads
-unsafe impl Send for Collection {}
-unsafe impl Sync for Collection {}
+// Ensure Collection is safely shareable across threads (compiler automatically derives Send + Sync)
+const _: fn() = || {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Collection>();
+};
 
 #[cfg(test)]
 mod tests {

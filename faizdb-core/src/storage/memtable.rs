@@ -1,8 +1,8 @@
-//! MemTable — in-memory write buffer using a concurrent SkipList.
+//! MemTable — in-memory write buffer using a concurrent RwLock-protected BTreeMap.
 //!
 //! The MemTable is the first stop for all writes. It provides:
 //! - O(log n) insert, get, and delete operations
-//! - Concurrent lock-free reads (multiple threads can read simultaneously)
+//! - Concurrent read access (multiple threads can read simultaneously via RwLock)
 //! - Ordered iteration (for efficient range scans and SSTable flushing)
 //! - Configurable size threshold for triggering flush to disk
 //!

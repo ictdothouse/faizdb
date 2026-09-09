@@ -14,7 +14,7 @@
 
 Modern computing architectures suffer from an unsustainable proliferation of specialized database engines—a systemic crisis known as the *Polyglot Persistence Sprawl*. To build an application requiring relational transactions, flexible document metadata, relationship topologies, vector embeddings for Artificial Intelligence, and analytical reporting, engineering teams are routinely compelled to operate four to five separate database clusters (e.g., PostgreSQL, MongoDB, Neo4j, Qdrant, and Redis). This fragmentation imposes a severe *Synchronization Tax*: cross-network replication latency, eventual consistency anomalies, data duplication, high infrastructure expenditure, and operational vulnerability. Furthermore, incumbent database engines written in C/C++ carry decades of technical debt, large attack surfaces, memory-safety vulnerabilities, and massive baseline footprints (often requiring 1 to 2 GB of idle RAM), making them unviable for constrained edge computing, IoT gateways, automotive silicon, robotics, and satellite compute payloads.
 
-This paper presents **FaizDB**, a ground-up, 100% Safe-Rust universal multi-model database engine that consolidates relational, document, graph, vector, in-memory cache, and columnar analytical processing into a single, transactional, zero-dependency **7.70 MB executable**. FaizDB introduces: (1) a multi-protocol network gateway simultaneously multiplexing PostgreSQL v3, MySQL HandshakeV10, MongoDB Wire, gRPC, and REST/WebSocket protocols on dedicated ports, enabling zero-migration integration for legacy client stacks; (2) an ACID hybrid Log-Structured Merge-Tree (LSM-Tree) storage engine incorporating a lock-free SkipList MemTable, an Adaptive Replacement Cache (ARC), and a deterministic Write-Ahead Log (WAL) with torn-write CRC32 protection; (3) a unified execution engine performing joint relational joins, graph traversals, and 8-lane SIMD-accelerated HNSW vector ranking within a single transaction boundary; and (4) an explicit distributed consistency duality providing linearizable CP Raft consensus for financial ledgers alongside multi-region AP Conflict-Free Replicated Data Types (CRDTs). Empirical verification demonstrates 32,305 durable WAL writes/sec, 860,001 point scans/sec, sub-millisecond Graph-Vector query latency, and 100% crash durability across injection runs while idling at only 23.05 MB VmRSS.
+This paper presents **FaizDB**, a ground-up, 100% Safe-Rust universal multi-model database engine that consolidates relational, document, graph, vector, in-memory cache, and columnar analytical processing into a single, transactional, zero-dependency **8.0 MB executable**. FaizDB introduces: (1) a multi-protocol network gateway simultaneously multiplexing PostgreSQL v3, MySQL HandshakeV10, MongoDB Wire, gRPC, and REST/WebSocket protocols on dedicated ports, enabling zero-migration integration for legacy client stacks; (2) an ACID hybrid Log-Structured Merge-Tree (LSM-Tree) storage engine incorporating a concurrent RwLock-protected BTreeMap MemTable (optimized for cache-conscious sequential SSTable flush iteration), an Adaptive Replacement Cache (ARC), and a deterministic Write-Ahead Log (WAL) with torn-write CRC32 protection; (3) a unified execution engine performing joint relational joins, graph traversals, and 8-lane loop-unrolled HNSW vector ranking kernels (enabling LLVM auto-vectorization across AVX2/NEON architectures) within a single transaction boundary; and (4) an explicit distributed consistency duality providing an embedded linearizable CP Raft consensus engine (with disk-backed replicated log and CRC32 frame verification) alongside multi-region AP Conflict-Free Replicated Data Types (CRDTs). Empirical verification demonstrates 32,305 durable WAL writes/sec, 860,001 point scans/sec, sub-millisecond Graph-Vector query latency, and 100% crash durability across injection runs while idling at only 23.05 MB VmRSS.
 
 ---
 
@@ -53,7 +53,7 @@ flowchart TD
     subgraph FaizDBUnified["FaizDB Unified Multi-Model Architecture (Single ACID Binary)"]
         direction TB
         UniversalClient["Application Layer (psql / mysql / mongosh / SDKs)"]
-        UniversalClient -->|"Single ACID Roundtrip"| FaizDBEngine["FaizDB Universal Engine (7.70 MB Single Binary)"]
+        UniversalClient -->|"Single ACID Roundtrip"| FaizDBEngine["FaizDB Universal Engine (~8.0 MB Single Binary)"]
         
         subgraph InternalConvergence["In-Memory Convergence"]
             FaizDBEngine --- ModelSQL["Relational SQL & Joins"]
@@ -77,7 +77,7 @@ Legacy engines written in C and C++ (e.g., MongoDB, RocksDB, Redis) suffer from 
 - Complex heap allocations and pointer arithmetic introduce vulnerabilities (buffer overflows, use-after-free, data races).
 - A standard MongoDB instance idles at between 1,000 MB and 2,000 MB of Resident Set Size (VmRSS), while dedicated vector engines frequently consume 250 MB to 512 MB at baseline.
 
-FaizDB was engineered under a strict mandate: **100% Safe Rust** (enforced by the Rust borrow checker with zero `unsafe` blocks in query and storage paths), resulting in an idle footprint of **23.05 MB VmRSS** and an executable binary of **7.70 MB**.
+FaizDB was engineered under a strict mandate: **100% Safe Rust** (enforced by the Rust borrow checker with zero `unsafe` blocks in query and storage paths), resulting in an idle footprint of **23.05 MB VmRSS** and an executable binary of **~8.0 MB** (stripped release).
 
 ---
 
@@ -125,11 +125,11 @@ flowchart TB
     subgraph Layer5["5. Storage Engine & Distributed Consistency Core"]
         direction TB
         StorageMVCC["MVCC Snapshot Isolation (Lock-Free Reads)"]
-        StorageMemTable["Lock-Free SkipList MemTable"]
+        StorageMemTable["Concurrent BTreeMap MemTable (RwLock)"]
         StorageARC["Adaptive Replacement Cache (ARC)"]
         StorageWAL["WAL (CRC32 Frame / Vector Group Commit)"]
         StorageSST["SSTables with Bloom Filters (Tiered Storage)"]
-        ConsistencyMesh["Consistency Duality: CP Raft Quorum & AP CRDT Mesh"]
+        ConsistencyMesh["Consistency Duality: Embedded CP Raft Quorum & AP CRDT Mesh"]
     end
 
     Layer1 --> Layer2
@@ -145,10 +145,10 @@ flowchart TB
 ```
 
 ### 2.1 Monorepo Crate Topology
-1. **`faizdb-core`**: LSM-Tree storage engine, SkipList MemTable, WAL framing, SSTable reader/writer, Adaptive Replacement Cache (ARC), Multi-Version Concurrency Control (MVCC), autonomous TTL engine, ColumnarBatch analytics, and TieredStorageManager.
+1. **`faizdb-core`**: LSM-Tree storage engine, concurrent BTreeMap MemTable, WAL framing, SSTable reader/writer, Adaptive Replacement Cache (ARC), Multi-Version Concurrency Control (MVCC), autonomous TTL engine, ColumnarBatch analytics, and TieredStorageManager.
 2. **`faizdb-query`**: AST nodes, recursive descent parser (SQL, MongoDB shell syntax, openCypher, and FaizQL), Cost-Based Optimizer (CBO), and physical query executors.
 3. **`faizdb-graph`**: Bidirectional adjacency graph store, BFS/DFS path traversal algorithms, shortest-path solvers, and LLM context extraction.
-4. **`faizdb-vector`**: Hierarchical Navigable Small World (HNSW) graph index, AVX2/NEON SIMD-accelerated distance kernels (Cosine, L2, Dot Product), and 8-bit scalar quantization (SQ8).
+4. **`faizdb-vector`**: Hierarchical Navigable Small World (HNSW) graph index, 8-lane loop-unrolled distance kernels (AVX2/NEON auto-vectorizable), and 8-bit scalar quantization (SQ8).
 5. **`faizdb-security`**: Argon2id password verification, EdDSA Ed25519 token lifecycle, TLS 1.3 transport security, and multi-gateway RBAC.
 6. **`faizdb-server`**: Asynchronous Tokio network runtime multiplexing the 5 wire gateways, Change Data Capture (CDC) streaming, and Prometheus telemetry.
 7. **`faizdb-cli`**: Terminal REPL, forensic diagnostics, online backup creation, and Point-In-Time Recovery (PITR) engine.
@@ -165,7 +165,7 @@ sequenceDiagram
     actor Client as Client (psql / mysql / SDK)
     participant Server as Protocol Gateway
     participant WAL as Write-Ahead Log (WAL)
-    participant MemTable as Active MemTable (SkipList)
+    participant MemTable as Active MemTable (Concurrent BTreeMap)
     participant Cache as ARC Block Cache
     participant Disk as SSTable Storage (NVMe/SSD)
 
@@ -173,7 +173,7 @@ sequenceDiagram
     Client->>Server: Mutation Request (INSERT / UPDATE / DELETE)
     Server->>WAL: Append Binary Frame (Magic + CRC32 + LSN + Payload)
     WAL->>Disk: Vectorized Batch fsync (Single I/O Flush)
-    Server->>MemTable: Insert Key-Value into Lock-Free SkipList
+    Server->>MemTable: Insert Key-Value into Concurrent BTreeMap
     Server->>Cache: Populate / Invalidate ARC Entry
     Server-->>Client: Transaction Acknowledged (Zero Data Loss Guarantee)
 
@@ -283,7 +283,7 @@ The graph subsystem maintains vertices and directed edges in bidirectional adjac
 ### 4.2 SIMD HNSW Vector Indexing & Scalar Quantization
 The vector subsystem implements Hierarchical Navigable Small World graphs:
 - Multi-layer graph topology providing logarithmic $O(\log N)$ search complexity.
-- **SIMD Hardware Vectorization**: Distance calculations automatically dispatch to 8-lane AVX2 (x86_64) or ARM NEON kernels:
+- **Vectorized Distance Kernels**: Distance calculations utilize 8-lane loop unrolling (`dot0`..`dot7`, `norm0`..`norm7`), enabling the LLVM backend to auto-vectorize across 256-bit AVX2 (x86_64) and 128-bit ARM NEON execution pipelines without requiring unsafe architecture-locked assembly:
   $$\text{Cosine Distance}(u, v) = 1.0 - \frac{\sum_{i=1}^D u_i v_i}{\sqrt{\sum_{i=1}^D u_i^2} \cdot \sqrt{\sum_{i=1}^D v_i^2}}$$
 - **Scalar Quantization (SQ8)**: Automatically quantizes 32-bit floating point vectors into 8-bit integer buckets ($4\times$ memory reduction), enabling over 100 million embeddings to reside in commodity server RAM with $< 1\%$ recall degradation.
 
@@ -394,7 +394,7 @@ flowchart TB
 ```
 
 1. **Mode 1: Strong Consistency (CP Mode — Mandatory for Financial Ledgers)**:
-   Powered by an embedded Raft consensus algorithm with disk-backed replicated logging (`RaftDiskStore`). Writes require acknowledgment from a strict majority ($N/2 + 1$) quorum. If network partitions prevent majority agreement, writes in the minority partition are cleanly rejected, preventing double-spending and ledger inconsistency.
+   Powered by an embedded Raft consensus algorithm with disk-backed replicated logging (`RaftDiskStore`) and abstracted network transport (`NetworkTransport`). The Raft state machine, randomized term elections, and majority quorum log replication are fully verified in single-process and multi-instance simulation. Writes require acknowledgment from a strict majority ($N/2 + 1$) quorum. If network partitions prevent majority agreement, writes in the minority partition are cleanly rejected, preventing double-spending and ledger inconsistency.
 2. **Mode 2: High Availability (AP Mode — Multi-Region Active-Active WAN Mesh)**:
    Leverages Conflict-Free Replicated Data Types (CRDTs) to provide partition tolerance across worldwide geographical regions without distributed locks:
    - `PnCounter`: Bounded positive-negative distributed counters.
@@ -419,7 +419,7 @@ All empirical tests were executed on bare-metal commodity server hardware:
 | Benchmark Workload | Operational Specification | Measured Throughput | p50 Latency | p99 Latency |
 |:---|:---|:---:|:---:|:---:|
 | **Durable WAL Writes** | Sequential write + `fdatasync` per batch | **32,305 ops/sec** | 30.9 µs | 94.2 µs |
-| **In-Memory MemTable Put** | Lock-free concurrent SkipList mutation | **61,432 ops/sec** | 16.2 µs | 42.1 µs |
+| **In-Memory MemTable Put** | Concurrent RwLock BTreeMap mutation | **61,432 ops/sec** | 16.2 µs | 42.1 µs |
 | **Sequential Point Scan** | Zero-copy document iterator | **860,001 ops/sec** | 1.16 µs | 3.84 µs |
 | **B-Tree Secondary Index** | 25,000 document range point lookups | **223,733 ops/sec** | 4.47 µs | 12.8 µs |
 | **HNSW Vector ANN Search** | Top-5 nearest neighbors (4,096 dimensions) | **1,414 QPS** | 0.88 ms | 2.14 ms |
@@ -434,7 +434,7 @@ All empirical tests were executed on bare-metal commodity server hardware:
 flowchart LR
     subgraph BinaryFootprint["Binary Size on Disk (Megabytes)"]
         direction TB
-        B_FaizDB["FaizDB: 7.7 MB"]
+        B_FaizDB["FaizDB: 8.0 MB"]
         B_SQLite["SQLite: 2.3 MB"]
         B_RocksDB["RocksDB: 21.0 MB"]
         B_DuckDB["DuckDB: 38.0 MB"]
@@ -460,7 +460,7 @@ flowchart LR
 
 | Database Engine | Architectural Focus | Executable Binary Size | Baseline Idle RAM (VmRSS) |
 |:---|:---|:---:|:---:|
-| 🟢 **FaizDB (Full Server)** | **Universal Multi-Model (Relational + Doc + Graph + Vector + 5 Protocols)** | **7.70 MB** | **23.05 MB** |
+| 🟢 **FaizDB (Full Server)** | **Universal Multi-Model (Relational + Doc + Graph + Vector + 5 Protocols)** | **8.0 MB** | **23.05 MB** |
 | SQLite (v3.46) | Embedded Relational SQL Only | 2.30 MB | 4.0 – 8.0 MB |
 | RocksDB (v9.x) | Key-Value Storage Library | 18 – 25 MB | 32 – 64 MB |
 | DuckDB (v1.x) | Embedded Columnar OLAP Only | 35 – 42 MB | 64 – 128 MB |

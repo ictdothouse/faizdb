@@ -8,6 +8,8 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 use crate::distance::DistanceMetric;
 use crate::quantization::{
@@ -603,6 +605,82 @@ impl HnswIndex {
     }
 }
 
+/// A thread-safe, concurrent wrapper around `HnswIndex` utilizing `parking_lot::RwLock`.
+///
+/// Provides fine-grained read concurrency for multiple simultaneous ANN vector search queries
+/// alongside write synchronization for inserts, updates, and deletes.
+#[derive(Debug, Clone)]
+pub struct ConcurrentHnswIndex {
+    inner: Arc<RwLock<HnswIndex>>,
+}
+
+impl ConcurrentHnswIndex {
+    /// Create a new concurrent HNSW index with given configuration
+    pub fn new(config: HnswConfig) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(HnswIndex::new(config))),
+        }
+    }
+
+    /// Wrap an existing HnswIndex
+    pub fn from_index(index: HnswIndex) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(index)),
+        }
+    }
+
+    /// Number of active (non-deleted) vectors stored
+    pub fn len(&self) -> usize {
+        self.inner.read().len()
+    }
+
+    /// Check if empty of active vectors
+    pub fn is_empty(&self) -> bool {
+        self.inner.read().is_empty()
+    }
+
+    /// Check if index contains an entry with given ID
+    pub fn contains_id(&self, id: &str) -> bool {
+        self.inner.read().contains_id(id)
+    }
+
+    /// Insert a vector with its external document ID
+    pub fn insert(&self, id: impl Into<String>, vector: Vec<f32>) -> Result<(), String> {
+        self.inner.write().insert(id, vector)
+    }
+
+    /// In-place update of a vector with the same document ID
+    pub fn update(&self, id: impl Into<String>, vector: Vec<f32>) -> Result<(), String> {
+        self.inner.write().update(id, vector)
+    }
+
+    /// Delete a vector by ID
+    pub fn delete(&self, id: &str) -> bool {
+        self.inner.write().delete(id)
+    }
+
+    /// Search the k nearest neighbors to the query vector (multiple concurrent readers allowed)
+    pub fn search(&self, query: &[f32], top_k: usize) -> Vec<VectorSearchResult> {
+        self.inner.read().search(query, top_k)
+    }
+
+    /// Save the HNSW index to a disk file path
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), String> {
+        self.inner.read().save_to_file(path)
+    }
+
+    /// Load from file
+    pub fn load_from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, String> {
+        let index = HnswIndex::load_from_file(path)?;
+        Ok(Self::from_index(index))
+    }
+
+    /// Access the underlying `Arc<RwLock<HnswIndex>>`
+    pub fn inner(&self) -> Arc<RwLock<HnswIndex>> {
+        Arc::clone(&self.inner)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -807,5 +885,45 @@ mod tests {
         assert_eq!(index.len(), 2);
         let res_v2 = index.search(&[0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1);
         assert_eq!(res_v2[0].id, "v2");
+    }
+
+    #[test]
+    fn test_concurrent_hnsw_index() {
+        let config = HnswConfig::new(4, DistanceMetric::Cosine);
+        let c_index = ConcurrentHnswIndex::new(config);
+
+        // Concurrently insert from multiple threads
+        let mut handles = Vec::new();
+        for t in 0..4 {
+            let idx = c_index.clone();
+            handles.push(std::thread::spawn(move || {
+                for i in 0..10 {
+                    let id = format!("t{t}_v{i}");
+                    let vec = vec![t as f32 * 0.1, i as f32 * 0.1, 0.5, 0.2];
+                    idx.insert(id, vec).unwrap();
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        assert_eq!(c_index.len(), 40);
+
+        // Concurrently search from multiple threads
+        let mut search_handles = Vec::new();
+        for _ in 0..4 {
+            let idx = c_index.clone();
+            search_handles.push(std::thread::spawn(move || {
+                let query = vec![0.1, 0.2, 0.5, 0.2];
+                let results = idx.search(&query, 5);
+                assert!(!results.is_empty());
+            }));
+        }
+
+        for h in search_handles {
+            h.join().unwrap();
+        }
     }
 }

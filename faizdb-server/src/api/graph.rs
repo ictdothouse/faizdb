@@ -176,7 +176,7 @@ pub async fn traverse_graph(
     if graph.get_vertex(&query.start).is_none() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::error(format!(
+            Json(ApiResponse::err(format!(
                 "Starting vertex '{}' not found in graph",
                 query.start
             ))),
