@@ -15,5 +15,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 crc32fast = { workspace = true }
 uuid = { workspace = true }
+faizdb-vector = { path = "../faizdb-vector" }
 
 

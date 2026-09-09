@@ -9,6 +9,7 @@ pub mod graph;
 pub mod index;
 pub mod persistence;
 pub mod query;
+pub mod vector_graph;
 
 pub use algorithms::{
     degree_centrality, dijkstra_shortest_path, k_hop_neighbors, pagerank,
@@ -19,6 +20,7 @@ pub use graph::{Direction, Edge, GraphRagContext, GraphStore, PathStep, Vertex};
 pub use index::GraphIndex;
 pub use persistence::{load_snapshot, save_snapshot, GRAPH_SNAPSHOT_MAGIC};
 pub use query::{GraphQuery, PatternMatch, PropertyFilter};
+pub use vector_graph::{FusedRagContext, FusedRagNode, VectorGraph};
 
 /// Crate version
 pub fn version() -> &'static str {

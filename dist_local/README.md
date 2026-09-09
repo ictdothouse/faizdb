@@ -180,14 +180,11 @@ FaizDB is engineered not only for laboratory speed, but for **uncompromising ope
 
 ---
 
-## 🧠 The Killer Feature: Transactional GraphRAG (Neo4j + Qdrant in One Binary)
+## 🧠 Unified GraphRAG Kernel: In-Memory Vector-Graph Fusion
 
-In traditional enterprise AI architectures, teams are forced into a painful **dual-database sync tax**:
-- **Neo4j** stores graph vertices & relationships.
-- **Qdrant / Pinecone** stores vector embeddings.
-- Updates require distributed two-phase commits or Kafka sync workers that inevitably drift, corrupt, and fail under load.
+In conventional AI architectures, implementing GraphRAG requires operating separate vector databases and graph databases linked by application scripts. This introduces network overhead (100ms–250ms), data drift, and synchronization complexity.
 
-**FaizDB eliminates the sync tax completely.** Graph relationships, vector embeddings, and rich JSON documents are stored, mutated, and queried **in a single ACID transaction within a single 7.70 MB binary**.
+**FaizDB provides an In-Memory VectorGraph Kernel.** Graph relationships and high-dimensional vector embeddings execute in a single memory pass within an ultra-lean **~8.0 MB binary**, enabling sub-millisecond GraphRAG context retrieval (< 1.5ms) with zero inter-database network round-trips.
 
 ### Multi-Hop Graph Traversal + Vector Search in One Query:
 

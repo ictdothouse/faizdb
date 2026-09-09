@@ -294,6 +294,20 @@ To serve real-time analytical queries (OLAP) directly on operational data, FaizD
 - Provides hardware-friendly vector aggregation operators: `sum_f64`, `avg_f64`, `min_f64`, `max_f64`, and `count`.
 - Exposed directly via native Rust API ([`Collection::to_columnar_batch()`](file:///c:/Users/afaiz/Documents/2006/PERSONAL2026/ICTHOUSE2026/FAIZDB/faizdb-core/src/document/collection.rs#L555)) and REST HTTP (`GET /v1/collections/{name}/columnar`).
 
+### 4.4 In-Memory Fused VectorGraph & GraphRAG Kernel (`VectorGraph`)
+In conventional AI architectures, implementing GraphRAG requires maintaining separate vector and graph database engines linked by application code (e.g., LangChain/Python). This introduces the *GraphRAG Fragmentation Tax*: high cross-network round-trip latency (100ms–250ms), data drift between vector embeddings and graph topology, and operational overhead.
+
+FaizDB bridges this divide via the native `VectorGraph` fusion engine in `faizdb-graph`:
+1. **Unified Node-Vector Space**: Graph vertices and HNSW high-dimensional vectors share the exact same entity identifiers in-memory without inter-process communication.
+2. **Single-Pass Vector-Guided Traversal**:
+   - Given a natural language query vector $\mathbf{q}$, the engine first executes an HNSW Approximate Nearest Neighbor (ANN) search to isolate $k$ semantic seed vertices.
+   - Immediately within the same CPU cache locality, it executes bounded graph expansion (BFS/Dijkstra) up to depth $d$.
+   - Each traversed entity $v$ is evaluated using a hybrid relevance scoring function:
+     $$\text{Score}(v) = \alpha \cdot \text{Sim}(\mathbf{q}, \mathbf{x}_{\text{seed}}) + (1 - \alpha) \cdot \frac{1}{1 + \text{hop}(v)}$$
+   - Generates clean, structured Markdown context ready for Large Language Model (LLM) prompt injection with sub-millisecond retrieval latency (< 1.5ms).
+3. **Graph-Constrained Vector Search**:
+   - Restricts vector similarity searches strictly to reachable subgraphs from a root entity or within an organizational community, eliminating cross-domain hallucinations in multi-tenant RAG systems without expensive post-filtering.
+
 ---
 
 ## 5. Five-Way Wire Protocol Multiplexing
@@ -468,7 +482,7 @@ flowchart LR
 | SurrealDB (v2.0) | Multi-Model (SurrealQL Only) | 95 – 110 MB | 256 – 512 MB |
 | MongoDB (v8.0) | Document Store Only | 110 – 140 MB | 1,000 – 2,000 MB |
 
-FaizDB provides the **highest capability-to-footprint ratio in database engineering**, delivering five converged data models and five native wire gateways in a footprint smaller than single-model vector databases.
+FaizDB demonstrates that a multi-model architecture can be realized within a lean, resource-efficient footprint (~8.0 MB), making it ideal for edge systems, local AI agents, and embedded applications where running multiple separate database servers is unviable.
 
 ### 7.4 Crash Durability Injection Testing (`pkill -9 / SIGKILL`)
 To prove non-volatile durability under catastrophic host failure, an automated crash loop was executed:
@@ -487,9 +501,27 @@ To prove non-volatile durability under catastrophic host failure, an automated c
 
 ---
 
-## 9. Conclusion & Project Roadmap
+## 9. Architectural Scope, Design Trade-Offs, and Limitations
 
-FaizDB establishes that modern database engineering does not require choosing between architectural specialization and operational simplicity. By leveraging **100% Safe Rust**, a unified hybrid LSM-Tree, and native wire protocol multiplexing, FaizDB eliminates the "sync tax" of disparate data architectures, delivering a universal database engine suitable for enterprise cloud datacenters and resource-constrained edge devices alike.
+A credible engineering evaluation requires explicitly defining the design boundaries and intentional trade-offs of the system:
+
+### 9.1 Local-First & In-Process Scope vs. Petabyte Distributed Clusters
+FaizDB is engineered from the ground up as a **compact, in-process, and single-node/edge database kernel** (~8.0 MB executable, ~23 MB baseline RAM). Its target domain is local AI agent runtimes, constrained edge gateways, automotive compute, and transactional microservices. It is **not** designed to replace petabyte-scale distributed data warehouses (e.g., Google BigQuery, Snowflake) or massive global multi-datacenter clusters (e.g., Google Spanner, CockroachDB).
+
+### 9.2 CPU SIMD Vector Quantization vs. Multi-GPU Compute Infrastructure
+FaizDB executes vector similarity search and scalar quantization (SQ8) using CPU-level SIMD instructions (AVX2 for x86_64, NEON for ARM64). For datasets comprising tens of thousands to hundreds of thousands of high-dimensional vectors, this delivers sub-millisecond latencies with minimal power draw. However, for billion-scale vector workloads requiring multi-GPU parallel matrix multiplication (CUDA), specialized distributed vector clusters (e.g., Milvus, Qdrant clusters) remain the appropriate architectural tier.
+
+### 9.3 Query Language Surface & openCypher Implementation Scope
+FaizDB implements a practical subset of openCypher focusing on pattern matching, shortest-path calculation (Dijkstra), centrality (PageRank), and multi-hop neighborhood extraction. It does not implement the entire openCypher specification or Neo4j Graph Data Science (GDS) library procedures. Similarly, its PostgreSQL and MySQL wire handlers support core relational transactions, ANSI SQL WHERE operators, and joins, but do not support advanced features such as distributed window functions, stored procedures, or complex triggers.
+
+### 9.4 Distributed Consensus Verification Boundaries
+The embedded Raft consensus engine implements randomized elections, term synchronization, disk-backed replicated logging, and log compaction snapshots. Current validation has been conducted using deterministic network simulation and multi-instance local disk verification. Validating partition tolerance across physical wide-area network (WAN) clusters with hardware clock drift remains an active area of ongoing engineering on the project roadmap.
+
+---
+
+## 10. Conclusion & Project Roadmap
+
+FaizDB establishes that modern database engineering does not require choosing between architectural specialization and operational simplicity. By leveraging **100% Safe Rust**, a unified hybrid LSM-Tree, and native wire protocol multiplexing, FaizDB eliminates the "sync tax" of disparate data architectures, delivering a compact, reliable database engine suitable for resource-constrained edge devices and modern AI-native applications.
 
 ### Roadmap Towards v1.0 General Availability (GA):
 1. **GPU Acceleration**: WebGPU and CUDA compute kernels for parallelized vector batch ingestion.
@@ -498,7 +530,7 @@ FaizDB establishes that modern database engineering does not require choosing be
 
 ---
 
-## References
+## 11. References
 
 1. Corbett, J. C., et al. (2013). "Spanner: Google’s Globally Distributed Database." *ACM Transactions on Computer Systems (TOCS)*, 31(3), 1-22.
 2. Ongaro, D., & Ousterhout, J. (2014). "In Search of an Understandable Consensus Algorithm." *USENIX Annual Technical Conference (ATC)*, 305-319.
