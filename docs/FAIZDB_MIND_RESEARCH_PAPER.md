@@ -71,7 +71,7 @@ To establish formal novelty, we classify existing paradigms into a comparative t
 | **Continual Adaptation** | Static Indexing | Manual Cypher Mutation | External Vector Log | Catastrophic Forgetting | **Hebbian Synaptic Plasticity** |
 | **Vector-Graph Coupling** | Decoupled (IPC/REST) | Secondary Index | Decoupled Polyglot | None (Latent Space) | **In-Memory Fused Single-Pass** |
 | **Metric Calculation Cost** | $O(d)$ SIMD f32 | $O(d)$ f32 / None | Cloud API Roundtrip | Matrix Multiplication | **$O(1)$ Hardware `POPCNT`** |
-| **Hosting Cost** | $\$50 - \$500/\text{mo}$ | $\$100+/ \text{mo}$ | $\$0.02 / \text{query}$ | $\$2.00 / \text{GPU-hr}$ | **$\mathbf{\$0.00}$ (Zero Server Cost)** |
+| **Hosting Cost** | USD 50–500 / mo | USD 100+ / mo | USD 0.02 / query | USD 2.00 / GPU-hr | **USD 0.00 (Zero Server Cost)** |
 
 ### Formal Novelty Claims
 
@@ -145,7 +145,7 @@ $$\mathbb{E}[D_H(h(u), h(v))] = \frac{1}{\pi} \arccos(\text{CosSim}(u, v))$$
 #### Corollary 1.2 (Hardware Implementation Complexity)
 On modern x86_64 (AVX2/AVX-512) and ARM64 (NEON) architectures, $D_H$ over $k=128$ bits requires precisely two 64-bit XOR operations and two Population Count (`POPCNT`) instructions:
 
-$$D_H(x, y) = \text{_mm_popcnt_u64}(x_0 \oplus y_0) + \text{_mm_popcnt_u64}(x_1 \oplus y_1)$$
+$$D_H(x, y) = \operatorname{POPCNT64}(x_0 \oplus y_0) + \operatorname{POPCNT64}(x_1 \oplus y_1)$$
 
 Execution latency on an Intel Skylake or AMD Zen core:
 - `XOR`: Latency $1\text{ cycle}$, Reciprocal Throughput $0.25\text{ cycles}$.
@@ -227,7 +227,7 @@ Since the eigenvalue is strictly negative, the equilibrium point is globally asy
 
 In CPU-bound autoregressive decoding, memory bandwidth is the primary bottleneck. Generating token $t_k$ requires transferring the full parameter weight matrix $W \in \mathbb{R}^{N}$ from RAM to CPU cache:
 
-$$T_{\text{autoregressive}} = K \cdot \frac{N \times \text{bytes\_per\_weight}}{\text{Bandwidth}_{\text{RAM}}}$$
+$$T_{\text{autoregressive}} = K \cdot \frac{N \times B_{\text{weight}}}{\text{Bandwidth}_{\text{RAM}}}$$
 
 In FaizDB-Mind, an in-memory N-gram draft model predicts $K$ candidate tokens $\{c_1, \dots, c_K\}$ with negligible compute cost ($O(1)$ hash table lookup). The target language model evaluates all $K$ tokens in a **single forward pass** using speculative parallel verification.
 
