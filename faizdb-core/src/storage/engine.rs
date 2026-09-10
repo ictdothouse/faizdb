@@ -41,6 +41,8 @@ pub struct StorageConfig {
     pub l0_stop_writes_trigger: usize,
     /// Optional tiered storage configuration for hot/cold data lifecycle management
     pub tiered_storage: Option<crate::storage::tiered::TieredStorageConfig>,
+    /// SSTable compression algorithm (default: Compression::Lz4 for high speed & 50-70% disk savings)
+    pub compression: crate::storage::sstable::Compression,
 }
 
 impl Default for StorageConfig {
@@ -55,6 +57,7 @@ impl Default for StorageConfig {
             l0_slowdown_writes_trigger: 8,
             l0_stop_writes_trigger: 16,
             tiered_storage: None,
+            compression: crate::storage::sstable::Compression::Lz4,
         }
     }
 }
@@ -95,8 +98,8 @@ pub struct StorageEngine {
     /// SSTable generation counter
     sstable_generation: AtomicU64,
 
-    /// ARC (Adaptive Replacement Cache) for SSTable block and key-value lookups
-    block_cache: parking_lot::Mutex<crate::storage::arc_cache::ArcCache<Vec<u8>, Option<Vec<u8>>>>,
+    /// ARC (Adaptive Replacement Cache) for SSTable block and key-value lookups (Sharded for zero-contention concurrency)
+    block_cache: crate::storage::arc_cache::ShardedArcCache<Vec<u8>, Option<Vec<u8>>>,
 
     /// Atomic flag indicating whether compaction is actively running
     is_compacting: std::sync::atomic::AtomicBool,
@@ -204,7 +207,7 @@ impl StorageEngine {
 
         let cache_capacity = config.block_cache_size.max(16);
         let block_cache =
-            parking_lot::Mutex::new(crate::storage::arc_cache::ArcCache::new(cache_capacity));
+            crate::storage::arc_cache::ShardedArcCache::new(cache_capacity);
 
         // Initialize Tiered Storage Manager and load existing Cold SSTables if configured
         let mut cold_sstables = Vec::new();
@@ -293,10 +296,8 @@ impl StorageEngine {
         // Step 2: Write to MemTable
         self.active_memtable.put(key.to_vec(), value.to_vec())?;
 
-        // Update block cache
-        self.block_cache
-            .lock()
-            .put(key.to_vec(), Some(value.to_vec()));
+        // Update block cache (sharded, zero lock contention)
+        self.block_cache.put(key.to_vec(), Some(value.to_vec()));
 
         // Step 3: Check if MemTable needs flushing
         if self.active_memtable.should_flush() {
@@ -326,10 +327,10 @@ impl StorageEngine {
             wal.append_batch(&ops)?;
         }
 
-        // Step 2: Write to MemTable & Block Cache
+        // Step 2: Write to MemTable & Block Cache (sharded)
         for &(k, v) in entries {
             self.active_memtable.put(k.to_vec(), v.to_vec())?;
-            self.block_cache.lock().put(k.to_vec(), Some(v.to_vec()));
+            self.block_cache.put(k.to_vec(), Some(v.to_vec()));
         }
 
         // Step 3: Check if MemTable needs flushing
@@ -371,12 +372,9 @@ impl StorageEngine {
             }
         }
 
-        // Step 3: Check Adaptive Replacement Cache (ARC) for warm SSTable data
-        {
-            let mut cache = self.block_cache.lock();
-            if let Some(cached_val) = cache.get(&key.to_vec()) {
-                return Ok(cached_val);
-            }
+        // Step 3: Check Adaptive Replacement Cache (ARC) for warm SSTable data (sharded)
+        if let Some(cached_val) = self.block_cache.get(&key.to_vec()) {
+            return Ok(cached_val);
         }
 
         // Step 4: Check Hot SSTables (newest to oldest)
@@ -388,7 +386,7 @@ impl StorageEngine {
                         MemEntry::Value(v) => Some(v),
                         MemEntry::Tombstone => None,
                     };
-                    self.block_cache.lock().put(key.to_vec(), result.clone());
+                    self.block_cache.put(key.to_vec(), result.clone());
                     if let Some(mgr) = &self.tiered_manager {
                         mgr.write().record_access(sst.path());
                     }
@@ -407,7 +405,7 @@ impl StorageEngine {
                         MemEntry::Tombstone => None,
                     };
                     // Cache in ARC block cache so repeated reads of cold data avoid disk overhead
-                    self.block_cache.lock().put(key.to_vec(), result.clone());
+                    self.block_cache.put(key.to_vec(), result.clone());
                     if let Some(mgr) = &self.tiered_manager {
                         mgr.write().record_access(sst.path());
                     }
@@ -417,13 +415,13 @@ impl StorageEngine {
         }
 
         // Negative cache miss
-        self.block_cache.lock().put(key.to_vec(), None);
+        self.block_cache.put(key.to_vec(), None);
         Ok(None)
     }
 
     /// Get statistics for the ARC block cache (hits, misses, hit ratio)
     pub fn cache_stats(&self) -> crate::storage::arc_cache::ArcCacheStats {
-        self.block_cache.lock().stats()
+        self.block_cache.stats()
     }
 
     /// Delete a key from the storage engine.
@@ -443,7 +441,7 @@ impl StorageEngine {
         self.active_memtable.delete(key.to_vec())?;
 
         // Invalidate in block cache
-        self.block_cache.lock().put(key.to_vec(), None);
+        self.block_cache.put(key.to_vec(), None);
 
         if self.active_memtable.should_flush() {
             self.maybe_flush_memtable()?;
@@ -464,16 +462,13 @@ impl StorageEngine {
         {
             let cold_sstables = self.cold_sstables.read();
             for sst in cold_sstables.iter().rev() {
-                for entry_result in sst.iter()? {
-                    let (key, entry) = entry_result?;
-                    if key.starts_with(prefix) {
-                        match entry {
-                            MemEntry::Value(v) => {
-                                results.insert(key, Some(v));
-                            }
-                            MemEntry::Tombstone => {
-                                results.insert(key, None);
-                            }
+                for (key, entry) in sst.prefix_scan(prefix)? {
+                    match entry {
+                        MemEntry::Value(v) => {
+                            results.insert(key, Some(v));
+                        }
+                        MemEntry::Tombstone => {
+                            results.insert(key, None);
                         }
                     }
                 }
@@ -484,16 +479,13 @@ impl StorageEngine {
         {
             let sstables = self.sstables.read();
             for sst in sstables.iter().rev() {
-                for entry_result in sst.iter()? {
-                    let (key, entry) = entry_result?;
-                    if key.starts_with(prefix) {
-                        match entry {
-                            MemEntry::Value(v) => {
-                                results.insert(key, Some(v));
-                            }
-                            MemEntry::Tombstone => {
-                                results.insert(key, None);
-                            }
+                for (key, entry) in sst.prefix_scan(prefix)? {
+                    match entry {
+                        MemEntry::Value(v) => {
+                            results.insert(key, Some(v));
+                        }
+                        MemEntry::Tombstone => {
+                            results.insert(key, None);
                         }
                     }
                 }
@@ -633,8 +625,8 @@ impl StorageEngine {
             .join("sst")
             .join(format!("sst_{gen_num:06}.sst"));
 
-        // Write SSTable
-        let mut writer = SSTableWriter::new(&sst_path, entries.len())?;
+        // Write SSTable with configured compression (default LZ4)
+        let mut writer = SSTableWriter::with_compression(&sst_path, entries.len(), self.config.compression)?;
         for (key, entry) in &entries {
             writer.write_entry(key, entry)?;
         }

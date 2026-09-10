@@ -286,22 +286,42 @@ impl TransactionManager {
             }
         }
 
-        // Remove from active transactions
+        // Remove from active transactions and run watermark-based GC
         {
             let mut active = self.active_txns.write();
             active.remove(&txn.id);
 
-            // Periodically clean up committed write history to prevent unbounded memory growth.
-            // If no other transactions are active, all history can be safely cleared.
+            // Watermark-based GC: always prune entries older than the oldest
+            // active transaction's snapshot timestamp. This prevents unbounded
+            // memory growth even when long-running OLAP queries are active.
+            let committed_len = self.committed_writes.read().len();
             if active.is_empty() {
+                // Fast path: no active transactions → clear everything
                 drop(active);
                 self.committed_writes.write().clear();
-            } else {
-                let committed_len = self.committed_writes.read().len();
-                if committed_len > 10_000 {
-                    drop(active);
-                    self.gc();
+            } else if committed_len > 5_000 {
+                // Incremental GC: prune entries no longer needed for conflict detection.
+                // An entry is safe to remove if its commit_ts < min(active snapshot_ts),
+                // because no active transaction can see or conflict with it.
+                drop(active);
+                self.gc();
+            }
+
+            // Emergency hard cap: if GC wasn't enough (e.g. single long-running txn
+            // holds min_ts at 0), force-prune the oldest 50% to prevent OOM.
+            let committed_len = self.committed_writes.read().len();
+            if committed_len > 50_000 {
+                let mut committed = self.committed_writes.write();
+                let mut entries: Vec<_> = committed.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                entries.sort_by_key(|(_k, ts)| *ts);
+                let half = entries.len() / 2;
+                for (key, _ts) in entries.into_iter().take(half) {
+                    committed.remove(&key);
                 }
+                tracing::warn!(
+                    "[MVCC GC] Emergency prune: committed_writes exceeded 50K ({committed_len} entries). \
+                     Pruned oldest 50%. Consider reducing long-running transaction duration."
+                );
             }
         }
 

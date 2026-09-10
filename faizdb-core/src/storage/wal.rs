@@ -229,7 +229,8 @@ impl WalRecord {
 /// The Write-Ahead Log writer.
 ///
 /// Thread-safe — uses a mutex to serialize writes.
-/// All writes are fsync'd for durability.
+/// When `sync_writes` is enabled, every write is fsync'd to guarantee
+/// durability even across OS crashes and power failures.
 pub struct Wal {
     /// Path to the WAL directory
     dir: PathBuf,
@@ -248,11 +249,24 @@ pub struct Wal {
 
     /// WAL file generation number
     generation: AtomicU64,
+
+    /// Whether to fsync after every write for crash-safe durability.
+    /// When `true`: data survives OS crash/power failure (slower, RECOMMENDED for production).
+    /// When `false`: data survives process crash only; OS crash may lose recent writes (faster).
+    sync_writes: bool,
 }
 
 impl Wal {
-    /// Open or create a WAL in the specified directory.
+    /// Open or create a WAL in the specified directory with fsync enabled (production-safe default).
     pub fn open(dir: impl AsRef<Path>) -> FaizResult<Self> {
+        Self::open_with_sync(dir, true)
+    }
+
+    /// Open or create a WAL with explicit sync_writes control.
+    ///
+    /// - `sync_writes = true`: Every write is fsync'd to disk — survives OS crash & power failure.
+    /// - `sync_writes = false`: Writes are buffered in OS page cache — survives process crash only.
+    pub fn open_with_sync(dir: impl AsRef<Path>, sync_writes: bool) -> FaizResult<Self> {
         let dir = dir.as_ref().to_path_buf();
         fs::create_dir_all(&dir).map_err(|e| FaizError::io(&dir, e))?;
 
@@ -273,6 +287,7 @@ impl Wal {
             sequence: AtomicU64::new(sequence),
             file_size: AtomicU64::new(file_size),
             generation: AtomicU64::new(generation),
+            sync_writes,
         })
     }
 
@@ -329,10 +344,19 @@ impl Wal {
             .write_all(&bytes)
             .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
 
-        // Flush to ensure durability
+        // Flush BufWriter to OS page cache
         writer
             .flush()
             .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+
+        // fsync to physical disk — guarantees durability across OS crash & power failure.
+        // Without this, data in the OS page cache can be lost if the machine loses power.
+        if self.sync_writes {
+            writer
+                .get_ref()
+                .sync_data()
+                .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+        }
 
         self.file_size.fetch_add(record_size, Ordering::Relaxed);
 
@@ -399,6 +423,14 @@ impl Wal {
         writer
             .flush()
             .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+
+        // fsync batch to physical disk for crash-safe durability
+        if self.sync_writes {
+            writer
+                .get_ref()
+                .sync_data()
+                .map_err(|e| FaizError::io(self.current_path.lock().clone(), e))?;
+        }
 
         self.file_size.fetch_add(batch_size, Ordering::Relaxed);
 

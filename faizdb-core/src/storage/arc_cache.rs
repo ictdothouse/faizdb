@@ -209,6 +209,93 @@ impl<K: Clone + Eq + Hash, V: Clone> ArcCache<K, V> {
 /// Thread-safe shared ARC cache
 pub type SharedArcCache<K, V> = Arc<Mutex<ArcCache<K, V>>>;
 
+/// Sharded Adaptive Replacement Cache for high-concurrency workloads (M1).
+///
+/// Divides total capacity across multiple shards (default: 16 shards),
+/// each protected by an independent Mutex to eliminate lock contention
+/// during high-throughput concurrent point lookups.
+pub struct ShardedArcCache<K, V> {
+    shards: Vec<Mutex<ArcCache<K, V>>>,
+    num_shards: usize,
+}
+
+impl<K: Clone + Eq + Hash, V: Clone> ShardedArcCache<K, V> {
+    /// Create a new sharded ARC cache with given total capacity (default 16 shards)
+    pub fn new(total_capacity: usize) -> Self {
+        Self::with_shards(total_capacity, 16)
+    }
+
+    /// Create a new sharded ARC cache with custom shard count
+    pub fn with_shards(total_capacity: usize, num_shards: usize) -> Self {
+        let num_shards = num_shards.max(1);
+        let per_shard = (total_capacity / num_shards).max(1);
+        let mut shards = Vec::with_capacity(num_shards);
+        for _ in 0..num_shards {
+            shards.push(Mutex::new(ArcCache::new(per_shard)));
+        }
+        Self { shards, num_shards }
+    }
+
+    fn shard_idx(&self, key: &K) -> usize {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        (hasher.finish() as usize) % self.num_shards
+    }
+
+    /// Retrieve an entry from the appropriate shard
+    pub fn get(&self, key: &K) -> Option<V> {
+        let idx = self.shard_idx(key);
+        self.shards[idx].lock().get(key)
+    }
+
+    /// Insert or update an entry in the appropriate shard
+    pub fn put(&self, key: K, value: V) {
+        let idx = self.shard_idx(&key);
+        self.shards[idx].lock().put(key, value);
+    }
+
+    /// Remove an entry from the appropriate shard
+    pub fn remove(&self, key: &K) -> Option<V> {
+        let idx = self.shard_idx(key);
+        let mut shard = self.shards[idx].lock();
+        if let Some(pos) = shard.t1.iter().position(|k| k == key) {
+            shard.t1.remove(pos);
+        }
+        if let Some(pos) = shard.t2.iter().position(|k| k == key) {
+            shard.t2.remove(pos);
+        }
+        shard.store.remove(key)
+    }
+
+    /// Evict all items across all shards
+    pub fn clear(&self) {
+        for shard in &self.shards {
+            let mut s = shard.lock();
+            s.store.clear();
+            s.t1.clear();
+            s.t2.clear();
+            s.b1.clear();
+            s.b2.clear();
+        }
+    }
+
+    /// Aggregate statistics across all shards
+    pub fn stats(&self) -> ArcCacheStats {
+        let mut total = ArcCacheStats::default();
+        for shard in &self.shards {
+            let s = shard.lock().stats();
+            total.hits += s.hits;
+            total.misses += s.misses;
+            total.ghost_hits_b1 += s.ghost_hits_b1;
+            total.ghost_hits_b2 += s.ghost_hits_b2;
+            total.evictions += s.evictions;
+        }
+        total
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,5 +332,23 @@ mod tests {
             cache.target_p() > 0,
             "p should dynamically adapt upwards on B1 hit"
         );
+    }
+
+    #[test]
+    fn test_sharded_arc_cache() {
+        let cache = ShardedArcCache::with_shards(64, 4);
+
+        cache.put("user:1", 100);
+        cache.put("user:2", 200);
+        cache.put("user:3", 300);
+
+        assert_eq!(cache.get(&"user:1"), Some(100));
+        assert_eq!(cache.get(&"user:2"), Some(200));
+        assert_eq!(cache.get(&"user:3"), Some(300));
+        assert_eq!(cache.get(&"user:999"), None);
+
+        let stats = cache.stats();
+        assert_eq!(stats.hits, 3);
+        assert_eq!(stats.misses, 1);
     }
 }

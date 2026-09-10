@@ -110,7 +110,12 @@ pub fn merge_sstables(
     }
 
     // Streaming merge: write directly as we pop from the heap
-    let mut writer = SSTableWriter::new(output_path, 0)?;
+    let compression = if sstables.iter().any(|s| s.compression() == crate::storage::sstable::Compression::Lz4) {
+        crate::storage::sstable::Compression::Lz4
+    } else {
+        crate::storage::sstable::Compression::None
+    };
+    let mut writer = SSTableWriter::with_compression(output_path, 0, compression)?;
     let mut last_written_key: Option<Vec<u8>> = None;
 
     while let Some(Reverse(HeapEntry {

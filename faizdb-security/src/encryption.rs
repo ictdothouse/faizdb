@@ -6,6 +6,16 @@ use ring::aead::{
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 
+/// Helper type for ring's HKDF output key material length
+struct HkdfLen(usize);
+
+impl ring::hkdf::KeyType for HkdfLen {
+    fn len(&self) -> usize {
+        self.0
+    }
+}
+
+
 /// Custom single-nonce sequence for AEAD operations
 struct OneNonce(Option<[u8; NONCE_LEN]>);
 
@@ -38,11 +48,34 @@ impl Cipher {
         }
     }
 
-    /// Create a cipher by deriving a 256-bit key from a user passphrase using SHA-256
+    /// Create a cipher by deriving a 256-bit key from a user passphrase using **HKDF-SHA256**.
+    ///
+    /// Uses HKDF (HMAC-based Extract-and-Expand Key Derivation Function) which is the
+    /// standard way to derive strong cryptographic keys from passphrases. Unlike raw SHA-256,
+    /// HKDF provides proper key separation via the info label and resistance to related-key
+    /// attacks via the salt.
+    ///
+    /// For interactive password-to-key scenarios, consider using Argon2id instead (which is
+    /// already used in the auth module for password hashing).
     pub fn from_passphrase(passphrase: &str) -> Self {
-        let hash = ring::digest::digest(&ring::digest::SHA256, passphrase.as_bytes());
+        // HKDF-Extract: derive a pseudorandom key (PRK) from the passphrase with a salt.
+        // Using a fixed application-specific salt ensures consistent key derivation.
+        let salt = ring::hkdf::Salt::new(
+            ring::hkdf::HKDF_SHA256,
+            b"FaizDB-Encryption-Key-v1", // Application-specific fixed salt
+        );
+        let prk = salt.extract(passphrase.as_bytes());
+
+        // HKDF-Expand: derive the final 256-bit encryption key with context info.
+        let info = [b"faizdb-aes256gcm-data-at-rest".as_ref()];
+        let okm = prk
+            .expand(&info, HkdfLen(32))
+            .expect("HKDF-SHA256 expand should not fail for 32-byte output");
+
         let mut key = [0u8; 32];
-        key.copy_from_slice(hash.as_ref());
+        okm.fill(&mut key)
+            .expect("HKDF fill should not fail for matching length");
+
         Self::new(key)
     }
 

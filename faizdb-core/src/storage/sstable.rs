@@ -190,11 +190,21 @@ pub struct SSTableWriter {
     sparse_index: BTreeMap<Vec<u8>, u64>, // key -> offset in data block
     current_offset: u64,
     entries_since_index: usize,
+    compression: Compression,
 }
 
 impl SSTableWriter {
-    /// Create a new SSTable writer
+    /// Create a new SSTable writer with default compression (None)
     pub fn new(path: impl AsRef<Path>, expected_entries: usize) -> FaizResult<Self> {
+        Self::with_compression(path, expected_entries, Compression::None)
+    }
+
+    /// Create a new SSTable writer with explicit compression configuration
+    pub fn with_compression(
+        path: impl AsRef<Path>,
+        expected_entries: usize,
+        compression: Compression,
+    ) -> FaizResult<Self> {
         let path = path.as_ref().to_path_buf();
 
         // Create parent directories if needed
@@ -220,6 +230,7 @@ impl SSTableWriter {
             sparse_index: BTreeMap::new(),
             current_offset: HEADER_SIZE as u64,
             entries_since_index: 0,
+            compression,
         })
     }
 
@@ -239,14 +250,22 @@ impl SSTableWriter {
 
         // Write entry
         let is_tombstone = entry.is_tombstone();
-        let value = entry.as_value().unwrap_or(&[]);
+        let raw_value = entry.as_value().unwrap_or(&[]);
+
+        let compressed_buf;
+        let value_bytes: &[u8] = if !is_tombstone && self.compression == Compression::Lz4 {
+            compressed_buf = lz4_flex::compress_prepend_size(raw_value);
+            &compressed_buf
+        } else {
+            raw_value
+        };
 
         let mut entry_buf = Vec::new();
         entry_buf.extend_from_slice(&(key.len() as u32).to_le_bytes());
-        entry_buf.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        entry_buf.extend_from_slice(&(value_bytes.len() as u32).to_le_bytes());
         entry_buf.push(if is_tombstone { 1 } else { 0 });
         entry_buf.extend_from_slice(key);
-        entry_buf.extend_from_slice(value);
+        entry_buf.extend_from_slice(value_bytes);
 
         self.writer
             .write_all(&entry_buf)
@@ -305,7 +324,7 @@ impl SSTableWriter {
         header.extend_from_slice(&SSTABLE_VERSION.to_le_bytes());
         header.extend_from_slice(&self.entry_count.to_le_bytes());
         header.extend_from_slice(&self.data_size.to_le_bytes());
-        header.push(Compression::None as u8);
+        header.push(self.compression as u8);
         header.extend(vec![0u8; HEADER_SIZE - header.len()]); // padding
 
         file.write_all(&header)
@@ -347,6 +366,7 @@ pub struct SSTableReader {
     path: PathBuf,
     entry_count: u64,
     data_size: u64,
+    compression: Compression,
     bloom: BloomFilter,
     sparse_index: BTreeMap<Vec<u8>, u64>,
     index_offset: u64,
@@ -388,6 +408,10 @@ impl SSTableReader {
 
         let entry_count = u64::from_le_bytes(mmap[12..20].try_into().unwrap());
         let data_size = u64::from_le_bytes(mmap[20..28].try_into().unwrap());
+        let compression = match mmap.get(28).copied() {
+            Some(1) => Compression::Lz4,
+            _ => Compression::None,
+        };
 
         // Read and verify footer directly from memory map
         let footer_start = (file_size - FOOTER_SIZE as u64) as usize;
@@ -420,6 +444,7 @@ impl SSTableReader {
             path,
             entry_count,
             data_size,
+            compression,
             bloom,
             sparse_index,
             index_offset,
@@ -456,7 +481,15 @@ impl SSTableReader {
 
                     if entry_key == key {
                         return Ok(Some(match entry_val {
-                            Some(val) => MemEntry::Value(val.to_vec()),
+                            Some(val) => {
+                                if self.compression == Compression::Lz4 {
+                                    let decompressed = lz4_flex::decompress_size_prepended(val)
+                                        .map_err(|e| FaizError::SsTableCorrupted(format!("LZ4 decompression error: {e}")))?;
+                                    MemEntry::Value(decompressed)
+                                } else {
+                                    MemEntry::Value(val.to_vec())
+                                }
+                            }
                             None => MemEntry::Tombstone,
                         }));
                     }
@@ -480,6 +513,12 @@ impl SSTableReader {
     /// - `Ok(Some(None))`: Key found as tombstone (deleted)
     /// - `Ok(None)`: Key does not exist
     pub fn get_ref(&self, key: &[u8]) -> FaizResult<Option<Option<&[u8]>>> {
+        if self.compression == Compression::Lz4 {
+            return Err(FaizError::SsTableCorrupted(
+                "Cannot borrow zero-copy slice from LZ4-compressed SSTable; use get() instead".into(),
+            ));
+        }
+
         if !self.bloom.may_contain(key) {
             return Ok(None);
         }
@@ -508,6 +547,59 @@ impl SSTableReader {
         Ok(None)
     }
 
+    /// Prefix scan over the SSTable using the sparse index for fast seek.
+    ///
+    /// Instead of scanning the entire SSTable:
+    /// 1. Uses `find_start_offset(prefix)` to jump directly to the sparse index block
+    ///    that could contain the prefix.
+    /// 2. Iterates forward reading entries.
+    /// 3. Stops immediately once an entry key is encountered that is strictly greater
+    ///    than the prefix and does not start with the prefix (since SSTable is sorted).
+    pub fn prefix_scan(&self, prefix: &[u8]) -> FaizResult<Vec<(Vec<u8>, MemEntry)>> {
+        let start_offset = self.find_start_offset(prefix) as usize;
+        let end_offset = self.index_offset as usize;
+
+        let mut results = Vec::new();
+        let mut current_offset = start_offset;
+
+        while current_offset < end_offset {
+            match Self::read_entry_ref(&self.mmap, current_offset) {
+                Ok((entry_key, entry_val, entry_size)) => {
+                    current_offset += entry_size;
+
+                    if entry_key.starts_with(prefix) {
+                        let entry = match entry_val {
+                            Some(val) => {
+                                if self.compression == Compression::Lz4 {
+                                    let decompressed = lz4_flex::decompress_size_prepended(val)
+                                        .map_err(|e| FaizError::SsTableCorrupted(format!("LZ4 decompression error: {e}")))?;
+                                    MemEntry::Value(decompressed)
+                                } else {
+                                    MemEntry::Value(val.to_vec())
+                                }
+                            }
+                            None => MemEntry::Tombstone,
+                        };
+                        results.push((entry_key.to_vec(), entry));
+                    } else if entry_key > prefix {
+                        // Because SSTable keys are strictly sorted in ascending order:
+                        // If entry_key > prefix AND !entry_key.starts_with(prefix),
+                        // no subsequent keys can ever start with prefix. Stop early!
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Get the compression type of this SSTable
+    pub fn compression(&self) -> Compression {
+        self.compression
+    }
+
     /// Direct access to the underlying memory-mapped file
     pub fn mmap(&self) -> &memmap2::Mmap {
         &self.mmap
@@ -520,6 +612,7 @@ impl SSTableReader {
             offset: HEADER_SIZE,
             end_offset: self.index_offset as usize,
             remaining: self.entry_count,
+            compression: self.compression,
         })
     }
 
@@ -687,6 +780,7 @@ pub struct SSTableIterator {
     offset: usize,
     end_offset: usize,
     remaining: u64,
+    pub(crate) compression: Compression,
 }
 
 impl Iterator for SSTableIterator {
@@ -702,7 +796,21 @@ impl Iterator for SSTableIterator {
                 self.offset += bytes_read;
                 self.remaining -= 1;
                 let entry = match val {
-                    Some(v) => MemEntry::Value(v.to_vec()),
+                    Some(v) => {
+                        if self.compression == Compression::Lz4 {
+                            match lz4_flex::decompress_size_prepended(v) {
+                                Ok(d) => MemEntry::Value(d),
+                                Err(e) => {
+                                    self.remaining = 0;
+                                    return Some(Err(FaizError::SsTableCorrupted(format!(
+                                        "LZ4 decompression error: {e}"
+                                    ))));
+                                }
+                            }
+                        } else {
+                            MemEntry::Value(v.to_vec())
+                        }
+                    }
                     None => MemEntry::Tombstone,
                 };
                 Some(Ok((key.to_vec(), entry)))
@@ -840,4 +948,88 @@ mod tests {
             "Deep level SSTables must have larger bloom filter size"
         );
     }
+
+    #[test]
+    fn test_sstable_lz4_compression_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lz4_test.sst");
+
+        // Write with LZ4 compression
+        {
+            let mut writer =
+                SSTableWriter::with_compression(&path, 5, Compression::Lz4).unwrap();
+            writer
+                .write_entry(b"user:001", &MemEntry::Value(b"highly_repetitive_json_payload_highly_repetitive_json_payload".to_vec()))
+                .unwrap();
+            writer
+                .write_entry(b"user:002", &MemEntry::Tombstone)
+                .unwrap();
+            writer
+                .write_entry(b"user:003", &MemEntry::Value(b"another_compressible_string_0123456789_0123456789".to_vec()))
+                .unwrap();
+            writer.finish().unwrap();
+        }
+
+        let reader = SSTableReader::open(&path).unwrap();
+        assert_eq!(reader.compression(), Compression::Lz4);
+        assert_eq!(reader.entry_count(), 3);
+
+        // Verify get() decompresses correctly
+        let e1 = reader.get(b"user:001").unwrap().unwrap();
+        assert_eq!(
+            e1.as_value().unwrap(),
+            b"highly_repetitive_json_payload_highly_repetitive_json_payload"
+        );
+
+        let e2 = reader.get(b"user:002").unwrap().unwrap();
+        assert!(e2.is_tombstone());
+
+        let e3 = reader.get(b"user:003").unwrap().unwrap();
+        assert_eq!(
+            e3.as_value().unwrap(),
+            b"another_compressible_string_0123456789_0123456789"
+        );
+
+        // Verify iter() decompresses correctly
+        let items: Vec<_> = reader.iter().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0].0, b"user:001");
+        assert_eq!(items[0].1.as_value().unwrap(), b"highly_repetitive_json_payload_highly_repetitive_json_payload");
+    }
+
+    #[test]
+    fn test_sstable_prefix_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("prefix_scan.sst");
+
+        {
+            let mut writer = SSTableWriter::new(&path, 6).unwrap();
+            writer.write_entry(b"account:001", &MemEntry::Value(b"acc1".to_vec())).unwrap();
+            writer.write_entry(b"account:002", &MemEntry::Value(b"acc2".to_vec())).unwrap();
+            writer.write_entry(b"order:100", &MemEntry::Value(b"ord100".to_vec())).unwrap();
+            writer.write_entry(b"order:101", &MemEntry::Value(b"ord101".to_vec())).unwrap();
+            writer.write_entry(b"user:001", &MemEntry::Value(b"usr1".to_vec())).unwrap();
+            writer.write_entry(b"user:002", &MemEntry::Value(b"usr2".to_vec())).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let reader = SSTableReader::open(&path).unwrap();
+
+        // Scan only "order:" prefix
+        let orders = reader.prefix_scan(b"order:").unwrap();
+        assert_eq!(orders.len(), 2);
+        assert_eq!(orders[0].0, b"order:100");
+        assert_eq!(orders[1].0, b"order:101");
+
+        // Scan only "account:" prefix
+        let accounts = reader.prefix_scan(b"account:").unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].0, b"account:001");
+        assert_eq!(accounts[1].0, b"account:002");
+
+        // Scan non-existent prefix
+        let empty = reader.prefix_scan(b"product:").unwrap();
+        assert!(empty.is_empty());
+    }
 }
+

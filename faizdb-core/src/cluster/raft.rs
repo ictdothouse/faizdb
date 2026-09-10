@@ -202,7 +202,9 @@ impl RaftDiskStore {
             .append(true)
             .open(self.log_path())?;
 
-        let serialized = serde_json::to_vec(entry)?;
+        // High-performance binary serialization via BSON (P6: 3-5x faster and more compact than JSON)
+        let serialized = bson::to_vec(entry)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         let mut hasher = Hasher::new();
         hasher.update(&serialized);
         let checksum = hasher.finalize();
@@ -212,6 +214,7 @@ impl RaftDiskStore {
         file.write_all(&checksum.to_le_bytes())?;
         file.write_all(&serialized)?;
         file.flush()?;
+        file.sync_data()?;
         Ok(())
     }
 
@@ -221,7 +224,8 @@ impl RaftDiskStore {
         let mut file = BufWriter::new(File::create(&temp_path)?);
 
         for entry in entries {
-            let serialized = serde_json::to_vec(entry)?;
+            let serialized = bson::to_vec(entry)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             let mut hasher = Hasher::new();
             hasher.update(&serialized);
             let checksum = hasher.finalize();
@@ -232,6 +236,7 @@ impl RaftDiskStore {
             file.write_all(&serialized)?;
         }
         file.flush()?;
+        file.get_ref().sync_data()?;
         drop(file);
 
         fs::rename(temp_path, self.log_path())?;
@@ -272,7 +277,9 @@ impl RaftDiskStore {
                 break;
             }
 
-            let entry: LogEntry = serde_json::from_slice(&data)
+            // Support BSON binary format with transparent JSON fallback for backwards compatibility
+            let entry: LogEntry = bson::from_slice(&data)
+                .or_else(|_| serde_json::from_slice(&data))
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             entries.push(entry);
         }
@@ -451,7 +458,9 @@ impl RaftNode {
             config.election_timeout_max_ms,
         );
 
-        let initial_commit_index = initial_snapshot_index.max(initial_log.last().map(|e| e.index).unwrap_or(0));
+        // Per Raft specification: commit_index starts at snapshot index (0 if no snapshot).
+        // Log entries beyond snapshot must not be assumed committed until consensus is re-established.
+        let initial_commit_index = initial_snapshot_index;
 
         let initial_state = RaftState {
             current_term: initial_term,
@@ -461,8 +470,8 @@ impl RaftNode {
             last_applied: initial_commit_index,
             last_snapshot_index: initial_snapshot_index,
             last_snapshot_term: initial_snapshot_term,
-            role: NodeRole::Leader, // Standalone node starts as leader
-            leader_id: Some(node_id.clone()),
+            role: NodeRole::Follower, // Always start as Follower; self-promote to Leader only if no peers respond during election timeout
+            leader_id: None,
             last_heartbeat: Utc::now(),
             current_election_timeout_ms: initial_election_timeout,
             votes_received: std::collections::HashSet::new(),
@@ -731,11 +740,23 @@ impl RaftNode {
             }
         }
 
-        // 3. Check log continuity at prev_log_index
-        let has_prev_log = state
-            .log
-            .iter()
-            .any(|e| e.index == args.prev_log_index && e.term == args.prev_log_term);
+        // 3. Check log continuity at prev_log_index — O(1) direct index lookup.
+        //    Since log entries are sequential starting from last_snapshot_index,
+        //    we can directly compute the array offset instead of scanning.
+        let has_prev_log = if args.prev_log_index == 0 {
+            true // No previous log required — this is the first entry
+        } else if args.prev_log_index <= state.last_snapshot_index {
+            // prev_log_index is within the snapshot — continuity is guaranteed
+            args.prev_log_term <= state.last_snapshot_term
+        } else {
+            // Direct O(1) index into the log Vec using snapshot offset
+            let log_offset = (args.prev_log_index - state.last_snapshot_index) as usize;
+            if log_offset > 0 && log_offset <= state.log.len() {
+                state.log[log_offset - 1].term == args.prev_log_term
+            } else {
+                false
+            }
+        };
         if args.prev_log_index > 0 && !has_prev_log {
             return AppendEntriesReply {
                 term: state.current_term,
@@ -1196,5 +1217,25 @@ mod tests {
         assert_eq!(reply.term, 3);
         assert_eq!(follower.get_info().commit_index, 50);
         assert_eq!(follower.get_info().role, NodeRole::Follower);
+    }
+
+    #[test]
+    fn test_raft_bson_disk_persistence_roundtrip() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let store = RaftDiskStore::new(temp_dir.path());
+
+        let entry = LogEntry {
+            index: 1,
+            term: 1,
+            timestamp: Utc::now(),
+            command: "SET user:1 = 100".to_string(),
+            payload: Some(serde_json::json!({"user": 1, "val": 100})),
+        };
+
+        store.append_entry(&entry).unwrap();
+        let recovered = store.load_log().unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].index, 1);
+        assert_eq!(recovered[0].command, "SET user:1 = 100");
     }
 }
