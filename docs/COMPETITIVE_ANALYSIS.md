@@ -139,7 +139,7 @@ graph TD
     Q1 -- "Yes" --> Cockroach["Choose CockroachDB / PostgreSQL"]
     Q1 -- "No" --> Q2{"Need JSON Docs + AI Vector + GraphRAG?"}
     
-    Q2 -- "Yes" --> Q3{"Want drop-in drivers (MySQL/PG/Mongo/gRPC)?"}
+    Q2 -- "Yes" --> Q3{"Want native wire drivers (MySQL/PG/Mongo/gRPC)?"}
     Q3 -- "Yes" --> FaizDBChoice["🚀 CHOOSE FAIZDB<br/>(5-Way Gateways, Safe Rust LSM, Active-Active CRDTs)"]
     Q3 -- "No" --> Q4{"Willing to learn SurrealQL / AQL?"}
     Q4 -- "Yes" --> Surreal["Choose SurrealDB / ArangoDB"]
@@ -156,7 +156,7 @@ graph TD
 | Project Scenario | Recommended Database | Alternative | Why? |
 | :--- | :---: | :---: | :--- |
 | **Modern AI & GraphRAG Applications** | 🚀 **FaizDB** | SurrealDB | Combines 4096d HNSW Vector, Knowledge Graph, and JSON Documents in a single Rust binary without managing 3 separate databases. |
-| **Zero-Friction Migration from MySQL/Mongo/PG** | 🚀 **FaizDB** | FerretDB | Drop-in wire protocol ports (3306, 27017 & 5432) backed by a native high-speed Rust LSM-Tree engine. Works out-of-the-box with Laravel Eloquent, PHP PDO, and standard drivers. |
+| **Zero-Friction Migration from MySQL/Mongo/PG** | 🚀 **FaizDB** | FerretDB | Native wire protocol ports (3306, 27017 & 5432) backed by a native high-speed Rust LSM-Tree engine. Works out-of-the-box with Laravel Eloquent, PHP PDO, and standard drivers. |
 | **Ultra-High-Speed Microservices** | 🚀 **FaizDB** | Redis / gRPC | Sub-millisecond binary Protocol Buffers (Port 50051) and real-time Change Streams. |
 | **Global Multi-Region Datacenter Mesh** | 🚀 **FaizDB** | CockroachDB | Active-Active CRDTs provide sub-millisecond local writes with zero distributed lock penalties. |
 | **Traditional Core Banking Systems** | **CockroachDB** | PostgreSQL | Strict multi-table relational schema integrity with distributed serializable transactions. |

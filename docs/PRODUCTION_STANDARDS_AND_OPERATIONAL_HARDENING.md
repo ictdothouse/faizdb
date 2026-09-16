@@ -211,7 +211,7 @@ FaizDB is engineered around concrete, real-world systems principles:
   - `pg_catalog.pg_namespace`
   - `pg_catalog.pg_type`
   - `information_schema.columns`
-  Enables drop-in client tool compatibility with zero manual catalog schema definitions.
+  Enables native wire client tool compatibility with zero manual catalog schema definitions.
 
 ---
 

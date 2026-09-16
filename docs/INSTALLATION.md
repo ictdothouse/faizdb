@@ -222,9 +222,9 @@ cargo build --target aarch64-apple-ios --release -p faizdb-core
 
 | Port | Protocol | Usage |
 |:---:|:---:|:---|
-| **3306** | **🐬 MySQL / MariaDB Wire Protocol** | Drop-in connection for MySQL CLI, PHP `mysqli`/PDO, Laravel Eloquent |
-| **5432 / 5433** | **🐘 PostgreSQL Wire Protocol** | Drop-in connection for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs |
-| **27017** | **🍃 MongoDB Wire Protocol** | Drop-in connection for PyMongo, Mongoose, Prisma, PHP |
+| **3306** | **🐬 MySQL / MariaDB Wire Protocol** | Native wire connection for MySQL CLI, PHP `mysqli`/PDO, Laravel Eloquent |
+| **5432 / 5433** | **🐘 PostgreSQL Wire Protocol** | Native wire connection for `psql`, DBeaver, TablePlus, Grafana, SQL ORMs |
+| **27017** | **🍃 MongoDB Wire Protocol** | Native wire connection for PyMongo, Mongoose, Prisma, PHP |
 | **50051** | **⚡ gRPC & Protocol Buffers** | Ultra low-latency microservices and high-throughput Vector ANN streaming |
 | **27018** | **🌐 HTTP REST & WebSockets** | FaizQL queries, Change Streams, Health check, Backups, Geo-Replication |
 | **27020** | **🎛️ HTTP (FaizDB Studio)** | Visual Management Dashboard & Query Explorer |

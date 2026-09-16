@@ -747,6 +747,9 @@ let kafka_json = cdc_event.to_kafka_message()?;
 
 ## 📚 Comprehensive Documentation
 
+* [🛡️ Intellectual Property, Prior Art & Anti-Poaching Safeguards](docs/INTELLECTUAL_PROPERTY_AND_ANTI_POACHING.md) — Author & inventor declaration, cryptographic prior art hashes, international patent boundary disclosures, trademark protection, and cloud hyperscaler managed-DBaaS restrictions.
+* [📊 Wire Protocol Compatibility Matrix](docs/COMPATIBILITY_MATRIX.md) — Transparent, empirical compatibility matrix across PostgreSQL v3.0, MongoDB BSON OP_MSG, and MySQL v10 wire protocols, verified client ORMs and driver ecosystems.
+* [🎓 Interactive Tutorial & Real-World Use Cases](landing/tutorial.html) — Step-by-step interactive visual tutorial demonstrating ACID MVCC flash ticketing, HNSW AI vector search, GraphRAG multi-hop, and 128Hz robotics edge streaming.
 * [🛡️ Enterprise Production Standards & Operational Hardening Reference](docs/PRODUCTION_STANDARDS_AND_OPERATIONAL_HARDENING.md) — Comprehensive technical reference for connection governors, WAL group commits, Kubernetes native health probes, autonomous snapshot daemon, open data portability, and wire protocol hardening `[LATEST - ENTERPRISE 2026]`.
 * [🏛️ Latest System Capabilities, Architecture & Verification Reference](docs/LATEST_SYSTEM_VERIFICATION_AND_BENCHMARKS.md) — Comprehensive technical reference, 4-gateway wire protocol throughput & latency benchmarks, query capabilities, and workspace test certification.
 * [🏆 Enterprise Standards & Architectural Verification Specification](docs/ENTERPRISE_STANDARDS.md) — 100% compliant verification across all enterprise durability, consensus, and performance criteria.
