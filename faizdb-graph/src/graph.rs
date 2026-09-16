@@ -107,7 +107,6 @@ pub struct GraphRagContext {
     pub formatted_markdown: String,
 }
 
-
 /// Graph Store with adjacency lists
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GraphStore {
@@ -417,7 +416,6 @@ impl GraphStore {
                     md.push_str(&format!("  - Properties: `{json_str}`\n"));
                 }
             }
-
         }
 
         md.push_str("\n## Relationships (Edges)\n");
@@ -488,7 +486,10 @@ impl GraphStore {
     }
 
     /// Degree centrality for a vertex
-    pub fn degree_centrality(&self, vertex_id: &str) -> Option<crate::algorithms::DegreeCentrality> {
+    pub fn degree_centrality(
+        &self,
+        vertex_id: &str,
+    ) -> Option<crate::algorithms::DegreeCentrality> {
         crate::algorithms::degree_centrality(self, vertex_id)
     }
 
@@ -502,7 +503,6 @@ impl GraphStore {
         crate::persistence::load_snapshot(path)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -603,9 +603,13 @@ mod tests {
         assert_eq!(ctx.vertices[0].id, "doc_1");
         assert_eq!(ctx.vertices[1].id, "doc_2");
         assert_eq!(ctx.edges.len(), 1);
-        assert!(ctx.formatted_markdown.contains("# Knowledge Graph Context for: `doc_1`"));
+        assert!(ctx
+            .formatted_markdown
+            .contains("# Knowledge Graph Context for: `doc_1`"));
         assert!(ctx.formatted_markdown.contains("- **Document** (`doc_1`)"));
-        assert!(ctx.formatted_markdown.contains("- (`doc_1`) -[:EXPLAINS]-> (`doc_2`)"));
+        assert!(ctx
+            .formatted_markdown
+            .contains("- (`doc_1`) -[:EXPLAINS]-> (`doc_2`)"));
     }
 
     #[test]
@@ -702,8 +706,11 @@ mod tests {
         graph.add_vertex(Vertex::new("node_beta", "Test"));
         graph.add_edge(Edge::new("node_alpha", "node_beta", "CONNECTED"));
 
-        let temp_file = std::env::temp_dir().join(format!("faizdb_graph_test_{}.bin", uuid::Uuid::new_v4()));
-        graph.save_to_file(&temp_file).expect("Snapshot save must succeed");
+        let temp_file =
+            std::env::temp_dir().join(format!("faizdb_graph_test_{}.bin", uuid::Uuid::new_v4()));
+        graph
+            .save_to_file(&temp_file)
+            .expect("Snapshot save must succeed");
 
         let restored = GraphStore::load_from_file(&temp_file).expect("Snapshot load must succeed");
         assert_eq!(restored.vertex_count(), 2);
@@ -713,4 +720,3 @@ mod tests {
         let _ = std::fs::remove_file(temp_file);
     }
 }
-

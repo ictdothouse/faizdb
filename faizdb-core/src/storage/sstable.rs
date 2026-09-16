@@ -420,7 +420,9 @@ impl SSTableReader {
         let index_offset = u64::from_le_bytes(footer[0..8].try_into().unwrap());
         let bloom_offset = u64::from_le_bytes(footer[8..16].try_into().unwrap());
 
-        if (bloom_offset as usize) > footer_start || (index_offset as usize) > (bloom_offset as usize) {
+        if (bloom_offset as usize) > footer_start
+            || (index_offset as usize) > (bloom_offset as usize)
+        {
             return Err(FaizError::SsTableCorrupted(
                 "Corrupted block offsets in footer".into(),
             ));
@@ -484,7 +486,11 @@ impl SSTableReader {
                             Some(val) => {
                                 if self.compression == Compression::Lz4 {
                                     let decompressed = lz4_flex::decompress_size_prepended(val)
-                                        .map_err(|e| FaizError::SsTableCorrupted(format!("LZ4 decompression error: {e}")))?;
+                                        .map_err(|e| {
+                                            FaizError::SsTableCorrupted(format!(
+                                                "LZ4 decompression error: {e}"
+                                            ))
+                                        })?;
                                     MemEntry::Value(decompressed)
                                 } else {
                                     MemEntry::Value(val.to_vec())
@@ -515,7 +521,8 @@ impl SSTableReader {
     pub fn get_ref(&self, key: &[u8]) -> FaizResult<Option<Option<&[u8]>>> {
         if self.compression == Compression::Lz4 {
             return Err(FaizError::SsTableCorrupted(
-                "Cannot borrow zero-copy slice from LZ4-compressed SSTable; use get() instead".into(),
+                "Cannot borrow zero-copy slice from LZ4-compressed SSTable; use get() instead"
+                    .into(),
             ));
         }
 
@@ -572,7 +579,11 @@ impl SSTableReader {
                             Some(val) => {
                                 if self.compression == Compression::Lz4 {
                                     let decompressed = lz4_flex::decompress_size_prepended(val)
-                                        .map_err(|e| FaizError::SsTableCorrupted(format!("LZ4 decompression error: {e}")))?;
+                                        .map_err(|e| {
+                                            FaizError::SsTableCorrupted(format!(
+                                                "LZ4 decompression error: {e}"
+                                            ))
+                                        })?;
                                     MemEntry::Value(decompressed)
                                 } else {
                                     MemEntry::Value(val.to_vec())
@@ -660,17 +671,13 @@ impl SSTableReader {
 
     /// Read an entry as borrowed slices directly from memory map slice (Zero-Copy)
     #[allow(clippy::type_complexity)]
-    pub fn read_entry_ref(
-        data: &[u8],
-        offset: usize,
-    ) -> FaizResult<(&[u8], Option<&[u8]>, usize)> {
+    pub fn read_entry_ref(data: &[u8], offset: usize) -> FaizResult<(&[u8], Option<&[u8]>, usize)> {
         if offset + 9 > data.len() {
             return Err(FaizError::SsTableCorrupted("Entry truncated".into()));
         }
 
         let key_len = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
-        let val_len =
-            u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let val_len = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().unwrap()) as usize;
         let is_tombstone = data[offset + 8] == 1;
 
         let total_entry_len = 9usize
@@ -678,7 +685,10 @@ impl SSTableReader {
             .and_then(|l| l.checked_add(val_len))
             .ok_or_else(|| FaizError::SsTableCorrupted("Entry length overflow".into()))?;
 
-        if offset.checked_add(total_entry_len).is_none_or(|end| end > data.len()) {
+        if offset
+            .checked_add(total_entry_len)
+            .is_none_or(|end| end > data.len())
+        {
             return Err(FaizError::SsTableCorrupted("Entry data truncated".into()));
         }
 
@@ -956,16 +966,23 @@ mod tests {
 
         // Write with LZ4 compression
         {
-            let mut writer =
-                SSTableWriter::with_compression(&path, 5, Compression::Lz4).unwrap();
+            let mut writer = SSTableWriter::with_compression(&path, 5, Compression::Lz4).unwrap();
             writer
-                .write_entry(b"user:001", &MemEntry::Value(b"highly_repetitive_json_payload_highly_repetitive_json_payload".to_vec()))
+                .write_entry(
+                    b"user:001",
+                    &MemEntry::Value(
+                        b"highly_repetitive_json_payload_highly_repetitive_json_payload".to_vec(),
+                    ),
+                )
                 .unwrap();
             writer
                 .write_entry(b"user:002", &MemEntry::Tombstone)
                 .unwrap();
             writer
-                .write_entry(b"user:003", &MemEntry::Value(b"another_compressible_string_0123456789_0123456789".to_vec()))
+                .write_entry(
+                    b"user:003",
+                    &MemEntry::Value(b"another_compressible_string_0123456789_0123456789".to_vec()),
+                )
                 .unwrap();
             writer.finish().unwrap();
         }
@@ -991,10 +1008,17 @@ mod tests {
         );
 
         // Verify iter() decompresses correctly
-        let items: Vec<_> = reader.iter().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let items: Vec<_> = reader
+            .iter()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(items.len(), 3);
         assert_eq!(items[0].0, b"user:001");
-        assert_eq!(items[0].1.as_value().unwrap(), b"highly_repetitive_json_payload_highly_repetitive_json_payload");
+        assert_eq!(
+            items[0].1.as_value().unwrap(),
+            b"highly_repetitive_json_payload_highly_repetitive_json_payload"
+        );
     }
 
     #[test]
@@ -1004,12 +1028,24 @@ mod tests {
 
         {
             let mut writer = SSTableWriter::new(&path, 6).unwrap();
-            writer.write_entry(b"account:001", &MemEntry::Value(b"acc1".to_vec())).unwrap();
-            writer.write_entry(b"account:002", &MemEntry::Value(b"acc2".to_vec())).unwrap();
-            writer.write_entry(b"order:100", &MemEntry::Value(b"ord100".to_vec())).unwrap();
-            writer.write_entry(b"order:101", &MemEntry::Value(b"ord101".to_vec())).unwrap();
-            writer.write_entry(b"user:001", &MemEntry::Value(b"usr1".to_vec())).unwrap();
-            writer.write_entry(b"user:002", &MemEntry::Value(b"usr2".to_vec())).unwrap();
+            writer
+                .write_entry(b"account:001", &MemEntry::Value(b"acc1".to_vec()))
+                .unwrap();
+            writer
+                .write_entry(b"account:002", &MemEntry::Value(b"acc2".to_vec()))
+                .unwrap();
+            writer
+                .write_entry(b"order:100", &MemEntry::Value(b"ord100".to_vec()))
+                .unwrap();
+            writer
+                .write_entry(b"order:101", &MemEntry::Value(b"ord101".to_vec()))
+                .unwrap();
+            writer
+                .write_entry(b"user:001", &MemEntry::Value(b"usr1".to_vec()))
+                .unwrap();
+            writer
+                .write_entry(b"user:002", &MemEntry::Value(b"usr2".to_vec()))
+                .unwrap();
             writer.finish().unwrap();
         }
 
@@ -1032,4 +1068,3 @@ mod tests {
         assert!(empty.is_empty());
     }
 }
-

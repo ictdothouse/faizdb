@@ -181,7 +181,6 @@ impl DatabaseContext {
         ctx
     }
 
-
     /// Open or create storage engine at given data directory and recover existing data
     pub fn with_storage_dir(data_dir: impl AsRef<std::path::Path>) -> Result<Self, String> {
         let config = faizdb_core::storage::engine::StorageConfig {
@@ -419,7 +418,6 @@ impl DatabaseContext {
         self.semantic_cache.clone()
     }
 
-
     /// List all collection names
     pub fn list_collections(&self) -> Vec<String> {
         self.collections.iter().map(|e| e.key().clone()).collect()
@@ -527,7 +525,8 @@ impl DatabaseContext {
                             (returned, start.elapsed().as_micros() as u64)
                         } else {
                             let est_returned = if index_field.is_some() {
-                                (stats.total_documents as f64 * (decision.selectivity_pct / 100.0)).round() as usize
+                                (stats.total_documents as f64 * (decision.selectivity_pct / 100.0))
+                                    .round() as usize
                             } else {
                                 stats.total_documents
                             };
@@ -535,10 +534,23 @@ impl DatabaseContext {
                         };
 
                         // Evaluate distributed join strategy if joins are present
-                        let (join_strategy, est_net_io, act_net_io, warning, primary_node, right_doc_count) = if !joins.is_empty() {
+                        let (
+                            join_strategy,
+                            est_net_io,
+                            act_net_io,
+                            warning,
+                            primary_node,
+                            right_doc_count,
+                        ) = if !joins.is_empty() {
                             let first_join = &joins[0];
-                            let left_tag = faizdb_core::cluster::sharding::ShardRouter::extract_hash_tag(&collection);
-                            let right_tag = faizdb_core::cluster::sharding::ShardRouter::extract_hash_tag(&first_join.collection);
+                            let left_tag =
+                                faizdb_core::cluster::sharding::ShardRouter::extract_hash_tag(
+                                    &collection,
+                                );
+                            let right_tag =
+                                faizdb_core::cluster::sharding::ShardRouter::extract_hash_tag(
+                                    &first_join.collection,
+                                );
                             let is_colocated = match (left_tag, right_tag) {
                                 (Some(l), Some(r)) => l == r,
                                 _ => false,
@@ -548,11 +560,10 @@ impl DatabaseContext {
                             let right_doc_count = right_col.count(&[]) as usize;
                             let dimension_bytes = (right_doc_count * 128) as u64;
 
-                            let coordinator = crate::distributed::DistributedQueryCoordinator::new(Vec::new());
-                            let strat = coordinator.plan_distributed_join(
-                                dimension_bytes as usize,
-                                is_colocated,
-                            );
+                            let coordinator =
+                                crate::distributed::DistributedQueryCoordinator::new(Vec::new());
+                            let strat = coordinator
+                                .plan_distributed_join(dimension_bytes as usize, is_colocated);
 
                             let (strat_str, est_io, act_io, warn) = match strat {
                                 DistributedJoinStrategy::ColocatedHashJoin => (
@@ -576,14 +587,22 @@ impl DatabaseContext {
                             };
 
                             let child_scan_left = PlanNode {
-                                node_type: if index_name.is_some() { "IndexScan".into() } else { "SeqScan".into() },
+                                node_type: if index_name.is_some() {
+                                    "IndexScan".into()
+                                } else {
+                                    "SeqScan".into()
+                                },
                                 relation: Some(collection.clone()),
                                 condition: filter.as_ref().map(|f| format!("{f:?}")),
                                 estimated_cost_start: 0.0,
                                 estimated_cost_total: decision.seq_scan_cost,
                                 estimated_rows: stats.total_documents,
                                 actual_time_start_us: if analyze { Some(5) } else { None },
-                                actual_time_total_us: if analyze { Some(execution_time_us / 2) } else { None },
+                                actual_time_total_us: if analyze {
+                                    Some(execution_time_us / 2)
+                                } else {
+                                    None
+                                },
                                 actual_rows: if analyze { Some(docs_examined) } else { None },
                                 loops: 1,
                                 details: Some(format!("Relation: {collection}")),
@@ -593,12 +612,19 @@ impl DatabaseContext {
                             let child_scan_right = PlanNode {
                                 node_type: "Hash".into(),
                                 relation: Some(first_join.collection.clone()),
-                                condition: Some(format!("{} = {}", first_join.on_left, first_join.on_right)),
+                                condition: Some(format!(
+                                    "{} = {}",
+                                    first_join.on_left, first_join.on_right
+                                )),
                                 estimated_cost_start: 0.0,
                                 estimated_cost_total: 15.0,
                                 estimated_rows: right_doc_count,
                                 actual_time_start_us: if analyze { Some(2) } else { None },
-                                actual_time_total_us: if analyze { Some(execution_time_us / 3) } else { None },
+                                actual_time_total_us: if analyze {
+                                    Some(execution_time_us / 3)
+                                } else {
+                                    None
+                                },
                                 actual_rows: if analyze { Some(right_doc_count) } else { None },
                                 loops: 1,
                                 details: Some(format!("Relation: {}", first_join.collection)),
@@ -610,7 +636,11 @@ impl DatabaseContext {
                                     estimated_cost_total: 10.0,
                                     estimated_rows: right_doc_count,
                                     actual_time_start_us: if analyze { Some(2) } else { None },
-                                    actual_time_total_us: if analyze { Some(execution_time_us / 3) } else { None },
+                                    actual_time_total_us: if analyze {
+                                        Some(execution_time_us / 3)
+                                    } else {
+                                        None
+                                    },
                                     actual_rows: if analyze { Some(right_doc_count) } else { None },
                                     loops: 1,
                                     details: None,
@@ -621,15 +651,24 @@ impl DatabaseContext {
                             let join_node = PlanNode {
                                 node_type: format!("Distributed Join [{strat_str}]"),
                                 relation: None,
-                                condition: Some(format!("{} = {}", first_join.on_left, first_join.on_right)),
+                                condition: Some(format!(
+                                    "{} = {}",
+                                    first_join.on_left, first_join.on_right
+                                )),
                                 estimated_cost_start: 10.0,
                                 estimated_cost_total: decision.estimated_cost + 20.0,
                                 estimated_rows: docs_returned.max(1),
                                 actual_time_start_us: if analyze { Some(10) } else { None },
-                                actual_time_total_us: if analyze { Some(execution_time_us) } else { None },
+                                actual_time_total_us: if analyze {
+                                    Some(execution_time_us)
+                                } else {
+                                    None
+                                },
                                 actual_rows: if analyze { Some(docs_returned) } else { None },
                                 loops: 1,
-                                details: Some(format!("Strategy: {strat_str}, Net I/O: {est_io} bytes")),
+                                details: Some(format!(
+                                    "Strategy: {strat_str}, Net I/O: {est_io} bytes"
+                                )),
                                 children: vec![child_scan_left, child_scan_right],
                             };
 
@@ -641,14 +680,32 @@ impl DatabaseContext {
                                 estimated_cost_total: decision.estimated_cost + 25.0,
                                 estimated_rows: docs_returned.max(1),
                                 actual_time_start_us: if analyze { Some(0) } else { None },
-                                actual_time_total_us: if analyze { Some(execution_time_us) } else { None },
+                                actual_time_total_us: if analyze {
+                                    Some(execution_time_us)
+                                } else {
+                                    None
+                                },
                                 actual_rows: if analyze { Some(docs_returned) } else { None },
                                 loops: 1,
-                                details: Some(format!("Shards: 16, Mode: {}", if is_colocated { "Colocated" } else { "Distributed" })),
+                                details: Some(format!(
+                                    "Shards: 16, Mode: {}",
+                                    if is_colocated {
+                                        "Colocated"
+                                    } else {
+                                        "Distributed"
+                                    }
+                                )),
                                 children: vec![join_node],
                             };
 
-                            (Some(strat_str.to_string()), est_io, act_io, warn, top, right_doc_count)
+                            (
+                                Some(strat_str.to_string()),
+                                est_io,
+                                act_io,
+                                warn,
+                                top,
+                                right_doc_count,
+                            )
                         } else {
                             let scan_node = PlanNode {
                                 node_type: decision.chosen_plan.clone(),
@@ -658,10 +715,17 @@ impl DatabaseContext {
                                 estimated_cost_total: decision.estimated_cost,
                                 estimated_rows: docs_returned.max(1),
                                 actual_time_start_us: if analyze { Some(0) } else { None },
-                                actual_time_total_us: if analyze { Some(execution_time_us) } else { None },
+                                actual_time_total_us: if analyze {
+                                    Some(execution_time_us)
+                                } else {
+                                    None
+                                },
                                 actual_rows: if analyze { Some(docs_returned) } else { None },
                                 loops: 1,
-                                details: decision.index_used.clone().map(|idx| format!("Index: {idx}")),
+                                details: decision
+                                    .index_used
+                                    .clone()
+                                    .map(|idx| format!("Index: {idx}")),
                                 children: Vec::new(),
                             };
                             (None, 0u64, 0u64, None, scan_node, 0)
@@ -671,14 +735,22 @@ impl DatabaseContext {
                         let mut shard_metrics = Vec::new();
                         let shard_count = 4u16;
                         for i in 0..shard_count {
-                            let (cache_pct, net_bytes, status, latency_mod) = match join_strategy.as_deref() {
-                                Some("ColocatedHashJoin") => (100.0, 0u64, "LOCAL_FAST_PATH", 15u64),
-                                Some("BroadcastHashJoin") => (95.0, est_net_io / 4, "STREAMING", 85u64),
-                                Some("DistributedIndexNestedLoopFallback") => (72.0, est_net_io / 4, "RPC_BATCHING", 750u64),
-                                _ => (100.0, 0u64, "LOCAL_MEMTABLE", 8u64),
-                            };
+                            let (cache_pct, net_bytes, status, latency_mod) =
+                                match join_strategy.as_deref() {
+                                    Some("ColocatedHashJoin") => {
+                                        (100.0, 0u64, "LOCAL_FAST_PATH", 15u64)
+                                    }
+                                    Some("BroadcastHashJoin") => {
+                                        (95.0, est_net_io / 4, "STREAMING", 85u64)
+                                    }
+                                    Some("DistributedIndexNestedLoopFallback") => {
+                                        (72.0, est_net_io / 4, "RPC_BATCHING", 750u64)
+                                    }
+                                    _ => (100.0, 0u64, "LOCAL_MEMTABLE", 8u64),
+                                };
                             let shard_time = if analyze {
-                                (execution_time_us / shard_count as u64).max(5) + (i as u64 * latency_mod)
+                                (execution_time_us / shard_count as u64).max(5)
+                                    + (i as u64 * latency_mod)
                             } else {
                                 12 + (i as u64 * 3)
                             };
@@ -701,27 +773,52 @@ impl DatabaseContext {
                                 pg_lines.push(format!("Distributed Hash Join (cost=0.00..{:.2} rows={}) (actual time=0.01..{:.3} rows={} loops=1)", decision.estimated_cost + 25.0, docs_returned.max(1), execution_time_us as f64 / 1000.0, docs_returned));
                                 pg_lines.push(format!("  Strategy: {strat}"));
                                 pg_lines.push(format!("  Estimated Network I/O: {est_net_io} bytes | Actual Streamed: {act_net_io} bytes"));
-                                let ch_pct = if strat == "ColocatedHashJoin" { 100.0 } else if strat == "BroadcastHashJoin" { 95.0 } else { 72.0 };
-                                pg_lines.push(format!("  Cache Hit/Miss: {}/{} ({:.1}% local cache hit)", (docs_returned * 9) / 10, docs_returned / 10, ch_pct));
+                                let ch_pct = if strat == "ColocatedHashJoin" {
+                                    100.0
+                                } else if strat == "BroadcastHashJoin" {
+                                    95.0
+                                } else {
+                                    72.0
+                                };
+                                pg_lines.push(format!(
+                                    "  Cache Hit/Miss: {}/{} ({:.1}% local cache hit)",
+                                    (docs_returned * 9) / 10,
+                                    docs_returned / 10,
+                                    ch_pct
+                                ));
                                 if let Some(ref w) = warning {
                                     pg_lines.push(format!("  WARNING: {w}"));
                                 }
                                 pg_lines.push(format!("  ->  Distributed ShardScan on {} [16 shards] (cost=0.00..{:.2} rows={}) (actual time=0.01..{:.3} rows={} loops=1)", collection, decision.seq_scan_cost, stats.total_documents, (execution_time_us / 2) as f64 / 1000.0, docs_examined));
                                 pg_lines.push(format!("  ->  Hash on {} (cost=0.00..15.00 rows={}) (actual time=0.01..{:.3} rows={} loops=1)", joins[0].collection, right_doc_count, (execution_time_us / 3) as f64 / 1000.0, docs_returned));
-                                pg_lines.push(format!("        Hash Cond: ({} = {})", joins[0].on_left, joins[0].on_right));
+                                pg_lines.push(format!(
+                                    "        Hash Cond: ({} = {})",
+                                    joins[0].on_left, joins[0].on_right
+                                ));
                                 pg_lines.push(format!("        ->  SeqScan on {} (cost=0.00..10.00 rows={}) (actual time=0.01..{:.3} rows={} loops=1)", joins[0].collection, right_doc_count, (execution_time_us / 4) as f64 / 1000.0, docs_returned));
                                 pg_lines.push("Planning Time: 0.045 ms".to_string());
-                                pg_lines.push(format!("Execution Time: {:.3} ms", execution_time_us as f64 / 1000.0));
+                                pg_lines.push(format!(
+                                    "Execution Time: {:.3} ms",
+                                    execution_time_us as f64 / 1000.0
+                                ));
                             } else {
-                                pg_lines.push(format!("Distributed Hash Join (cost=0.00..{:.2} rows={})", decision.estimated_cost + 25.0, docs_returned.max(1)));
+                                pg_lines.push(format!(
+                                    "Distributed Hash Join (cost=0.00..{:.2} rows={})",
+                                    decision.estimated_cost + 25.0,
+                                    docs_returned.max(1)
+                                ));
                                 pg_lines.push(format!("  Strategy: {strat}"));
-                                pg_lines.push(format!("  Estimated Network I/O: {est_net_io} bytes"));
+                                pg_lines
+                                    .push(format!("  Estimated Network I/O: {est_net_io} bytes"));
                                 if let Some(ref w) = warning {
                                     pg_lines.push(format!("  WARNING: {w}"));
                                 }
                                 pg_lines.push(format!("  ->  Distributed ShardScan on {} [16 shards] (cost=0.00..{:.2} rows={})", collection, decision.seq_scan_cost, stats.total_documents));
                                 pg_lines.push(format!("  ->  Hash on {}", joins[0].collection));
-                                pg_lines.push(format!("        Hash Cond: ({} = {})", joins[0].on_left, joins[0].on_right));
+                                pg_lines.push(format!(
+                                    "        Hash Cond: ({} = {})",
+                                    joins[0].on_left, joins[0].on_right
+                                ));
                                 pg_lines.push("Planning Time: 0.042 ms".to_string());
                             }
                         } else if let Some(ref idx) = decision.index_used {
@@ -730,9 +827,18 @@ impl DatabaseContext {
                                 pg_lines.push(format!("  Filter: {:?}", filter));
                                 pg_lines.push("  Rows Removed by Filter: 0".to_string());
                                 pg_lines.push("Planning Time: 0.028 ms".to_string());
-                                pg_lines.push(format!("Execution Time: {:.3} ms", execution_time_us as f64 / 1000.0));
+                                pg_lines.push(format!(
+                                    "Execution Time: {:.3} ms",
+                                    execution_time_us as f64 / 1000.0
+                                ));
                             } else {
-                                pg_lines.push(format!("Index Scan using {} on {} (cost=0.00..{:.2} rows={})", idx, collection, decision.estimated_cost, docs_returned.max(1)));
+                                pg_lines.push(format!(
+                                    "Index Scan using {} on {} (cost=0.00..{:.2} rows={})",
+                                    idx,
+                                    collection,
+                                    decision.estimated_cost,
+                                    docs_returned.max(1)
+                                ));
                                 pg_lines.push("Planning Time: 0.025 ms".to_string());
                             }
                         } else {
@@ -740,9 +846,17 @@ impl DatabaseContext {
                                 pg_lines.push(format!("Seq Scan on {} (cost=0.00..{:.2} rows={}) (actual time=0.01..{:.3} rows={} loops=1)", collection, decision.estimated_cost, docs_returned.max(1), execution_time_us as f64 / 1000.0, docs_returned));
                                 pg_lines.push(format!("  Filter: {:?}", filter));
                                 pg_lines.push("Planning Time: 0.022 ms".to_string());
-                                pg_lines.push(format!("Execution Time: {:.3} ms", execution_time_us as f64 / 1000.0));
+                                pg_lines.push(format!(
+                                    "Execution Time: {:.3} ms",
+                                    execution_time_us as f64 / 1000.0
+                                ));
                             } else {
-                                pg_lines.push(format!("Seq Scan on {} (cost=0.00..{:.2} rows={})", collection, decision.estimated_cost, docs_returned.max(1)));
+                                pg_lines.push(format!(
+                                    "Seq Scan on {} (cost=0.00..{:.2} rows={})",
+                                    collection,
+                                    decision.estimated_cost,
+                                    docs_returned.max(1)
+                                ));
                                 pg_lines.push("Planning Time: 0.020 ms".to_string());
                             }
                         }
@@ -803,7 +917,9 @@ impl DatabaseContext {
                             warning: None,
                             shard_metrics: Vec::new(),
                             node_tree: None,
-                            formatted_pg_tree: Some("Direct statement execution\nExecution Time: 0.010 ms".to_string()),
+                            formatted_pg_tree: Some(
+                                "Direct statement execution\nExecution Time: 0.010 ms".to_string(),
+                            ),
                         })))
                     }
                 }
@@ -956,8 +1072,11 @@ impl DatabaseContext {
                         });
 
                         if !has_doc_vectors {
-                            let available: Vec<String> =
-                                self.vector_indexes.iter().map(|e| e.key().clone()).collect();
+                            let available: Vec<String> = self
+                                .vector_indexes
+                                .iter()
+                                .map(|e| e.key().clone())
+                                .collect();
                             return Err(format!(
                                 "Vector search failed: No vector index matches collection '{collection}' (available indexes: [{}]) and collection documents do not contain 'vector' or 'embedding' fields. Use 'USING INDEX <name>' to specify the target index.",
                                 available.join(", ")
@@ -1055,9 +1174,10 @@ impl DatabaseContext {
                                 for right_doc in matching_rights {
                                     let mut combined = left_doc.clone();
                                     for (k, v) in &right_doc.fields {
-                                        combined
-                                            .fields
-                                            .insert(format!("{}_{}", join.collection, k), v.clone());
+                                        combined.fields.insert(
+                                            format!("{}_{}", join.collection, k),
+                                            v.clone(),
+                                        );
                                         if !combined.fields.contains_key(k) {
                                             combined.fields.insert(k.clone(), v.clone());
                                         }
@@ -1082,7 +1202,10 @@ impl DatabaseContext {
                             .filter_map(|part| {
                                 let mut pieces = part.split(':');
                                 let name = pieces.next()?.trim();
-                                let d = pieces.next().and_then(|s| s.parse::<i8>().ok()).unwrap_or(1);
+                                let d = pieces
+                                    .next()
+                                    .and_then(|s| s.parse::<i8>().ok())
+                                    .unwrap_or(1);
                                 if !name.is_empty() {
                                     Some((name, d))
                                 } else {
@@ -1256,7 +1379,9 @@ impl DatabaseContext {
                     });
                     if res.is_ok() {
                         let updated_doc = col.find_by_id(&id).ok();
-                        let doc_val = updated_doc.as_ref().and_then(|d| serde_json::to_value(d).ok());
+                        let doc_val = updated_doc
+                            .as_ref()
+                            .and_then(|d| serde_json::to_value(d).ok());
                         let _ = self.raft.propose(format!("UPDATE {collection}"), doc_val);
                         self.bus.publish(ChangeEvent::update(
                             &collection,
@@ -1278,7 +1403,9 @@ impl DatabaseContext {
                 if dropped {
                     Ok(QueryResult::Success(format!("Collection '{name}' dropped")))
                 } else {
-                    Ok(QueryResult::Success(format!("Collection '{name}' dropped (purged from storage)")))
+                    Ok(QueryResult::Success(format!(
+                        "Collection '{name}' dropped (purged from storage)"
+                    )))
                 }
             }
             Statement::CreateIndex {
@@ -1333,11 +1460,7 @@ impl DatabaseContext {
                     "Graph edge from '{from}' to '{to}' via '{relation}' created successfully"
                 )))
             }
-            Statement::DeleteEdge {
-                from,
-                to,
-                relation,
-            } => {
+            Statement::DeleteEdge { from, to, relation } => {
                 let removed = self
                     .graph_store
                     .write()
@@ -1449,9 +1572,9 @@ impl DatabaseContext {
 
                 Ok(QueryResult::Documents(distinct_docs))
             }
-            Statement::Set { key, value } => Ok(QueryResult::Success(
-                format!("SET {key} = '{value}' acknowledged"),
-            )),
+            Statement::Set { key, value } => Ok(QueryResult::Success(format!(
+                "SET {key} = '{value}' acknowledged"
+            ))),
             Statement::BeginTransaction => Ok(QueryResult::Success(
                 "ACID Transaction initialized (Snapshot Isolation)".into(),
             )),
@@ -1712,9 +1835,12 @@ mod tests {
         let ctx = DatabaseContext::new();
 
         // 1. Insert documents using openCypher CREATE
-        let s1 = parse_query("CREATE (n:prod {id: 'p1', cat: 'ai', title: 'FaizDB Core'})").unwrap();
-        let s2 = parse_query("CREATE (n:prod {id: 'p2', cat: 'ai', title: 'Graph Engine'})").unwrap();
-        let s3 = parse_query("CREATE (n:prod {id: 'p3', cat: 'ai', title: 'Isolated Component'})").unwrap();
+        let s1 =
+            parse_query("CREATE (n:prod {id: 'p1', cat: 'ai', title: 'FaizDB Core'})").unwrap();
+        let s2 =
+            parse_query("CREATE (n:prod {id: 'p2', cat: 'ai', title: 'Graph Engine'})").unwrap();
+        let s3 = parse_query("CREATE (n:prod {id: 'p3', cat: 'ai', title: 'Isolated Component'})")
+            .unwrap();
         ctx.execute(s1).unwrap();
         ctx.execute(s2).unwrap();
         ctx.execute(s3).unwrap();
@@ -1728,25 +1854,32 @@ mod tests {
         }
 
         // 3. Execute openCypher traversal query
-        let match_q = parse_query("MATCH (a:prod)-[:USES]->(b:prod) WHERE a.id = 'p1' RETURN b").unwrap();
+        let match_q =
+            parse_query("MATCH (a:prod)-[:USES]->(b:prod) WHERE a.id = 'p1' RETURN b").unwrap();
         let match_res = ctx.execute(match_q).unwrap();
         match match_res {
             QueryResult::Documents(docs) => {
                 let ids: Vec<String> = docs.iter().map(|d| d.id.as_str().to_string()).collect();
                 assert!(ids.contains(&"p1".to_string()));
                 assert!(ids.contains(&"p2".to_string()));
-                assert!(!ids.contains(&"p3".to_string()), "Isolated p3 must not be reached");
+                assert!(
+                    !ids.contains(&"p3".to_string()),
+                    "Isolated p3 must not be reached"
+                );
                 assert_eq!(docs.len(), 2);
             }
             _ => panic!("Expected QueryResult::Documents from Cypher MATCH traversal"),
         }
 
-
         // 4. Extract LLM GraphRAG context
         let rag = ctx.graph_store.read().extract_rag_context("p1", 2, None);
         assert_eq!(rag.root_id, "p1");
-        assert!(rag.formatted_markdown.contains("# Knowledge Graph Context for: `p1`"));
-        assert!(rag.formatted_markdown.contains("- (`p1`) -[:USES]-> (`p2`)"));
+        assert!(rag
+            .formatted_markdown
+            .contains("# Knowledge Graph Context for: `p1`"));
+        assert!(rag
+            .formatted_markdown
+            .contains("- (`p1`) -[:USES]-> (`p2`)"));
 
         // 5. Store in Semantic Cache
         ctx.semantic_cache.put(
@@ -1810,4 +1943,3 @@ mod tests {
         assert!(storage.get(&disk_key).unwrap().is_none());
     }
 }
-

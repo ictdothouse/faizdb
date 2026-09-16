@@ -117,4 +117,3 @@ impl SecondaryIndex {
         self.tree.write().clear();
     }
 }
-

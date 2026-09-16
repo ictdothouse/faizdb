@@ -47,6 +47,7 @@ impl FilterExpr {
             FilterExpr::AlwaysTrue => true,
             FilterExpr::Field { field, op, value } => {
                 let id_val;
+                let null_val = Value::Null;
                 let actual = match doc.get_nested(field) {
                     Some(v) => v,
                     None => {
@@ -54,7 +55,7 @@ impl FilterExpr {
                             id_val = Value::String(doc.id.to_string());
                             &id_val
                         } else {
-                            return value.is_null() && *op == Operator::Eq;
+                            &null_val
                         }
                     }
                 };
@@ -124,14 +125,18 @@ impl FilterExpr {
                 (Value::Integer(a), Value::Array(arr)) if arr.len() == 2 => {
                     match (&arr[0], &arr[1]) {
                         (Value::Integer(lo), Value::Integer(hi)) => a >= lo && a <= hi,
-                        (Value::Float(lo), Value::Float(hi)) => (*a as f64) >= *lo && (*a as f64) <= *hi,
+                        (Value::Float(lo), Value::Float(hi)) => {
+                            (*a as f64) >= *lo && (*a as f64) <= *hi
+                        }
                         _ => false,
                     }
                 }
                 (Value::Float(a), Value::Array(arr)) if arr.len() == 2 => {
                     match (&arr[0], &arr[1]) {
                         (Value::Float(lo), Value::Float(hi)) => a >= lo && a <= hi,
-                        (Value::Integer(lo), Value::Integer(hi)) => *a >= (*lo as f64) && *a <= (*hi as f64),
+                        (Value::Integer(lo), Value::Integer(hi)) => {
+                            *a >= (*lo as f64) && *a <= (*hi as f64)
+                        }
                         _ => false,
                     }
                 }
@@ -144,9 +149,7 @@ impl FilterExpr {
                 _ => false,
             },
             Operator::Like => match (actual, target) {
-                (Value::String(s), Value::String(pattern)) => {
-                    sql_like_match(s, pattern)
-                }
+                (Value::String(s), Value::String(pattern)) => sql_like_match(s, pattern),
                 _ => false,
             },
             Operator::IsNull => actual.is_null(),
@@ -181,8 +184,8 @@ fn sql_like_match(s: &str, pattern: &str) -> bool {
                 '_' => dp[i][j] = dp[i - 1][j - 1],
                 c => {
                     // Case-insensitive comparison for SQL LIKE compatibility
-                    dp[i][j] = dp[i - 1][j - 1]
-                        && s_chars[i - 1].to_lowercase().eq(c.to_lowercase());
+                    dp[i][j] =
+                        dp[i - 1][j - 1] && s_chars[i - 1].to_lowercase().eq(c.to_lowercase());
                 }
             }
         }
@@ -398,8 +401,14 @@ pub enum Statement {
 /// ALTER TABLE action types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlterAction {
-    AddColumn { name: String, default: Option<Value> },
-    DropColumn { name: String },
-    RenameTable { new_name: String },
+    AddColumn {
+        name: String,
+        default: Option<Value>,
+    },
+    DropColumn {
+        name: String,
+    },
+    RenameTable {
+        new_name: String,
+    },
 }
-

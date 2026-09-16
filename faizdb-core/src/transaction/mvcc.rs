@@ -291,7 +291,11 @@ impl TransactionManager {
     /// transaction must abort to prevent write skew.
     ///
     /// This is the core of Serializable Snapshot Isolation (SSI).
-    fn validate_ssi(&self, txn: &Transaction, committed: &BTreeMap<Vec<u8>, u64>) -> FaizResult<()> {
+    fn validate_ssi(
+        &self,
+        txn: &Transaction,
+        committed: &BTreeMap<Vec<u8>, u64>,
+    ) -> FaizResult<()> {
         for key in txn.read_set() {
             // Skip keys we also wrote — our own writes are always visible
             if txn.write_buffer.contains_key(key) {
@@ -558,10 +562,14 @@ mod tests {
 
         // T2 should fail: it read account_A, which T1 wrote after T2's snapshot
         let result = mgr.commit(&mut t2);
-        assert!(result.is_err(), "T2 must fail due to SSI write-skew on account_A");
+        assert!(
+            result.is_err(),
+            "T2 must fail due to SSI write-skew on account_A"
+        );
         let err = result.unwrap_err();
         assert!(
-            err.to_string().contains("write skew") || err.to_string().contains("Serialization failure"),
+            err.to_string().contains("write skew")
+                || err.to_string().contains("Serialization failure"),
             "Error should mention write skew: {err}"
         );
     }
@@ -580,9 +588,13 @@ mod tests {
         mgr.commit(&mut t2).unwrap();
 
         // T1 writes a different key but its read of key_x is now stale
-        t1.put(b"key_y".to_vec(), b"based_on_stale_read".to_vec()).unwrap();
+        t1.put(b"key_y".to_vec(), b"based_on_stale_read".to_vec())
+            .unwrap();
         let result = mgr.commit(&mut t1);
-        assert!(result.is_err(), "T1 should fail due to SSI — it read key_x which was written by T2");
+        assert!(
+            result.is_err(),
+            "T1 should fail due to SSI — it read key_x which was written by T2"
+        );
     }
 
     #[test]

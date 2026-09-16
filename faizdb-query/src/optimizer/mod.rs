@@ -291,12 +291,22 @@ impl CostModel {
     }
 
     /// Compute estimated cost for SSTable sparse index lookup across LSM levels
-    pub fn sstable_sparse_scan_cost(total_docs: usize, lsm_levels: usize, estimated_rows: usize) -> f64 {
-        let block_lookup_cost = (lsm_levels as f64).max(1.0) * (total_docs as f64 + 1.0).log2().max(1.0) * 0.05;
-        let estimated_blocks = ((estimated_rows * 128) as f64 / (Self::PAGE_SIZE as f64)).ceil().max(1.0);
+    pub fn sstable_sparse_scan_cost(
+        total_docs: usize,
+        lsm_levels: usize,
+        estimated_rows: usize,
+    ) -> f64 {
+        let block_lookup_cost =
+            (lsm_levels as f64).max(1.0) * (total_docs as f64 + 1.0).log2().max(1.0) * 0.05;
+        let estimated_blocks = ((estimated_rows * 128) as f64 / (Self::PAGE_SIZE as f64))
+            .ceil()
+            .max(1.0);
         let disk_seek_cost = estimated_blocks * Self::RANDOM_PAGE_COST * 0.4;
         let cpu_decompression = estimated_blocks * 0.02;
-        block_lookup_cost + disk_seek_cost + cpu_decompression + (estimated_rows as f64 * Self::CPU_TUPLE_COST)
+        block_lookup_cost
+            + disk_seek_cost
+            + cpu_decompression
+            + (estimated_rows as f64 * Self::CPU_TUPLE_COST)
     }
 
     /// Compute estimated cost of HNSW graph traversal for vector search
@@ -349,10 +359,12 @@ impl QueryOptimizer {
 
                     // Null checks using column statistics
                     if *op == Operator::IsNull && stats.total_documents > 0 {
-                        return (col.null_count as f64 / stats.total_documents as f64).clamp(0.0001, 0.99);
+                        return (col.null_count as f64 / stats.total_documents as f64)
+                            .clamp(0.0001, 0.99);
                     }
                     if *op == Operator::IsNotNull && stats.total_documents > 0 {
-                        let null_sel = (col.null_count as f64 / stats.total_documents as f64).clamp(0.0, 0.99);
+                        let null_sel =
+                            (col.null_count as f64 / stats.total_documents as f64).clamp(0.0, 0.99);
                         return (1.0 - null_sel).clamp(0.01, 1.0);
                     }
 
@@ -448,7 +460,9 @@ impl QueryOptimizer {
                 }
                 (1.0 - p_none).clamp(0.0, 1.0)
             }
-            FilterExpr::Not(inner) => (1.0 - Self::estimate_selectivity(stats, inner)).clamp(0.0, 1.0),
+            FilterExpr::Not(inner) => {
+                (1.0 - Self::estimate_selectivity(stats, inner)).clamp(0.0, 1.0)
+            }
         }
     }
 
@@ -727,7 +741,10 @@ mod tests {
             value: Value::Array(vec![Value::Float(20.0), Value::Float(40.0)]),
         };
         let sel_bet = QueryOptimizer::estimate_selectivity(&stats, &bet_filter);
-        assert!((sel_bet - 0.20).abs() < 0.08, "Expected ~0.20, got {sel_bet}");
+        assert!(
+            (sel_bet - 0.20).abs() < 0.08,
+            "Expected ~0.20, got {sel_bet}"
+        );
 
         // IS NULL: 10 out of 100 nulls -> expected 0.10
         let null_filter = FilterExpr::Field {
@@ -736,12 +753,23 @@ mod tests {
             value: Value::Null,
         };
         let sel_null = QueryOptimizer::estimate_selectivity(&stats, &null_filter);
-        assert!((sel_null - 0.10).abs() < 0.02, "Expected ~0.10, got {sel_null}");
+        assert!(
+            (sel_null - 0.10).abs() < 0.02,
+            "Expected ~0.10, got {sel_null}"
+        );
 
         // Multi-AND damping
         let multi_and = FilterExpr::And(vec![
-            FilterExpr::Field { field: "val".to_string(), op: Operator::Gt, value: Value::Float(20.0) },
-            FilterExpr::Field { field: "val".to_string(), op: Operator::Lt, value: Value::Float(80.0) },
+            FilterExpr::Field {
+                field: "val".to_string(),
+                op: Operator::Gt,
+                value: Value::Float(20.0),
+            },
+            FilterExpr::Field {
+                field: "val".to_string(),
+                op: Operator::Lt,
+                value: Value::Float(80.0),
+            },
         ]);
         let sel_and = QueryOptimizer::estimate_selectivity(&stats, &multi_and);
         assert!(sel_and > 0.0 && sel_and <= 1.0);

@@ -88,16 +88,20 @@ fn test_vector_graph_rag_submillisecond_fusion() {
     assert!(retrieved_ids.contains(&"entity_10".to_string()));
 
     // Verify Markdown format
-    assert!(rag_context.formatted_markdown.contains("# 🧠 FaizDB Fused GraphRAG Context"));
+    assert!(rag_context
+        .formatted_markdown
+        .contains("# 🧠 FaizDB Fused GraphRAG Context"));
     assert!(rag_context.formatted_markdown.contains("entity_0"));
 
     // Benchmark Graph-Constrained Vector Search
     let start_constrained = Instant::now();
-    let constrained_results =
-        vg.graph_constrained_vector_search(&query, 5, "entity_0", 2, None);
+    let constrained_results = vg.graph_constrained_vector_search(&query, 5, "entity_0", 2, None);
     let elapsed_constrained = start_constrained.elapsed();
 
-    println!("Graph-Constrained Vector Search Latency: {:?}", elapsed_constrained);
+    println!(
+        "Graph-Constrained Vector Search Latency: {:?}",
+        elapsed_constrained
+    );
 
     assert!(
         !constrained_results.is_empty(),

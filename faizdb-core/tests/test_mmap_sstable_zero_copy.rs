@@ -77,13 +77,19 @@ fn test_mmap_zero_copy_borrowed_slice() {
     {
         let mut writer = SSTableWriter::new(&path, 3).expect("Failed to create writer");
         writer
-            .write_entry(b"doc:001", &MemEntry::Value(b"first_document_payload".to_vec()))
+            .write_entry(
+                b"doc:001",
+                &MemEntry::Value(b"first_document_payload".to_vec()),
+            )
             .expect("write entry");
         writer
             .write_entry(b"doc:002", &MemEntry::Tombstone)
             .expect("write entry");
         writer
-            .write_entry(b"doc:003", &MemEntry::Value(b"third_document_payload".to_vec()))
+            .write_entry(
+                b"doc:003",
+                &MemEntry::Value(b"third_document_payload".to_vec()),
+            )
             .expect("write entry");
         writer.finish().expect("finish");
     }
@@ -186,7 +192,10 @@ fn test_mmap_compaction_and_file_deletion() {
     for i in 0..10 {
         for table_idx in 0..3 {
             let key = format!("k:{:02}", i * 3 + table_idx);
-            let entry = merged_reader.get(key.as_bytes()).expect("get").expect("found");
+            let entry = merged_reader
+                .get(key.as_bytes())
+                .expect("get")
+                .expect("found");
             let expected = format!("t{table_idx}_v{i}");
             assert_eq!(entry.as_value().unwrap(), expected.as_bytes());
         }

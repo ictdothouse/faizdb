@@ -67,20 +67,10 @@ pub fn handle_mysql_query(
         );
     }
     if upper.contains("@@CHARACTER_SET_CLIENT") {
-        return make_single_value_result(
-            &mut seq,
-            current_db,
-            "@@character_set_client",
-            "utf8mb4",
-        );
+        return make_single_value_result(&mut seq, current_db, "@@character_set_client", "utf8mb4");
     }
     if upper.contains("@@MAX_ALLOWED_PACKET") {
-        return make_single_value_result(
-            &mut seq,
-            current_db,
-            "@@max_allowed_packet",
-            "67108864",
-        );
+        return make_single_value_result(&mut seq, current_db, "@@max_allowed_packet", "67108864");
     }
     if upper.contains("@@SQL_MODE") {
         return make_single_value_result(
@@ -127,10 +117,8 @@ pub fn handle_mysql_query(
         let collections = db.list_collections();
         let col_name = format!("Tables_in_{current_db}");
         let cols = vec![col_name];
-        let rows: Vec<Vec<Option<String>>> = collections
-            .into_iter()
-            .map(|c| vec![Some(c)])
-            .collect();
+        let rows: Vec<Vec<Option<String>>> =
+            collections.into_iter().map(|c| vec![Some(c)]).collect();
         return format_result_set(&mut seq, current_db, "", &cols, &rows);
     }
 
@@ -441,7 +429,10 @@ pub fn handle_mysql_query(
                 let plan_str = if let Some(ref pg_tree) = plan.formatted_pg_tree {
                     pg_tree.clone()
                 } else {
-                    format!("Plan: {} on collection: {}", plan.plan_type, plan.collection)
+                    format!(
+                        "Plan: {} on collection: {}",
+                        plan.plan_type, plan.collection
+                    )
                 };
                 let rows = vec![vec![Some(plan_str)]];
                 format_result_set(&mut seq, current_db, "", &cols, &rows)
@@ -457,12 +448,7 @@ pub fn handle_mysql_query(
 }
 
 /// Helper to create a single-row, single-column result set
-fn make_single_value_result(
-    seq: &mut u8,
-    db: &str,
-    col_name: &str,
-    value: &str,
-) -> Vec<Bytes> {
+fn make_single_value_result(seq: &mut u8, db: &str, col_name: &str, value: &str) -> Vec<Bytes> {
     let cols = vec![col_name.to_string()];
     let rows = vec![vec![Some(value.to_string())]];
     format_result_set(seq, db, "", &cols, &rows)
@@ -516,7 +502,13 @@ pub fn format_result_set(
 fn format_value_for_mysql(v: &Value) -> String {
     match v {
         Value::Null => String::new(),
-        Value::Boolean(b) => if *b { "1".to_string() } else { "0".to_string() },
+        Value::Boolean(b) => {
+            if *b {
+                "1".to_string()
+            } else {
+                "0".to_string()
+            }
+        }
         Value::Integer(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
         Value::String(s) => s.clone(),
@@ -536,7 +528,11 @@ fn extract_table_name_from_create(query: &str) -> Option<String> {
         return None;
     }
     let mut idx = 2;
-    if tokens[idx] == "IF" && tokens.len() > 5 && tokens[idx + 1] == "NOT" && tokens[idx + 2] == "EXISTS" {
+    if tokens[idx] == "IF"
+        && tokens.len() > 5
+        && tokens[idx + 1] == "NOT"
+        && tokens[idx + 2] == "EXISTS"
+    {
         idx += 3;
     }
     if idx < tokens.len() {

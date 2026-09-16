@@ -230,10 +230,10 @@ pub async fn delete_document(
     let col = state.db.get_or_create_collection(&name);
     match col.delete_by_id(&id) {
         Ok(_) => {
-            let _ = state
-                .db
-                .raft()
-                .propose(format!("DELETE {name}"), Some(serde_json::json!({ "id": id })));
+            let _ = state.db.raft().propose(
+                format!("DELETE {name}"),
+                Some(serde_json::json!({ "id": id })),
+            );
             state
                 .db
                 .change_stream_bus()
@@ -282,10 +282,10 @@ pub async fn update_document_put(
 
     match res {
         Ok(updated) => {
-            let _ = state
-                .db
-                .raft()
-                .propose(format!("UPDATE {name}"), serde_json::to_value(&updated).ok());
+            let _ = state.db.raft().propose(
+                format!("UPDATE {name}"),
+                serde_json::to_value(&updated).ok(),
+            );
             let mut diff = BTreeMap::new();
             for (k, v) in &updated.fields {
                 diff.insert(k.clone(), v.clone());
@@ -373,10 +373,10 @@ pub async fn update_document_patch(
 
     match res {
         Ok(updated) => {
-            let _ = state
-                .db
-                .raft()
-                .propose(format!("UPDATE {name}"), serde_json::to_value(&updated).ok());
+            let _ = state.db.raft().propose(
+                format!("UPDATE {name}"),
+                serde_json::to_value(&updated).ok(),
+            );
             state.db.change_stream_bus().publish(ChangeEvent::update(
                 &name,
                 &id,
@@ -895,11 +895,6 @@ pub async fn get_collection_columnar(
                 "batch": batch,
             }))),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ApiResponse::err(e)),
-        ),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::err(e))),
     }
 }
-
-

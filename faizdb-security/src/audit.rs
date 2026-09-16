@@ -171,10 +171,34 @@ mod tests {
         let temp_file = std::env::temp_dir().join(format!("audit_test_{}.jsonl", Uuid::new_v4()));
         let logger = AuditLogger::with_file(3, &temp_file).unwrap();
 
-        logger.record("admin", AuditAction::LoginSuccess, "auth_portal", true, Some("127.0.0.1".into()));
-        logger.record("hacker", AuditAction::LoginFailure, "auth_portal", false, Some("192.168.1.50".into()));
-        logger.record("admin", AuditAction::KeyRotated, "aes_master_key", true, None);
-        logger.record("user1", AuditAction::AccessDenied, "users_collection", false, None);
+        logger.record(
+            "admin",
+            AuditAction::LoginSuccess,
+            "auth_portal",
+            true,
+            Some("127.0.0.1".into()),
+        );
+        logger.record(
+            "hacker",
+            AuditAction::LoginFailure,
+            "auth_portal",
+            false,
+            Some("192.168.1.50".into()),
+        );
+        logger.record(
+            "admin",
+            AuditAction::KeyRotated,
+            "aes_master_key",
+            true,
+            None,
+        );
+        logger.record(
+            "user1",
+            AuditAction::AccessDenied,
+            "users_collection",
+            false,
+            None,
+        );
 
         assert_eq!(logger.len(), 3, "Ring buffer should cap at 3");
         let recent = logger.recent_events(2);

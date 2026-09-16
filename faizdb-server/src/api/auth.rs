@@ -139,7 +139,6 @@ pub async fn auth_login(
         .user_store
         .authenticate(&payload.username, &payload.password);
 
-
     match role {
         Some(r) => {
             let expires_in: u64 = std::env::var("FAIZDB_TOKEN_TTL_SECS")

@@ -222,23 +222,24 @@ pub fn parse_handshake_response(mut payload: Bytes) -> Result<HandshakeResponse,
         .ok_or_else(|| "Missing username in handshake response".to_string())?;
 
     // Auth response data
-    let auth_response = if (client_capabilities & (CLIENT_PLUGIN_AUTH | CLIENT_SECURE_CONNECTION)) != 0 {
-        if payload.is_empty() {
-            Vec::new()
-        } else {
-            let auth_len = payload.get_u8() as usize;
-            if payload.remaining() >= auth_len {
-                let bytes = payload.split_to(auth_len);
-                bytes.to_vec()
-            } else {
+    let auth_response =
+        if (client_capabilities & (CLIENT_PLUGIN_AUTH | CLIENT_SECURE_CONNECTION)) != 0 {
+            if payload.is_empty() {
                 Vec::new()
+            } else {
+                let auth_len = payload.get_u8() as usize;
+                if payload.remaining() >= auth_len {
+                    let bytes = payload.split_to(auth_len);
+                    bytes.to_vec()
+                } else {
+                    Vec::new()
+                }
             }
-        }
-    } else {
-        read_null_terminated_str(&mut payload)
-            .map(|s| s.into_bytes())
-            .unwrap_or_default()
-    };
+        } else {
+            read_null_terminated_str(&mut payload)
+                .map(|s| s.into_bytes())
+                .unwrap_or_default()
+        };
 
     // Database (if CLIENT_CONNECT_WITH_DB is set)
     let database = if (client_capabilities & CLIENT_CONNECT_WITH_DB) != 0 {

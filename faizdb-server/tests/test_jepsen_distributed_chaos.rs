@@ -61,7 +61,8 @@ fn test_jepsen_torn_write_crash_recovery() {
     {
         let mut f = OpenOptions::new().append(true).open(&wal_path).unwrap();
         // 11 random incomplete bytes (invalid header, missing CRC, truncated payload)
-        f.write_all(b"\x99\x88\x77\x66\x55\x44\x33\x22\x11\x00\xAA").unwrap();
+        f.write_all(b"\x99\x88\x77\x66\x55\x44\x33\x22\x11\x00\xAA")
+            .unwrap();
         f.flush().unwrap();
     }
 
@@ -163,7 +164,9 @@ fn test_jepsen_raft_majority_minority_split_brain_isolation() {
         !n4.get_info().is_leader,
         "Node 4 must remain a Candidate/Follower, never Leader"
     );
-    println!("  🛡️ [CHAOS-2B] Split-Brain prevented: Minority partition (2/5) rejected leader promotion");
+    println!(
+        "  🛡️ [CHAOS-2B] Split-Brain prevented: Minority partition (2/5) rejected leader promotion"
+    );
 
     // Step 4: Partition heals — Node 4 receives leader's log replication
     let append_args = AppendEntriesArgs {
@@ -271,7 +274,9 @@ fn test_jepsen_lsm_anti_stall_and_compaction_guard() {
         let val = engine.get(k.as_bytes()).unwrap();
         assert_eq!(val, Some(expected_v.into_bytes()));
     }
-    println!("  🚀 [CHAOS-4] Anti-Stall verification passed: 100% data intact across compacted SSTables");
+    println!(
+        "  🚀 [CHAOS-4] Anti-Stall verification passed: 100% data intact across compacted SSTables"
+    );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -286,20 +291,35 @@ fn test_jepsen_postgres_system_catalog_introspection() {
     let mut in_txn = false;
 
     // 1. pg_database
-    let resp = handle_postgres_query(&db, "SELECT datname, oid FROM pg_catalog.pg_database", &mut in_txn);
+    let resp = handle_postgres_query(
+        &db,
+        "SELECT datname, oid FROM pg_catalog.pg_database",
+        &mut in_txn,
+    );
     let s = String::from_utf8_lossy(&resp);
-    assert!(s.contains("faizdb"), "pg_database must return faizdb database");
+    assert!(
+        s.contains("faizdb"),
+        "pg_database must return faizdb database"
+    );
     assert!(s.contains("datname"));
 
     // 2. pg_namespace
-    let resp_ns = handle_postgres_query(&db, "SELECT nspname, oid FROM pg_catalog.pg_namespace", &mut in_txn);
+    let resp_ns = handle_postgres_query(
+        &db,
+        "SELECT nspname, oid FROM pg_catalog.pg_namespace",
+        &mut in_txn,
+    );
     let s_ns = String::from_utf8_lossy(&resp_ns);
     assert!(s_ns.contains("public"));
     assert!(s_ns.contains("pg_catalog"));
     assert!(s_ns.contains("information_schema"));
 
     // 3. pg_type
-    let resp_types = handle_postgres_query(&db, "SELECT typname, oid, typarray FROM pg_catalog.pg_type", &mut in_txn);
+    let resp_types = handle_postgres_query(
+        &db,
+        "SELECT typname, oid, typarray FROM pg_catalog.pg_type",
+        &mut in_txn,
+    );
     let s_types = String::from_utf8_lossy(&resp_types);
     assert!(s_types.contains("bool"));
     assert!(s_types.contains("int8"));
@@ -308,7 +328,11 @@ fn test_jepsen_postgres_system_catalog_introspection() {
     assert!(s_types.contains("vector"));
 
     // 4. information_schema.columns
-    let resp_cols = handle_postgres_query(&db, "SELECT table_name, column_name FROM information_schema.columns", &mut in_txn);
+    let resp_cols = handle_postgres_query(
+        &db,
+        "SELECT table_name, column_name FROM information_schema.columns",
+        &mut in_txn,
+    );
     let s_cols = String::from_utf8_lossy(&resp_cols);
     assert!(s_cols.contains("customers"));
     assert!(s_cols.contains("orders"));

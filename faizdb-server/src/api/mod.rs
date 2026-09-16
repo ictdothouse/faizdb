@@ -196,7 +196,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         .route("/v1/vector/index", post(vector::create_vector_index))
         .route("/v1/vector/index/{name}", delete(vector::drop_vector_index))
-        .route("/v1/vector/{index_name}/{id}", delete(vector::delete_vector))
+        .route(
+            "/v1/vector/{index_name}/{id}",
+            delete(vector::delete_vector),
+        )
         .route("/v1/vector/insert", post(vector::insert_vector))
         .route("/v1/vector/search", post(vector::search_vector))
         .route("/v1/graph/vertices", post(graph::create_vertex))

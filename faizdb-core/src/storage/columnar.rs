@@ -257,9 +257,7 @@ impl ColumnarBatch {
     /// Column Minimum (SIMD-Friendly Columnar Scan)
     pub fn min_f64(&self, column_name: &str) -> Option<f64> {
         if let Some(ColumnData::Float64(vals)) = self.columns.get(column_name) {
-            vals.iter()
-                .filter_map(|&v| v)
-                .min_by(|a, b| a.total_cmp(b))
+            vals.iter().filter_map(|&v| v).min_by(|a, b| a.total_cmp(b))
         } else if let Some(ColumnData::Int64(vals)) = self.columns.get(column_name) {
             vals.iter()
                 .filter_map(|&v| v.map(|i| i as f64))
@@ -272,9 +270,7 @@ impl ColumnarBatch {
     /// Column Maximum (SIMD-Friendly Columnar Scan)
     pub fn max_f64(&self, column_name: &str) -> Option<f64> {
         if let Some(ColumnData::Float64(vals)) = self.columns.get(column_name) {
-            vals.iter()
-                .filter_map(|&v| v)
-                .max_by(|a, b| a.total_cmp(b))
+            vals.iter().filter_map(|&v| v).max_by(|a, b| a.total_cmp(b))
         } else if let Some(ColumnData::Int64(vals)) = self.columns.get(column_name) {
             vals.iter()
                 .filter_map(|&v| v.map(|i| i as f64))

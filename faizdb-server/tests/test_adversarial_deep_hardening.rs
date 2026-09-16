@@ -35,7 +35,8 @@ fn test_sql_ddl_if_not_exists_and_identifier_quotes() {
     }
 
     // 2. INSERT INTO with double quotes
-    let insert_stmt = parse_query("INSERT INTO \"users\" (id, name) VALUES ('u1', 'Alice');").unwrap();
+    let insert_stmt =
+        parse_query("INSERT INTO \"users\" (id, name) VALUES ('u1', 'Alice');").unwrap();
     ctx.execute(insert_stmt).unwrap();
 
     // 3. SELECT FROM with backticks
@@ -64,28 +65,30 @@ fn test_graph_edge_query_durability() {
     let ctx = DatabaseContext::with_storage_dir(dir.path()).unwrap();
 
     // Create edge via FaizQL query
-    let create_edge_stmt = parse_query(
-        "CREATE EDGE from 'alice' to 'bob' VIA 'COLLABORATES' WEIGHT 3.0;",
-    )
-    .unwrap();
+    let create_edge_stmt =
+        parse_query("CREATE EDGE from 'alice' to 'bob' VIA 'COLLABORATES' WEIGHT 3.0;").unwrap();
     ctx.execute(create_edge_stmt).unwrap();
 
     // Verify edge is stored in storage engine under graph:e:
     let storage = ctx.storage().unwrap();
     let edge_key = b"graph:e:alice:bob:COLLABORATES";
     let stored_bytes = storage.get(edge_key).unwrap();
-    assert!(stored_bytes.is_some(), "Graph edge must be persisted to disk storage");
+    assert!(
+        stored_bytes.is_some(),
+        "Graph edge must be persisted to disk storage"
+    );
 
     // Delete edge via FaizQL query
-    let del_edge_stmt = parse_query(
-        "DELETE EDGE from 'alice' to 'bob' VIA 'COLLABORATES';",
-    )
-    .unwrap();
+    let del_edge_stmt =
+        parse_query("DELETE EDGE from 'alice' to 'bob' VIA 'COLLABORATES';").unwrap();
     ctx.execute(del_edge_stmt).unwrap();
 
     // Verify edge tombstone / deletion in storage engine
     let deleted_bytes = storage.get(edge_key).unwrap();
-    assert!(deleted_bytes.is_none(), "Graph edge must be deleted from disk storage");
+    assert!(
+        deleted_bytes.is_none(),
+        "Graph edge must be deleted from disk storage"
+    );
 }
 
 #[test]
@@ -137,7 +140,8 @@ fn test_offline_expired_ttl_purged_on_reboot() {
 fn test_mysql_string_and_uuid_id_column_type() {
     let db = Arc::new(DatabaseContext::new());
     db.get_or_create_collection("articles");
-    let insert_stmt = parse_query("INSERT INTO articles (id, title) VALUES ('art_001', 'Rust Guide');").unwrap();
+    let insert_stmt =
+        parse_query("INSERT INTO articles (id, title) VALUES ('art_001', 'Rust Guide');").unwrap();
     let _ = db.execute(insert_stmt);
 
     let res = handle_mysql_query(&db, "faizdb", "SELECT id, title FROM articles", 1);
@@ -180,7 +184,8 @@ fn test_sql_comments_and_tautology_filters_and_set() {
     ctx.execute(stmt).unwrap();
 
     // 3. INSERT with backticks around column names and block comment
-    let insert_sql = "/* bulk insert */ INSERT INTO `members` (`id`, `status`) VALUES ('m1', 'active');";
+    let insert_sql =
+        "/* bulk insert */ INSERT INTO `members` (`id`, `status`) VALUES ('m1', 'active');";
     let insert_stmt = parse_query(insert_sql).unwrap();
     ctx.execute(insert_stmt).unwrap();
 
@@ -244,11 +249,14 @@ async fn test_rest_vector_delete_and_drop_index() {
         .uri("/v1/vector/index")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "name": "embeddings",
-            "dimensions": 4,
-            "metric": "Cosine"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "name": "embeddings",
+                "dimensions": 4,
+                "metric": "Cosine"
+            })
+            .to_string(),
+        ))
         .unwrap();
     let resp = app.clone().oneshot(create_req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
@@ -259,11 +267,14 @@ async fn test_rest_vector_delete_and_drop_index() {
         .uri("/v1/vector/insert")
         .header("Authorization", format!("Bearer {token}"))
         .header("Content-Type", "application/json")
-        .body(Body::from(json!({
-            "index_name": "embeddings",
-            "id": "doc_1",
-            "vector": [0.1, 0.2, 0.3, 0.4]
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "index_name": "embeddings",
+                "id": "doc_1",
+                "vector": [0.1, 0.2, 0.3, 0.4]
+            })
+            .to_string(),
+        ))
         .unwrap();
     let resp = app.clone().oneshot(insert_req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

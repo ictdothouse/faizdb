@@ -113,7 +113,9 @@ async fn handle_postgres_connection(
     client_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut txn_state: u8 = b'I';
-    let mut current_txn: Option<Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>> = None;
+    let mut current_txn: Option<
+        Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>,
+    > = None;
 
     // 1. Initial Handshake (SSLRequest check & StartupMessage)
     loop {
@@ -327,15 +329,26 @@ async fn handle_postgres_connection(
                     .to_string();
 
                 let upper_trim = query_str.trim().trim_end_matches(';').trim().to_uppercase();
-                if upper_trim == "BEGIN" || upper_trim == "BEGIN TRANSACTION" || upper_trim.starts_with("START TRANSACTION") {
+                if upper_trim == "BEGIN"
+                    || upper_trim == "BEGIN TRANSACTION"
+                    || upper_trim.starts_with("START TRANSACTION")
+                {
                     let txn = db.tx_manager().begin();
                     current_txn = Some(Arc::new(parking_lot::Mutex::new(txn)));
-                } else if upper_trim == "COMMIT" || upper_trim == "COMMIT TRANSACTION" || upper_trim == "COMMIT WORK" || upper_trim == "END" {
+                } else if upper_trim == "COMMIT"
+                    || upper_trim == "COMMIT TRANSACTION"
+                    || upper_trim == "COMMIT WORK"
+                    || upper_trim == "END"
+                {
                     if let Some(t_mutex) = current_txn.take() {
                         let mut t = t_mutex.lock();
                         let _ = db.tx_manager().commit(&mut t);
                     }
-                } else if upper_trim == "ROLLBACK" || upper_trim == "ROLLBACK TRANSACTION" || upper_trim == "ROLLBACK WORK" || upper_trim.starts_with("ROLLBACK TO") {
+                } else if upper_trim == "ROLLBACK"
+                    || upper_trim == "ROLLBACK TRANSACTION"
+                    || upper_trim == "ROLLBACK WORK"
+                    || upper_trim.starts_with("ROLLBACK TO")
+                {
                     if let Some(t_mutex) = current_txn.take() {
                         let mut t = t_mutex.lock();
                         db.tx_manager().abort(&mut t);
@@ -519,7 +532,8 @@ async fn handle_postgres_connection(
                         }
                     } else if desc_type == b'P' {
                         if let Some(portal) = portals.get(&name) {
-                            if let Some(row_desc) = infer_query_row_description(&db, &portal.query) {
+                            if let Some(row_desc) = infer_query_row_description(&db, &portal.query)
+                            {
                                 stream.write_all(&encode_row_description(&row_desc)).await?;
                             } else {
                                 stream.write_all(&encode_no_data()).await?;
@@ -541,16 +555,31 @@ async fn handle_postgres_connection(
                     // Safe parameter substitution: matches $N whole tokens outside quotes
                     let resolved_query = substitute_postgres_params(&portal.query, &portal.params);
 
-                    let upper_trim = resolved_query.trim().trim_end_matches(';').trim().to_uppercase();
-                    if upper_trim == "BEGIN" || upper_trim == "BEGIN TRANSACTION" || upper_trim.starts_with("START TRANSACTION") {
+                    let upper_trim = resolved_query
+                        .trim()
+                        .trim_end_matches(';')
+                        .trim()
+                        .to_uppercase();
+                    if upper_trim == "BEGIN"
+                        || upper_trim == "BEGIN TRANSACTION"
+                        || upper_trim.starts_with("START TRANSACTION")
+                    {
                         let txn = db.tx_manager().begin();
                         current_txn = Some(Arc::new(parking_lot::Mutex::new(txn)));
-                    } else if upper_trim == "COMMIT" || upper_trim == "COMMIT TRANSACTION" || upper_trim == "COMMIT WORK" || upper_trim == "END" {
+                    } else if upper_trim == "COMMIT"
+                        || upper_trim == "COMMIT TRANSACTION"
+                        || upper_trim == "COMMIT WORK"
+                        || upper_trim == "END"
+                    {
                         if let Some(t_mutex) = current_txn.take() {
                             let mut t = t_mutex.lock();
                             let _ = db.tx_manager().commit(&mut t);
                         }
-                    } else if upper_trim == "ROLLBACK" || upper_trim == "ROLLBACK TRANSACTION" || upper_trim == "ROLLBACK WORK" || upper_trim.starts_with("ROLLBACK TO") {
+                    } else if upper_trim == "ROLLBACK"
+                        || upper_trim == "ROLLBACK TRANSACTION"
+                        || upper_trim == "ROLLBACK WORK"
+                        || upper_trim.starts_with("ROLLBACK TO")
+                    {
                         if let Some(t_mutex) = current_txn.take() {
                             let mut t = t_mutex.lock();
                             db.tx_manager().abort(&mut t);
@@ -597,9 +626,7 @@ async fn handle_postgres_connection(
             }
             b'S' => {
                 // Sync: reply with ReadyForQuery using accurate transaction state ('I', 'T', 'E')
-                stream
-                    .write_all(&encode_ready_for_query(txn_state))
-                    .await?;
+                stream.write_all(&encode_ready_for_query(txn_state)).await?;
                 stream.flush().await?;
             }
             other => {
@@ -608,9 +635,7 @@ async fn handle_postgres_connection(
                     other as char, other, client_addr
                 );
                 // Send ReadyForQuery to keep connection in sync
-                stream
-                    .write_all(&encode_ready_for_query(txn_state))
-                    .await?;
+                stream.write_all(&encode_ready_for_query(txn_state)).await?;
                 stream.flush().await?;
             }
         }
@@ -620,7 +645,9 @@ async fn handle_postgres_connection(
     if let Some(t_mutex) = current_txn.take() {
         let mut t = t_mutex.lock();
         db.tx_manager().abort(&mut t);
-        tracing::debug!("Aborted uncommitted active transaction on client disconnect from {client_addr}");
+        tracing::debug!(
+            "Aborted uncommitted active transaction on client disconnect from {client_addr}"
+        );
     }
 
     Ok(())

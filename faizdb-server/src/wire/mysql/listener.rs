@@ -119,7 +119,8 @@ async fn handle_mysql_connection(
     // 3. Read HandshakeResponse41 packet from client
     let mut header = [0u8; 4];
     stream.read_exact(&mut header).await?;
-    let payload_len = (header[0] as usize) | ((header[1] as usize) << 8) | ((header[2] as usize) << 16);
+    let payload_len =
+        (header[0] as usize) | ((header[1] as usize) << 8) | ((header[2] as usize) << 16);
     let mut client_seq_id = header[3];
 
     let mut payload = vec![0u8; payload_len];
@@ -128,7 +129,9 @@ async fn handle_mysql_connection(
     let handshake_resp = parse_handshake_response(bytes::Bytes::from(payload))
         .map_err(|e| format!("MySQL handshake error: {e}"))?;
 
-    let mut current_db = handshake_resp.database.unwrap_or_else(|| "faizdb".to_string());
+    let mut current_db = handshake_resp
+        .database
+        .unwrap_or_else(|| "faizdb".to_string());
     info!(
         "MySQL client authenticated: user='{}', db='{}', conn_id={conn_id} from {peer_addr}",
         handshake_resp.username, current_db

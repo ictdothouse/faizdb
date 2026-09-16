@@ -216,8 +216,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 http_port
             );
             println!("╚══════════════════════════════════════════════════════════════════╝");
-            faizdb_server::run_multi_protocol_server(&wire_addr, &pg_addr, &mysql_addr, &grpc_addr, &http_addr)
-                .await?;
+            faizdb_server::run_multi_protocol_server(
+                &wire_addr,
+                &pg_addr,
+                &mysql_addr,
+                &grpc_addr,
+                &http_addr,
+            )
+            .await?;
         }
         Some(Commands::Info) => print_info(),
         Some(Commands::Benchmark { count, durable }) => run_benchmark(count, durable),
@@ -243,13 +249,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             data_dir,
         }) => {
             run_doctor_cli(
-                &host,
-                http_port,
-                wire_port,
-                pg_port,
-                mysql_port,
-                grpc_port,
-                &data_dir,
+                &host, http_port, wire_port, pg_port, mysql_port, grpc_port, &data_dir,
             )
             .await;
         }
@@ -781,20 +781,27 @@ async fn run_doctor_cli(
         match tokio::net::TcpStream::connect(&addr).await {
             Ok(_) => {
                 online_count += 1;
-                println!("  🟢 Port {:<5} [{:<23}] : ONLINE (Active & Listening)", port, name);
+                println!(
+                    "  🟢 Port {:<5} [{:<23}] : ONLINE (Active & Listening)",
+                    port, name
+                );
             }
-            Err(_) => {
-                match std::net::TcpListener::bind(("0.0.0.0", port)) {
-                    Ok(_) => {
-                        available_count += 1;
-                        println!("  ⚪ Port {:<5} [{:<23}] : AVAILABLE (Ready to bind)", port, name);
-                    }
-                    Err(e) => {
-                        conflict_count += 1;
-                        println!("  🔴 Port {:<5} [{:<23}] : CONFLICT (Blocked: {e})", port, name);
-                    }
+            Err(_) => match std::net::TcpListener::bind(("0.0.0.0", port)) {
+                Ok(_) => {
+                    available_count += 1;
+                    println!(
+                        "  ⚪ Port {:<5} [{:<23}] : AVAILABLE (Ready to bind)",
+                        port, name
+                    );
                 }
-            }
+                Err(e) => {
+                    conflict_count += 1;
+                    println!(
+                        "  🔴 Port {:<5} [{:<23}] : CONFLICT (Blocked: {e})",
+                        port, name
+                    );
+                }
+            },
         }
     }
 
@@ -802,11 +809,20 @@ async fn run_doctor_cli(
     let dir_exists = data_dir.exists();
     if !dir_exists {
         match std::fs::create_dir_all(data_dir) {
-            Ok(_) => println!("  🟢 Storage Directory: Created successfully at '{}'", data_dir.display()),
-            Err(e) => println!("  🔴 Storage Directory: Failed to create '{}' ({e})", data_dir.display()),
+            Ok(_) => println!(
+                "  🟢 Storage Directory: Created successfully at '{}'",
+                data_dir.display()
+            ),
+            Err(e) => println!(
+                "  🔴 Storage Directory: Failed to create '{}' ({e})",
+                data_dir.display()
+            ),
         }
     } else {
-        println!("  🟢 Storage Directory: Present at '{}'", data_dir.display());
+        println!(
+            "  🟢 Storage Directory: Present at '{}'",
+            data_dir.display()
+        );
     }
 
     let test_file = data_dir.join(".faizdb_doctor_probe");
@@ -823,20 +839,34 @@ async fn run_doctor_cli(
     let wal_path = data_dir.join("faizdb.wal");
     if wal_path.exists() {
         if let Ok(meta) = std::fs::metadata(&wal_path) {
-            println!("  🟢 Write-Ahead Log (WAL): Active ({} bytes logged)", meta.len());
+            println!(
+                "  🟢 Write-Ahead Log (WAL): Active ({} bytes logged)",
+                meta.len()
+            );
         }
     } else {
         println!("  ⚪ Write-Ahead Log (WAL): Clean (Ready for new session)");
     }
 
     println!("\n🔍 [3/4] Hardware & Environment Diagnostics...");
-    let cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
-    println!("  🟢 CPU Architecture: {} logical execution cores detected", cpus);
-    println!("  🟢 Engine Kernel: FaizDB v{} (Pure Safe Rust, Single-Binary)", faizdb_core::VERSION);
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    println!(
+        "  🟢 CPU Architecture: {} logical execution cores detected",
+        cpus
+    );
+    println!(
+        "  🟢 Engine Kernel: FaizDB v{} (Pure Safe Rust, Single-Binary)",
+        faizdb_core::VERSION
+    );
 
     println!("\n🔍 [4/4] Enterprise Security & Configuration Review...");
     let root_user = std::env::var("FAIZDB_ROOT_USER").unwrap_or_else(|_| "admin".to_string());
-    println!("  🟢 Root Authentication: Configured (User: '{}')", root_user);
+    println!(
+        "  🟢 Root Authentication: Configured (User: '{}')",
+        root_user
+    );
 
     let has_custom_pw = std::env::var("FAIZDB_ROOT_PASSWORD").is_ok();
     if has_custom_pw {
@@ -845,8 +875,16 @@ async fn run_doctor_cli(
         println!("  🟡 Root Password: Using default development credential (Set FAIZDB_ROOT_PASSWORD for production)");
     }
 
-    let auto_backup = std::env::var("FAIZDB_AUTO_BACKUP").unwrap_or_else(|_| "disabled".to_string());
-    println!("  🟢 Autonomous Backup Daemon: {}", if auto_backup == "true" || auto_backup == "1" { "ENABLED (Daily Snapshot Routine)" } else { "STANDBY (Set FAIZDB_AUTO_BACKUP=1 to activate)" });
+    let auto_backup =
+        std::env::var("FAIZDB_AUTO_BACKUP").unwrap_or_else(|_| "disabled".to_string());
+    println!(
+        "  🟢 Autonomous Backup Daemon: {}",
+        if auto_backup == "true" || auto_backup == "1" {
+            "ENABLED (Daily Snapshot Routine)"
+        } else {
+            "STANDBY (Set FAIZDB_AUTO_BACKUP=1 to activate)"
+        }
+    );
 
     println!("\n══════════════════════════════════════════════════════════════════");
     println!("  Summary: {online_count} online, {available_count} available, {conflict_count} conflicting.");
@@ -855,7 +893,9 @@ async fn run_doctor_cli(
         println!("    Ensure conflicting services are stopped or supply custom flags, e.g.:");
         println!("    faizdb serve --pg-port 5433 --mysql-port 3307");
     } else if online_count == 5 {
-        println!("🎉 ALL 5 GATEWAYS ONLINE! FaizDB cluster is running in prime operational health.");
+        println!(
+            "🎉 ALL 5 GATEWAYS ONLINE! FaizDB cluster is running in prime operational health."
+        );
     } else if online_count > 0 {
         println!("⚡ FaizDB is active with {online_count}/5 gateways online.");
     } else {
@@ -889,11 +929,51 @@ fn seed_ecommerce(db: &DatabaseContext, data_dir: &std::path::Path) {
     let orders = db.get_or_create_collection("orders");
 
     let prod_items = [
-        ("prod_1", "Quantum RTX 5090", "Hardware", 1999.99, true, 4.9, "Flagship AI training and ray-tracing GPU"),
-        ("prod_2", "Neural TPU v5 Accelerator", "AI Accelerators", 2499.50, true, 4.8, "High-efficiency transformer inference card"),
-        ("prod_3", "Cyberpunk Mech Keyboard", "Peripherals", 149.00, false, 4.6, "Hot-swappable magnetic switch RGB board"),
-        ("prod_4", "HoloLens Spatial Pro", "Spatial Computing", 1299.00, true, 4.7, "Dual micro-OLED 4K mixed-reality headset"),
-        ("prod_5", "Starlink Mini Edge Dish", "Networking", 599.00, true, 4.5, "Portable phased-array low-earth orbit satellite terminal"),
+        (
+            "prod_1",
+            "Quantum RTX 5090",
+            "Hardware",
+            1999.99,
+            true,
+            4.9,
+            "Flagship AI training and ray-tracing GPU",
+        ),
+        (
+            "prod_2",
+            "Neural TPU v5 Accelerator",
+            "AI Accelerators",
+            2499.50,
+            true,
+            4.8,
+            "High-efficiency transformer inference card",
+        ),
+        (
+            "prod_3",
+            "Cyberpunk Mech Keyboard",
+            "Peripherals",
+            149.00,
+            false,
+            4.6,
+            "Hot-swappable magnetic switch RGB board",
+        ),
+        (
+            "prod_4",
+            "HoloLens Spatial Pro",
+            "Spatial Computing",
+            1299.00,
+            true,
+            4.7,
+            "Dual micro-OLED 4K mixed-reality headset",
+        ),
+        (
+            "prod_5",
+            "Starlink Mini Edge Dish",
+            "Networking",
+            599.00,
+            true,
+            4.5,
+            "Portable phased-array low-earth orbit satellite terminal",
+        ),
     ];
 
     for (id, name, cat, price, in_stock, rating, desc) in &prod_items {
@@ -909,9 +989,30 @@ fn seed_ecommerce(db: &DatabaseContext, data_dir: &std::path::Path) {
     }
 
     let cust_items = [
-        ("cust_1", "Ahmad Faiz", "faiz@ict.house", "Diamond", 4500.00, "Kuala Lumpur"),
-        ("cust_2", "Elena Rostova", "elena@techcorp.io", "Platinum", 2800.00, "London"),
-        ("cust_3", "Marcus Vance", "marcus@cloudsys.dev", "Gold", 1200.00, "San Francisco"),
+        (
+            "cust_1",
+            "Ahmad Faiz",
+            "faiz@ict.house",
+            "Diamond",
+            4500.00,
+            "Kuala Lumpur",
+        ),
+        (
+            "cust_2",
+            "Elena Rostova",
+            "elena@techcorp.io",
+            "Platinum",
+            2800.00,
+            "London",
+        ),
+        (
+            "cust_3",
+            "Marcus Vance",
+            "marcus@cloudsys.dev",
+            "Gold",
+            1200.00,
+            "San Francisco",
+        ),
     ];
 
     for (id, name, email, tier, spend, city) in &cust_items {
@@ -964,8 +1065,10 @@ fn seed_ecommerce(db: &DatabaseContext, data_dir: &std::path::Path) {
 
     let hnsw_path = data_dir.join("products.hnsw");
     let _ = hnsw.save_to_file(&hnsw_path);
-    db.vector_indexes()
-        .insert("products".to_string(), Arc::new(parking_lot::RwLock::new(hnsw)));
+    db.vector_indexes().insert(
+        "products".to_string(),
+        Arc::new(parking_lot::RwLock::new(hnsw)),
+    );
 
     // Knowledge Graph
     {
@@ -989,12 +1092,36 @@ fn seed_ecommerce(db: &DatabaseContext, data_dir: &std::path::Path) {
             ));
         }
 
-        graph.add_edge(faizdb_graph::Edge::with_weight("cust_1", "prod_1", "PURCHASED", 5.0));
-        graph.add_edge(faizdb_graph::Edge::with_weight("cust_1", "prod_5", "PURCHASED", 5.0));
-        graph.add_edge(faizdb_graph::Edge::with_weight("cust_2", "prod_2", "PURCHASED", 5.0));
-        graph.add_edge(faizdb_graph::Edge::with_weight("cust_3", "prod_4", "PURCHASED", 4.0));
+        graph.add_edge(faizdb_graph::Edge::with_weight(
+            "cust_1",
+            "prod_1",
+            "PURCHASED",
+            5.0,
+        ));
+        graph.add_edge(faizdb_graph::Edge::with_weight(
+            "cust_1",
+            "prod_5",
+            "PURCHASED",
+            5.0,
+        ));
+        graph.add_edge(faizdb_graph::Edge::with_weight(
+            "cust_2",
+            "prod_2",
+            "PURCHASED",
+            5.0,
+        ));
+        graph.add_edge(faizdb_graph::Edge::with_weight(
+            "cust_3",
+            "prod_4",
+            "PURCHASED",
+            4.0,
+        ));
         graph.add_edge(faizdb_graph::Edge::new("cust_1", "cust_2", "REFERRED"));
-        graph.add_edge(faizdb_graph::Edge::new("prod_1", "prod_2", "COMPATIBLE_WITH"));
+        graph.add_edge(faizdb_graph::Edge::new(
+            "prod_1",
+            "prod_2",
+            "COMPATIBLE_WITH",
+        ));
 
         let graph_path = data_dir.join("graph_store.json");
         if let Ok(graph_json) = serde_json::to_string_pretty(&*graph) {
@@ -1010,7 +1137,10 @@ fn seed_ecommerce(db: &DatabaseContext, data_dir: &std::path::Path) {
     println!("     • 'customers' : 3 documents (Ahmad Faiz, Elena Rostova, Marcus Vance)");
     println!("     • 'orders'    : 4 transactional records");
     println!("  🧠 AI Vector Index:");
-    println!("     • 'products'  : 64 dimensions (Cosine Metric, HNSW persisted to '{}')", hnsw_path.display());
+    println!(
+        "     • 'products'  : 64 dimensions (Cosine Metric, HNSW persisted to '{}')",
+        hnsw_path.display()
+    );
     println!("  🕸️ Knowledge Graph:");
     println!("     • 8 Vertices (3 Customers, 5 Products)");
     println!("     • 6 Directed Edges (PURCHASED, REFERRED, COMPATIBLE_WITH)");
@@ -1027,11 +1157,46 @@ fn seed_agent_memory(db: &DatabaseContext, data_dir: &std::path::Path) {
     let tools = db.get_or_create_collection("agent_tools");
 
     let memory_items = [
-        ("mem_1", "episodic", "agent_alpha", "User requested database performance benchmark YCSB Workload B", 0.95, 1725500000i64),
-        ("mem_2", "episodic", "agent_alpha", "Executed WAL checkpoint flush; reclaimed 45MB disk space", 0.88, 1725501000i64),
-        ("mem_3", "semantic", "agent_alpha", "FaizDB supports 5 native wire gateways: 3306, 5432, 27017, 27018, 50051", 0.99, 1725502000i64),
-        ("mem_4", "working", "agent_beta", "Current task: optimize multi-hop GraphRAG context injection for LangGraph", 0.92, 1725503000i64),
-        ("mem_5", "semantic", "agent_beta", "Cosine distance is normalized between 0.0 and 2.0 with safe IEEE 754 float clamping", 0.85, 1725504000i64),
+        (
+            "mem_1",
+            "episodic",
+            "agent_alpha",
+            "User requested database performance benchmark YCSB Workload B",
+            0.95,
+            1725500000i64,
+        ),
+        (
+            "mem_2",
+            "episodic",
+            "agent_alpha",
+            "Executed WAL checkpoint flush; reclaimed 45MB disk space",
+            0.88,
+            1725501000i64,
+        ),
+        (
+            "mem_3",
+            "semantic",
+            "agent_alpha",
+            "FaizDB supports 5 native wire gateways: 3306, 5432, 27017, 27018, 50051",
+            0.99,
+            1725502000i64,
+        ),
+        (
+            "mem_4",
+            "working",
+            "agent_beta",
+            "Current task: optimize multi-hop GraphRAG context injection for LangGraph",
+            0.92,
+            1725503000i64,
+        ),
+        (
+            "mem_5",
+            "semantic",
+            "agent_beta",
+            "Cosine distance is normalized between 0.0 and 2.0 with safe IEEE 754 float clamping",
+            0.85,
+            1725504000i64,
+        ),
     ];
 
     for (id, tier, agent_id, content, imp, ts) in &memory_items {
@@ -1046,9 +1211,24 @@ fn seed_agent_memory(db: &DatabaseContext, data_dir: &std::path::Path) {
     }
 
     let tool_items = [
-        ("tool_sql", "execute_sql", "Runs ANSI SQL statement against relational collections", true),
-        ("tool_vector", "vector_search", "Performs k-NN similarity search on 64-dim HNSW embeddings", true),
-        ("tool_graph", "graph_traverse", "Traverses multi-hop entity relationships for GraphRAG", true),
+        (
+            "tool_sql",
+            "execute_sql",
+            "Runs ANSI SQL statement against relational collections",
+            true,
+        ),
+        (
+            "tool_vector",
+            "vector_search",
+            "Performs k-NN similarity search on 64-dim HNSW embeddings",
+            true,
+        ),
+        (
+            "tool_graph",
+            "graph_traverse",
+            "Traverses multi-hop entity relationships for GraphRAG",
+            true,
+        ),
     ];
 
     for (id, name, desc, active) in &tool_items {
@@ -1080,8 +1260,10 @@ fn seed_agent_memory(db: &DatabaseContext, data_dir: &std::path::Path) {
 
     let hnsw_path = data_dir.join("agent_memory.hnsw");
     let _ = hnsw.save_to_file(&hnsw_path);
-    db.vector_indexes()
-        .insert("agent_memory".to_string(), Arc::new(parking_lot::RwLock::new(hnsw)));
+    db.vector_indexes().insert(
+        "agent_memory".to_string(),
+        Arc::new(parking_lot::RwLock::new(hnsw)),
+    );
 
     {
         let graph_store = db.graph_store();
@@ -1091,9 +1273,21 @@ fn seed_agent_memory(db: &DatabaseContext, data_dir: &std::path::Path) {
         graph.add_vertex(faizdb_graph::Vertex::new("task:mvcc_reaper", "Task"));
         graph.add_vertex(faizdb_graph::Vertex::new("agent:alpha", "Agent"));
 
-        graph.add_edge(faizdb_graph::Edge::new("agent:alpha", "goal:system_hardening", "ASSIGNED_TO"));
-        graph.add_edge(faizdb_graph::Edge::new("goal:system_hardening", "task:wal_checkpoint", "SUBTASK"));
-        graph.add_edge(faizdb_graph::Edge::new("goal:system_hardening", "task:mvcc_reaper", "SUBTASK"));
+        graph.add_edge(faizdb_graph::Edge::new(
+            "agent:alpha",
+            "goal:system_hardening",
+            "ASSIGNED_TO",
+        ));
+        graph.add_edge(faizdb_graph::Edge::new(
+            "goal:system_hardening",
+            "task:wal_checkpoint",
+            "SUBTASK",
+        ));
+        graph.add_edge(faizdb_graph::Edge::new(
+            "goal:system_hardening",
+            "task:mvcc_reaper",
+            "SUBTASK",
+        ));
 
         let graph_path = data_dir.join("agent_graph.json");
         if let Ok(graph_json) = serde_json::to_string_pretty(&*graph) {
@@ -1132,9 +1326,24 @@ fn seed_social_graph(db: &DatabaseContext, data_dir: &std::path::Path) {
     }
 
     let post_items = [
-        ("post_1", "u1", "FaizDB v0.1.0 5-Way Gateway is now live!", 420i64),
-        ("post_2", "u2", "Benchmarking HNSW 32x Binary Quantization: zero accuracy drop", 310i64),
-        ("post_3", "u4", "GraphRAG + LangGraph checkpointer in pure Safe Rust", 550i64),
+        (
+            "post_1",
+            "u1",
+            "FaizDB v0.1.0 5-Way Gateway is now live!",
+            420i64,
+        ),
+        (
+            "post_2",
+            "u2",
+            "Benchmarking HNSW 32x Binary Quantization: zero accuracy drop",
+            310i64,
+        ),
+        (
+            "post_3",
+            "u4",
+            "GraphRAG + LangGraph checkpointer in pure Safe Rust",
+            550i64,
+        ),
     ];
 
     for (id, author_id, text, likes) in &post_items {
@@ -1172,4 +1381,3 @@ fn seed_social_graph(db: &DatabaseContext, data_dir: &std::path::Path) {
     println!("     • 'posts'        : 3 posts with engagement counts");
     println!("     • Knowledge Graph: 4 Users with bi-directional FOLLOWS relationships\n");
 }
-

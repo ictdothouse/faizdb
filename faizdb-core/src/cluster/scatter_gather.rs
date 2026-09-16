@@ -17,7 +17,12 @@ pub struct ScatterPartition {
 }
 
 impl ScatterPartition {
-    pub fn new(partition_id: impl Into<String>, slot_start: u16, slot_end: u16, node_id: impl Into<String>) -> Self {
+    pub fn new(
+        partition_id: impl Into<String>,
+        slot_start: u16,
+        slot_end: u16,
+        node_id: impl Into<String>,
+    ) -> Self {
         Self {
             partition_id: partition_id.into(),
             slot_start,
@@ -151,7 +156,11 @@ impl ScatterGatherCoordinator {
     }
 
     /// Gather, sort, paginate, and merge analytical aggregates from all partition results
-    pub fn gather(&self, query: &ScatterQuery, mut results: Vec<PartitionResult>) -> MergedQueryResult {
+    pub fn gather(
+        &self,
+        query: &ScatterQuery,
+        mut results: Vec<PartitionResult>,
+    ) -> MergedQueryResult {
         let mut all_documents = Vec::new();
         let mut total_matching = 0;
         let mut total_count = 0;
@@ -246,7 +255,8 @@ mod tests {
         ];
 
         // Keyed lookup routes to single partition
-        let keyed_query = ScatterQuery::new("users").with_filter("_id", Value::String("usr_alpha".into()));
+        let keyed_query =
+            ScatterQuery::new("users").with_filter("_id", Value::String("usr_alpha".into()));
         let scatter_tasks = coordinator.plan_scatter(&keyed_query, &partitions);
         assert_eq!(scatter_tasks.len(), 1);
 

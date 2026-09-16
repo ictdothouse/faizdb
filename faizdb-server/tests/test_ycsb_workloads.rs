@@ -53,7 +53,8 @@ fn test_ycsb_workload_a_update_heavy() {
                     // In-place Update
                     let updated_val = format!("updated_by_t{t}_{i}");
                     c.update_by_id(&key, |d| {
-                        d.fields.insert("val".to_string(), Value::String(updated_val));
+                        d.fields
+                            .insert("val".to_string(), Value::String(updated_val));
                         d.fields.insert("count".to_string(), Value::Integer(9999));
                     })
                     .unwrap();
@@ -79,7 +80,10 @@ fn test_ycsb_workload_a_update_heavy() {
         "\n⚡ [YCSB Workload A - 50/50 R/W] Ops: {}, Elapsed: {:.3}s, Throughput: {:.0} ops/s, p50: {:.3}ms, p99: {:.3}ms",
         total_ops, elapsed, ops_sec, p50, p99
     );
-    assert!(ops_sec > 2_000.0, "Throughput must exceed 2,000 ops/sec in debug mode");
+    assert!(
+        ops_sec > 2_000.0,
+        "Throughput must exceed 2,000 ops/sec in debug mode"
+    );
 }
 
 #[test]
@@ -107,7 +111,8 @@ fn test_ycsb_workload_b_read_mostly() {
                     // 5% Update
                     let updated_val = format!("updated_by_t{t}_{i}");
                     c.update_by_id(&key, |d| {
-                        d.fields.insert("val".to_string(), Value::String(updated_val));
+                        d.fields
+                            .insert("val".to_string(), Value::String(updated_val));
                         d.fields.insert("count".to_string(), Value::Integer(8888));
                     })
                     .unwrap();
@@ -314,8 +319,10 @@ fn test_ycsb_workload_f_read_modify_write() {
                             Some(Value::Integer(cnt)) => *cnt,
                             _ => 0,
                         };
-                        doc.fields.insert("count".to_string(), Value::Integer(current_count + 1));
-                        doc.fields.insert("rmw_thread".to_string(), Value::Integer(t as i64));
+                        doc.fields
+                            .insert("count".to_string(), Value::Integer(current_count + 1));
+                        doc.fields
+                            .insert("rmw_thread".to_string(), Value::Integer(t as i64));
                     })
                     .unwrap();
                 }
@@ -340,5 +347,8 @@ fn test_ycsb_workload_f_read_modify_write() {
         "⚡ [YCSB Workload F - Read-Modify-Write] Ops: {}, Elapsed: {:.3}s, Throughput: {:.0} ops/s, p50: {:.3}ms, p99: {:.3}ms\n",
         total_ops, elapsed, ops_sec, p50, p99
     );
-    assert!(ops_sec > 2_000.0, "Throughput must exceed 2,000 ops/sec in debug mode");
+    assert!(
+        ops_sec > 2_000.0,
+        "Throughput must exceed 2,000 ops/sec in debug mode"
+    );
 }

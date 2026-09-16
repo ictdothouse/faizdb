@@ -15,7 +15,6 @@ impl ring::hkdf::KeyType for HkdfLen {
     }
 }
 
-
 /// Custom single-nonce sequence for AEAD operations
 struct OneNonce(Option<[u8; NONCE_LEN]>);
 

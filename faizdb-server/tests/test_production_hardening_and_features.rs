@@ -334,4 +334,3 @@ fn test_scan_limit_pushdown() {
         panic!("Expected QueryResult::Documents");
     }
 }
-

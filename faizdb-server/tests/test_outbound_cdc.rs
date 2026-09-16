@@ -31,7 +31,13 @@ async fn test_cdc_full_mutation_lifecycle_and_serialization() {
         "name": "Widget Alpha Pro",
         "price": 59.99
     });
-    let cdc_update = CdcEnvelope::new_update("products", "p99", Some(doc_initial.clone()), doc_updated, 1002);
+    let cdc_update = CdcEnvelope::new_update(
+        "products",
+        "p99",
+        Some(doc_initial.clone()),
+        doc_updated,
+        1002,
+    );
     assert_eq!(cdc_update.payload.op, CdcOp::Update);
     assert_eq!(cdc_update.payload.before.as_ref().unwrap()["price"], 49.99);
     assert_eq!(cdc_update.payload.after.as_ref().unwrap()["price"], 59.99);
@@ -62,8 +68,10 @@ async fn test_outbound_cdc_dispatcher_batch_delivery() {
         channel_capacity: 50,
     };
 
-    let (dispatcher, sender, metrics) =
-        CdcOutboundDispatcher::new(config, CdcTransportBackend::InMemory(Arc::clone(&transport)));
+    let (dispatcher, sender, metrics) = CdcOutboundDispatcher::new(
+        config,
+        CdcTransportBackend::InMemory(Arc::clone(&transport)),
+    );
 
     let worker = tokio::spawn(dispatcher.run());
 

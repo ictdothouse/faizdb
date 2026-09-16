@@ -129,8 +129,10 @@ pub fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
     }
 
     let mut dot = ((dot0 + dot1) + (dot2 + dot3)) + ((dot4 + dot5) + (dot6 + dot7));
-    let mut norm_a = ((norm_a0 + norm_a1) + (norm_a2 + norm_a3)) + ((norm_a4 + norm_a5) + (norm_a6 + norm_a7));
-    let mut norm_b = ((norm_b0 + norm_b1) + (norm_b2 + norm_b3)) + ((norm_b4 + norm_b5) + (norm_b6 + norm_b7));
+    let mut norm_a =
+        ((norm_a0 + norm_a1) + (norm_a2 + norm_a3)) + ((norm_a4 + norm_a5) + (norm_a6 + norm_a7));
+    let mut norm_b =
+        ((norm_b0 + norm_b1) + (norm_b2 + norm_b3)) + ((norm_b4 + norm_b5) + (norm_b6 + norm_b7));
 
     // Remainder tail
     for idx in (chunks * 8)..len {

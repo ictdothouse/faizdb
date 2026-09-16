@@ -15,7 +15,7 @@ pub mod tokenizer;
 pub use aggregation::{
     execute_pipeline, execute_pipeline_with_collections, parse_pipeline, Accumulator, PipelineStage,
 };
-pub use ast::{FilterExpr, Operator, Statement, TraverseClause, VectorSearchClause, AlterAction};
+pub use ast::{AlterAction, FilterExpr, Operator, Statement, TraverseClause, VectorSearchClause};
 pub use cache::{QueryCache, QueryCacheStats};
 pub use distributed::{
     DistributedQueryCoordinator, DistributedQueryResult, ScatterGatherPlan, ShardTarget,

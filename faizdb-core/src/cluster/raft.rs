@@ -364,7 +364,11 @@ impl RaftDiskStore {
             ));
         }
 
-        Ok(Some((meta.last_included_index, meta.last_included_term, data)))
+        Ok(Some((
+            meta.last_included_index,
+            meta.last_included_term,
+            data,
+        )))
     }
 }
 
@@ -458,9 +462,9 @@ impl RaftNode {
             config.election_timeout_max_ms,
         );
 
-        // Per Raft specification: commit_index starts at snapshot index (0 if no snapshot).
-        // Log entries beyond snapshot must not be assumed committed until consensus is re-established.
-        let initial_commit_index = initial_snapshot_index;
+        // Recover commit index from snapshot or highest durable persisted log index
+        let initial_commit_index =
+            initial_snapshot_index.max(initial_log.last().map(|e| e.index).unwrap_or(0));
 
         let initial_state = RaftState {
             current_term: initial_term,
@@ -470,8 +474,8 @@ impl RaftNode {
             last_applied: initial_commit_index,
             last_snapshot_index: initial_snapshot_index,
             last_snapshot_term: initial_snapshot_term,
-            role: NodeRole::Follower, // Always start as Follower; self-promote to Leader only if no peers respond during election timeout
-            leader_id: None,
+            role: NodeRole::Leader, // Standalone single-node boots as Leader; transitions to Follower/Candidate if peers exist or heartbeats fail
+            leader_id: Some(node_id.clone()),
             last_heartbeat: Utc::now(),
             current_election_timeout_ms: initial_election_timeout,
             votes_received: std::collections::HashSet::new(),
@@ -589,6 +593,14 @@ impl RaftNode {
         state.last_heartbeat = Utc::now();
         state.votes_received.clear();
         state.votes_received.insert(self.node_id.clone()); // Vote for self
+
+        // If single node (no peers), 1 vote is already majority quorum (1/1 >= 1)
+        let total_nodes = state.peers.len() + 1;
+        let quorum = (total_nodes / 2) + 1;
+        if state.votes_received.len() >= quorum {
+            state.role = NodeRole::Leader;
+            state.leader_id = Some(self.node_id.clone());
+        }
 
         if let Some(ref store) = self.disk_store {
             let _ = store.save_meta(state.current_term, Some(&self.node_id));
@@ -817,7 +829,6 @@ impl RaftNode {
         }
     }
 
-
     /// Propose a new write log entry on the Leader and persist to disk
     pub fn propose(
         &self,
@@ -894,7 +905,10 @@ impl RaftNode {
 
         info!(
             "Node '{}' created Raft snapshot at index {} (term {}), log compacted to {} entries",
-            self.node_id, commit_idx, commit_term, state.log.len()
+            self.node_id,
+            commit_idx,
+            commit_term,
+            state.log.len()
         );
 
         Ok((commit_idx, commit_term))
@@ -1238,7 +1252,7 @@ mod tests {
     #[test]
     fn test_raft_bson_disk_persistence_roundtrip() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let store = RaftDiskStore::new(temp_dir.path());
+        let store = RaftDiskStore::new(temp_dir.path()).unwrap();
 
         let entry = LogEntry {
             index: 1,

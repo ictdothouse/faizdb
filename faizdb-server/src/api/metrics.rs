@@ -387,8 +387,11 @@ mod tests {
         // Verify CBO metrics in Prometheus output
         assert!(rendered.contains("faizdb_cbo_distributed_joins_total{strategy=\"colocated\"} 45"));
         assert!(rendered.contains("faizdb_cbo_distributed_joins_total{strategy=\"broadcast\"} 12"));
-        assert!(rendered.contains("faizdb_cbo_distributed_joins_total{strategy=\"index_nested_loop_fallback\"} 2"));
-        assert!(rendered.contains("faizdb_cbo_distributed_joins_total{status=\"broadcast_rejected\"} 2"));
+        assert!(rendered.contains(
+            "faizdb_cbo_distributed_joins_total{strategy=\"index_nested_loop_fallback\"} 2"
+        ));
+        assert!(rendered
+            .contains("faizdb_cbo_distributed_joins_total{status=\"broadcast_rejected\"} 2"));
         assert!(rendered.contains("faizdb_cbo_broadcast_bytes_total 8388608"));
         assert!(rendered.contains("faizdb_cbo_fallback_duration_seconds_count 1"));
     }

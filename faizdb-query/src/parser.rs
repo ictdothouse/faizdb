@@ -152,7 +152,11 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
             if parts.len() >= 2 {
                 (
                     parts[0].to_string(),
-                    parts[1..].join(" ").trim_matches('\'').trim_matches('"').to_string(),
+                    parts[1..]
+                        .join(" ")
+                        .trim_matches('\'')
+                        .trim_matches('"')
+                        .to_string(),
                 )
             } else {
                 (rest.to_string(), "".to_string())
@@ -836,7 +840,10 @@ pub fn find_keyword_top_level(text: &str, keyword: &str) -> Option<usize> {
             continue;
         }
 
-        if paren_depth == 0 && i + kw_len <= text_len && text[i..i + kw_len].eq_ignore_ascii_case(keyword) {
+        if paren_depth == 0
+            && i + kw_len <= text_len
+            && text[i..i + kw_len].eq_ignore_ascii_case(keyword)
+        {
             // Check word boundaries before and after keyword
             let before_ok = if i == 0 {
                 true
@@ -1141,7 +1148,9 @@ fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
     // 8. LIKE
     if let Some(like_pos) = find_keyword_top_level(part, "LIKE") {
         let field = extract_field(&part[..like_pos]);
-        let pattern_raw = part[like_pos + 4..].trim().trim_matches(|c| c == '\'' || c == '"');
+        let pattern_raw = part[like_pos + 4..]
+            .trim()
+            .trim_matches(|c| c == '\'' || c == '"');
         return Ok(FilterExpr::Field {
             field,
             op: Operator::Like,
@@ -1403,8 +1412,10 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
         });
     }
 
-    Err("Expected 'INSERT INTO <collection> VALUES (...)' or 'INSERT INTO <collection> {...}'"
-        .to_string())
+    Err(
+        "Expected 'INSERT INTO <collection> VALUES (...)' or 'INSERT INTO <collection> {...}'"
+            .to_string(),
+    )
 }
 
 /// Parse UPDATE <table> SET col1 = val1, col2 = val2 [WHERE ...]
@@ -1421,11 +1432,12 @@ fn parse_update_query(input: &str) -> Result<Statement, String> {
         .trim_matches(|c| c == '`' || c == '"' || c == '\'')
         .to_string();
 
-    let set_pos = find_keyword_top_level(clean, "SET")
-        .ok_or("Expected 'SET' clause in UPDATE statement")?;
+    let set_pos =
+        find_keyword_top_level(clean, "SET").ok_or("Expected 'SET' clause in UPDATE statement")?;
     let after_set = clean[set_pos + 3..].trim();
 
-    let (set_part, where_part) = if let Some(where_pos) = find_keyword_top_level(after_set, "WHERE") {
+    let (set_part, where_part) = if let Some(where_pos) = find_keyword_top_level(after_set, "WHERE")
+    {
         let set_str = after_set[..where_pos].trim();
         let where_str = after_set[where_pos + 5..].trim();
         (set_str, Some(where_str))
@@ -1633,8 +1645,8 @@ fn parse_create_index_query(input: &str) -> Result<Statement, String> {
 /// Parse DROP INDEX [idx_name] ON <collection> or DROP INDEX <field> ON <collection>
 fn parse_drop_index_query(input: &str) -> Result<Statement, String> {
     let clean = input.trim_end_matches(';').trim();
-    let on_pos = find_keyword_top_level(clean, "ON")
-        .ok_or("Expected 'ON <collection>' in DROP INDEX")?;
+    let on_pos =
+        find_keyword_top_level(clean, "ON").ok_or("Expected 'ON <collection>' in DROP INDEX")?;
 
     let index_part = clean[..on_pos].trim();
     let field = index_part
@@ -2039,7 +2051,9 @@ fn parse_cypher_edge(edge_str: &str) -> Result<(Option<String>, usize, Option<f3
             if let Some(w) = doc.get("weight").and_then(|v| v.as_f64()) {
                 weight = Some(w as f32);
             }
-            inside = format!("{}{}", &inside[..p_open], &inside[p_close + 1..]).trim().to_string();
+            inside = format!("{}{}", &inside[..p_open], &inside[p_close + 1..])
+                .trim()
+                .to_string();
         }
 
         // Check for variable depth traversal e.g. *2 or *1..3
@@ -2205,9 +2219,9 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
         let node_str = &pattern_str[node_spans[0].0..=node_spans[0].1];
         let node = parse_cypher_node(node_str)?;
         let t_var = node.var.clone();
-        let col = node
-            .label
-            .ok_or_else(|| "Single node MATCH requires a collection label, e.g. (n:Person)".to_string())?;
+        let col = node.label.ok_or_else(|| {
+            "Single node MATCH requires a collection label, e.g. (n:Person)".to_string()
+        })?;
         inline_filters.extend(node.props_filters);
         (t_var, col)
     } else {
@@ -2227,7 +2241,9 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
             // `(a)<-[:REL]-(b)` means b -> a, so node2 is the source.
             (node2, node1)
         } else {
-            if !node1.var.is_empty() && (return_text.contains(&node1.var) || delete_text.contains(&node1.var)) {
+            if !node1.var.is_empty()
+                && (return_text.contains(&node1.var) || delete_text.contains(&node1.var))
+            {
                 (node2, node1)
             } else {
                 (node1, node2)
@@ -2253,7 +2269,6 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
 
         (t_var, col)
     };
-
 
     // Process WHERE conditions
     let mut where_filters = Vec::new();
@@ -2476,9 +2491,9 @@ fn parse_cypher_create(input: &str) -> Result<Statement, String> {
         // Node creation: CREATE (n:Person {id: 'p1', name: 'Alice'})
         let node_str = &pattern_str[node_spans[0].0..=node_spans[0].1];
         let node = parse_cypher_node(node_str)?;
-        let collection = node
-            .label
-            .ok_or_else(|| "CREATE node requires a collection label, e.g. (:Person {id: '...'})".to_string())?;
+        let collection = node.label.ok_or_else(|| {
+            "CREATE node requires a collection label, e.g. (:Person {id: '...'})".to_string()
+        })?;
 
         return Ok(Statement::Insert {
             collection,
@@ -2496,17 +2511,32 @@ fn parse_cypher_create(input: &str) -> Result<Statement, String> {
         let (relation, _, weight, is_incoming) = parse_cypher_edge(edge_str)?;
 
         let from = if is_incoming {
-            node2.id.clone().or_else(|| Some(node2.var.clone())).unwrap_or_default()
+            node2
+                .id
+                .clone()
+                .or_else(|| Some(node2.var.clone()))
+                .unwrap_or_default()
         } else {
-            node1.id.clone().or_else(|| Some(node1.var.clone())).unwrap_or_default()
+            node1
+                .id
+                .clone()
+                .or_else(|| Some(node1.var.clone()))
+                .unwrap_or_default()
         };
 
         let to = if is_incoming {
-            node1.id.clone().or_else(|| Some(node1.var.clone())).unwrap_or_default()
+            node1
+                .id
+                .clone()
+                .or_else(|| Some(node1.var.clone()))
+                .unwrap_or_default()
         } else {
-            node2.id.clone().or_else(|| Some(node2.var.clone())).unwrap_or_default()
+            node2
+                .id
+                .clone()
+                .or_else(|| Some(node2.var.clone()))
+                .unwrap_or_default()
         };
-
 
         let rel_name = relation.unwrap_or_else(|| "RELATED".to_string());
 
@@ -2831,9 +2861,9 @@ mod tests {
                 let f = filter.expect("Filter should be present");
                 let doc = Document::from_json(r#"{"_id": "1", "age": 20, "city": "KL"}"#).unwrap();
                 assert!(f.matches(&doc));
-                let doc_young = Document::from_json(r#"{"_id": "2", "age": 16, "city": "KL"}"#).unwrap();
+                let doc_young =
+                    Document::from_json(r#"{"_id": "2", "age": 16, "city": "KL"}"#).unwrap();
                 assert!(!f.matches(&doc_young));
-
             }
             _ => panic!("Expected Statement::Find"),
         }
@@ -2841,9 +2871,8 @@ mod tests {
 
     #[test]
     fn test_parse_cypher_traversal_simple() {
-        let stmt =
-            parse_query("MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.id = 'p1' RETURN b")
-                .unwrap();
+        let stmt = parse_query("MATCH (a:Person)-[:KNOWS]->(b:Person) WHERE a.id = 'p1' RETURN b")
+            .unwrap();
         match stmt {
             Statement::Find {
                 collection,
@@ -3012,10 +3041,8 @@ mod tests {
     #[test]
     fn test_parse_cypher_incoming_edge() {
         // (a)<-[:KNOWS]-(b) means edge is b -> a, so traversal source is b, target is a
-        let stmt = parse_query(
-            "MATCH (a:Person)<-[:KNOWS]-(b:Person) WHERE b.id = 'p1' RETURN a",
-        )
-        .unwrap();
+        let stmt = parse_query("MATCH (a:Person)<-[:KNOWS]-(b:Person) WHERE b.id = 'p1' RETURN a")
+            .unwrap();
         match stmt {
             Statement::Find {
                 collection,
@@ -3053,5 +3080,3 @@ mod tests {
         }
     }
 }
-
-

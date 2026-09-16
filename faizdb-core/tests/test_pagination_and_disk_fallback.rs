@@ -68,7 +68,10 @@ fn test_transparent_disk_fallback_on_cache_miss() {
     // Direct disk verification: verify the LSM storage engine actually has the document
     let sample_id = &doc_ids[0];
     let disk_key = format!("doc:customers:{sample_id}").into_bytes();
-    let stored_bytes = storage.get(&disk_key).unwrap().expect("Must exist in LSM store");
+    let stored_bytes = storage
+        .get(&disk_key)
+        .unwrap()
+        .expect("Must exist in LSM store");
     assert!(!stored_bytes.is_empty());
 
     // Test fallback: find_by_id successfully retrieves document and repopulates memory
@@ -164,12 +167,17 @@ fn test_find_all_and_disk_fallback_operations() {
     duplicate_doc.id = faizdb_core::document::model::DocumentId::from_string(evicted_id.clone());
     duplicate_doc.set("sku", "SKU_DUPLICATE");
     let insert_res = col.insert(duplicate_doc);
-    assert!(insert_res.is_err(), "Must reject duplicate key for disk-resident doc");
+    assert!(
+        insert_res.is_err(),
+        "Must reject duplicate key for disk-resident doc"
+    );
 
     // 4. Verify update_by_id on disk-resident record
-    let updated = col.update_by_id(evicted_id, |d| {
-        d.set("stock", 9999);
-    }).expect("update_by_id succeeds on evicted record");
+    let updated = col
+        .update_by_id(evicted_id, |d| {
+            d.set("stock", 9999);
+        })
+        .expect("update_by_id succeeds on evicted record");
     assert_eq!(updated.get("stock").unwrap().as_i64(), Some(9999));
 
     // Verify update persisted to disk
@@ -179,7 +187,9 @@ fn test_find_all_and_disk_fallback_operations() {
     assert_eq!(from_disk.get("stock").unwrap().as_i64(), Some(9999));
 
     // 5. Verify delete_by_id on disk-resident record
-    let deleted = col.delete_by_id(evicted_id).expect("delete_by_id succeeds on evicted record");
+    let deleted = col
+        .delete_by_id(evicted_id)
+        .expect("delete_by_id succeeds on evicted record");
     assert_eq!(deleted.id.as_str(), evicted_id.as_str());
     assert_eq!(col.stats().document_count, 9);
     assert!(col.find_by_id(evicted_id).is_err());
@@ -189,7 +199,10 @@ fn test_find_all_and_disk_fallback_operations() {
     for id in &ids[1..6] {
         let _ = col.find_by_id(id);
     }
-    assert!(col.in_memory_count() <= 3, "RAM cache must not exceed max_memory_documents");
+    assert!(
+        col.in_memory_count() <= 3,
+        "RAM cache must not exceed max_memory_documents"
+    );
 }
 
 #[test]
@@ -214,7 +227,10 @@ fn test_secondary_index_and_bm25_with_evicted_records() {
     for i in 0..6 {
         let mut doc = Document::new();
         doc.set("category", if i % 2 == 0 { "tech" } else { "news" });
-        doc.set("content", format!("Deep quantum computing tutorial article {i}"));
+        doc.set(
+            "content",
+            format!("Deep quantum computing tutorial article {i}"),
+        );
         col.insert(doc).unwrap();
     }
 
@@ -222,22 +238,40 @@ fn test_secondary_index_and_bm25_with_evicted_records() {
     assert!(col.in_memory_count() <= 2);
 
     // 1. Create secondary index AFTER documents are already evicted to disk
-    col.create_secondary_index("category", false).expect("Index created");
+    col.create_secondary_index("category", false)
+        .expect("Index created");
 
     // 2. Query secondary index for "tech" (should return 3 items, even though resident RAM is <=2)
     let tech_docs = col
-        .find_by_secondary_index("category", &faizdb_core::document::model::Value::String("tech".into()))
+        .find_by_secondary_index(
+            "category",
+            &faizdb_core::document::model::Value::String("tech".into()),
+        )
         .expect("Index lookup succeeds");
-    assert_eq!(tech_docs.len(), 3, "Secondary index must retrieve all 3 tech articles across disk");
+    assert_eq!(
+        tech_docs.len(),
+        3,
+        "Secondary index must retrieve all 3 tech articles across disk"
+    );
 
     // 3. BM25 Full-Text Search across disk-evicted documents
     let search_results = col.search_text("quantum", false, 10);
-    assert_eq!(search_results.len(), 6, "BM25 search must find all 6 articles including disk-evicted ones");
+    assert_eq!(
+        search_results.len(),
+        6,
+        "BM25 search must find all 6 articles including disk-evicted ones"
+    );
 
     // 4. Count with filter across disk-evicted documents
-    let filter = vec![("category".to_string(), faizdb_core::document::model::Value::String("news".into()))];
+    let filter = vec![(
+        "category".to_string(),
+        faizdb_core::document::model::Value::String("news".into()),
+    )];
     let news_count = col.count(&filter);
-    assert_eq!(news_count, 3, "Count with filter must accurately count disk records");
+    assert_eq!(
+        news_count, 3,
+        "Count with filter must accurately count disk records"
+    );
 
     // 5. Delete many with filter across disk-evicted documents
     let deleted_count = col.delete_many(&filter).expect("delete_many succeeds");
@@ -336,7 +370,7 @@ fn test_sstable_corrupted_overflow_protection() {
     // Craft a byte buffer claiming huge key_len to trigger overflow
     let mut corrupted = Vec::new();
     corrupted.extend_from_slice(&u32::MAX.to_le_bytes()); // key_len = u32::MAX
-    corrupted.extend_from_slice(&100u32.to_le_bytes());   // val_len = 100
+    corrupted.extend_from_slice(&100u32.to_le_bytes()); // val_len = 100
     corrupted.push(0); // tombstone
 
     // Must return Err(SsTableCorrupted), NOT panic or overflow
@@ -356,5 +390,8 @@ fn test_wal_corrupted_payload_limit() {
 
     let mut cursor = Cursor::new(corrupted);
     let result = WalRecord::from_reader(&mut cursor, 0);
-    assert!(result.is_err(), "Must reject payload exceeding MAX_WAL_SIZE");
+    assert!(
+        result.is_err(),
+        "Must reject payload exceeding MAX_WAL_SIZE"
+    );
 }

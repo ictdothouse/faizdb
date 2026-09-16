@@ -215,7 +215,7 @@ pub fn weakly_connected_components(graph: &GraphStore) -> Vec<Vec<String>> {
         components.push(component);
     }
 
-    components.sort_by(|a, b| b.len().cmp(&a.len()));
+    components.sort_by_key(|a| std::cmp::Reverse(a.len()));
     components
 }
 
@@ -229,9 +229,7 @@ pub struct DegreeCentrality {
 
 /// Compute Degree Centrality for a vertex
 pub fn degree_centrality(graph: &GraphStore, vertex_id: &str) -> Option<DegreeCentrality> {
-    if graph.get_vertex(vertex_id).is_none() {
-        return None;
-    }
+    graph.get_vertex(vertex_id)?;
 
     let in_degree = graph.edges(vertex_id, Direction::Incoming, None).len();
     let out_degree = graph.edges(vertex_id, Direction::Outgoing, None).len();

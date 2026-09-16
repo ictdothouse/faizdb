@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use faizdb_core::document::model::{Document, Value as FaizValue};
 use faizdb_query::DatabaseContext;
 use faizdb_server::wire::postgres::codec::decode_pg_param;
 use faizdb_server::wire::postgres::handler::{
     handle_postgres_query_state, infer_query_row_description,
 };
+use std::sync::Arc;
 
 #[test]
 fn test_extended_query_describe_inference() {
@@ -12,7 +12,10 @@ fn test_extended_query_describe_inference() {
 
     // 1. SELECT queries should return Some(fields)
     let desc_users = infer_query_row_description(&db, "SELECT * FROM users");
-    assert!(desc_users.is_some(), "SELECT queries must produce RowDescription on Describe");
+    assert!(
+        desc_users.is_some(),
+        "SELECT queries must produce RowDescription on Describe"
+    );
     let fields = desc_users.unwrap();
     assert_eq!(fields[0].name, "_id");
 
@@ -23,7 +26,8 @@ fn test_extended_query_describe_inference() {
     assert_eq!(type_fields[0].name, "typname");
     assert_eq!(type_fields[1].name, "oid");
 
-    let desc_settings = infer_query_row_description(&db, "SELECT current_setting('server_version_num')");
+    let desc_settings =
+        infer_query_row_description(&db, "SELECT current_setting('server_version_num')");
     assert!(desc_settings.is_some());
 
     // 3. Mutation and DDL queries should return None (mapping to NoData 'n' packet)
@@ -119,26 +123,46 @@ fn test_postgres_orm_introspection_catalogs() {
     col.insert(d).unwrap();
 
     // 1. current_setting
-    let v_num_resp = handle_postgres_query_state(&db, "SELECT current_setting('server_version_num')", &mut txn_state);
+    let v_num_resp = handle_postgres_query_state(
+        &db,
+        "SELECT current_setting('server_version_num')",
+        &mut txn_state,
+    );
     assert!(String::from_utf8_lossy(&v_num_resp).contains("160000"));
 
-    let v_resp = handle_postgres_query_state(&db, "SELECT current_setting('server_version')", &mut txn_state);
+    let v_resp = handle_postgres_query_state(
+        &db,
+        "SELECT current_setting('server_version')",
+        &mut txn_state,
+    );
     assert!(String::from_utf8_lossy(&v_resp).contains("16.0"));
 
     // 2. pg_constraint (Primary key)
-    let pkey_resp = handle_postgres_query_state(&db, "SELECT conname, contype, conrelid FROM pg_catalog.pg_constraint", &mut txn_state);
+    let pkey_resp = handle_postgres_query_state(
+        &db,
+        "SELECT conname, contype, conrelid FROM pg_catalog.pg_constraint",
+        &mut txn_state,
+    );
     let pkey_str = String::from_utf8_lossy(&pkey_resp);
     assert!(pkey_str.contains("products_pkey"));
     assert!(pkey_str.contains("p"));
 
     // 3. pg_class (Ordinary table 'r')
-    let class_resp = handle_postgres_query_state(&db, "SELECT relname, relkind, reltuples FROM pg_class", &mut txn_state);
+    let class_resp = handle_postgres_query_state(
+        &db,
+        "SELECT relname, relkind, reltuples FROM pg_class",
+        &mut txn_state,
+    );
     let class_str = String::from_utf8_lossy(&class_resp);
     assert!(class_str.contains("products"));
     assert!(class_str.contains("r"));
 
     // 4. pg_attribute (Columns & OIDs)
-    let attr_resp = handle_postgres_query_state(&db, "SELECT attname, atttypid, attnum FROM pg_attribute", &mut txn_state);
+    let attr_resp = handle_postgres_query_state(
+        &db,
+        "SELECT attname, atttypid, attnum FROM pg_attribute",
+        &mut txn_state,
+    );
     let attr_str = String::from_utf8_lossy(&attr_resp);
     assert!(attr_str.contains("_id"));
     assert!(attr_str.contains("title"));

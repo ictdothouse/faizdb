@@ -110,7 +110,10 @@ pub fn merge_sstables(
     }
 
     // Streaming merge: write directly as we pop from the heap
-    let compression = if readers.iter().any(|s| s.compression() == crate::storage::sstable::Compression::Lz4) {
+    let compression = if readers
+        .iter()
+        .any(|s| s.compression() == crate::storage::sstable::Compression::Lz4)
+    {
         crate::storage::sstable::Compression::Lz4
     } else {
         crate::storage::sstable::Compression::None

@@ -44,7 +44,11 @@ pub fn handle_postgres_query_state(
             out.extend_from_slice(&encode_ready_for_query(b'I'));
             return out;
         }
-        if upper == "COMMIT" || upper == "COMMIT TRANSACTION" || upper == "COMMIT WORK" || upper == "END" {
+        if upper == "COMMIT"
+            || upper == "COMMIT TRANSACTION"
+            || upper == "COMMIT WORK"
+            || upper == "END"
+        {
             *txn_state = b'I';
             let mut out = encode_command_complete("ROLLBACK");
             out.extend_from_slice(&encode_ready_for_query(b'I'));
@@ -80,7 +84,11 @@ pub fn handle_postgres_query_state(
         out.extend_from_slice(&encode_ready_for_query(b'T'));
         return out;
     }
-    if upper == "COMMIT" || upper == "COMMIT TRANSACTION" || upper == "COMMIT WORK" || upper == "END" {
+    if upper == "COMMIT"
+        || upper == "COMMIT TRANSACTION"
+        || upper == "COMMIT WORK"
+        || upper == "END"
+    {
         *txn_state = b'I';
         let mut out = encode_command_complete("COMMIT");
         out.extend_from_slice(&encode_ready_for_query(b'I'));
@@ -278,7 +286,6 @@ pub fn handle_postgres_query(
     resp
 }
 
-
 /// Handle SHOW queries (e.g. SHOW client_encoding, SHOW TABLES)
 fn handle_show_variable(db: &Arc<DatabaseContext>, var: &str, txn_state: u8) -> Vec<u8> {
     if var == "tables" || var == "collections" {
@@ -372,7 +379,10 @@ fn handle_pg_namespace(txn_state: u8) -> Vec<u8> {
         let row = vec![Some(nsp.to_string()), Some(oid.to_string())];
         out.extend_from_slice(&encode_data_row(&row));
     }
-    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", namespaces.len())));
+    out.extend_from_slice(&encode_command_complete(&format!(
+        "SELECT {}",
+        namespaces.len()
+    )));
     out.extend_from_slice(&encode_ready_for_query(txn_state));
     out
 }
@@ -490,12 +500,15 @@ fn handle_pg_class(db: &Arc<DatabaseContext>, txn_state: u8) -> Vec<u8> {
         let row = vec![
             Some(col_name.clone()),
             Some("2200".to_string()), // public namespace OID
-            Some("r".to_string()),     // ordinary table
+            Some("r".to_string()),    // ordinary table
             Some(count.to_string()),
         ];
         out.extend_from_slice(&encode_data_row(&row));
     }
-    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", collections.len())));
+    out.extend_from_slice(&encode_command_complete(&format!(
+        "SELECT {}",
+        collections.len()
+    )));
     out.extend_from_slice(&encode_ready_for_query(txn_state));
     out
 }
@@ -664,14 +677,16 @@ fn handle_list_columns(db: &Arc<DatabaseContext>, txn_state: u8) -> Vec<u8> {
         for doc in &sample_docs {
             for (k, v) in &doc.fields {
                 if k != "_id" && k != "id" {
-                    discovered_fields.entry(k.clone()).or_insert_with(|| match v {
-                        Value::Boolean(_) => "boolean",
-                        Value::Integer(_) => "bigint",
-                        Value::Float(_) => "double precision",
-                        Value::String(_) => "text",
-                        Value::Array(_) | Value::Object(_) => "jsonb",
-                        _ => "text",
-                    });
+                    discovered_fields
+                        .entry(k.clone())
+                        .or_insert_with(|| match v {
+                            Value::Boolean(_) => "boolean",
+                            Value::Integer(_) => "bigint",
+                            Value::Float(_) => "double precision",
+                            Value::String(_) => "text",
+                            Value::Array(_) | Value::Object(_) => "jsonb",
+                            _ => "text",
+                        });
                 }
             }
         }
@@ -727,7 +742,10 @@ fn handle_pg_stat_user_tables(db: &Arc<DatabaseContext>, txn_state: u8) -> Vec<u
         ];
         out.extend_from_slice(&encode_data_row(&row));
     }
-    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", collections.len())));
+    out.extend_from_slice(&encode_command_complete(&format!(
+        "SELECT {}",
+        collections.len()
+    )));
     out.extend_from_slice(&encode_ready_for_query(txn_state));
     out
 }
@@ -748,7 +766,9 @@ fn handle_pg_indexes(db: &Arc<DatabaseContext>, txn_state: u8) -> Vec<u8> {
             Some("public".to_string()),
             Some(col_name.clone()),
             Some(format!("{col_name}_pkey")),
-            Some(format!("CREATE UNIQUE INDEX {col_name}_pkey ON public.{col_name} USING btree (_id)")),
+            Some(format!(
+                "CREATE UNIQUE INDEX {col_name}_pkey ON public.{col_name} USING btree (_id)"
+            )),
         ];
         out.extend_from_slice(&encode_data_row(&row));
         count += 1;
@@ -772,8 +792,18 @@ fn handle_pg_settings(txn_state: u8) -> Vec<u8> {
         ("server_version_num", "160000", "", "Version"),
         ("client_encoding", "UTF8", "", "Client Connection Defaults"),
         ("server_encoding", "UTF8", "", "Client Connection Defaults"),
-        ("standard_conforming_strings", "on", "", "Client Connection Defaults"),
-        ("max_connections", "10000", "", "Connections and Authentication"),
+        (
+            "standard_conforming_strings",
+            "on",
+            "",
+            "Client Connection Defaults",
+        ),
+        (
+            "max_connections",
+            "10000",
+            "",
+            "Connections and Authentication",
+        ),
         ("shared_buffers", "128MB", "MB", "Resource Usage"),
     ];
     for (name, setting, unit, cat) in settings {
@@ -785,7 +815,10 @@ fn handle_pg_settings(txn_state: u8) -> Vec<u8> {
         ];
         out.extend_from_slice(&encode_data_row(&row));
     }
-    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", settings.len())));
+    out.extend_from_slice(&encode_command_complete(&format!(
+        "SELECT {}",
+        settings.len()
+    )));
     out.extend_from_slice(&encode_ready_for_query(txn_state));
     out
 }
@@ -1152,4 +1185,3 @@ pub fn infer_query_row_description(
 
     Some(vec![PgField::text("id")])
 }
-

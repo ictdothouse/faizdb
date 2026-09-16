@@ -365,4 +365,3 @@ pub fn decode_pg_param(format_code: i16, param_bytes: &[u8], type_oid: Option<i3
         }
     }
 }
-

@@ -159,7 +159,11 @@ impl VectorGraph {
 
         let mut collected_edges = Vec::new();
         for node in &ranked_nodes {
-            for edge in self.graph.edges(&node.vertex.id, crate::graph::Direction::Outgoing, relation_filter) {
+            for edge in self.graph.edges(
+                &node.vertex.id,
+                crate::graph::Direction::Outgoing,
+                relation_filter,
+            ) {
                 if retrieved_id_set.contains(&edge.to) {
                     collected_edges.push((*edge).clone());
                 }
@@ -276,11 +280,7 @@ mod tests {
         vg.insert_node_with_vector(v4, vec![0.0, 0.0, 1.0]).unwrap();
 
         // 2. Connect topology via edges
-        vg.add_edge(Edge::new(
-            "incident_404",
-            "db_cluster_alpha",
-            "AFFECTS",
-        ));
+        vg.add_edge(Edge::new("incident_404", "db_cluster_alpha", "AFFECTS"));
         vg.add_edge(Edge::new(
             "user_lead_engineer",
             "db_cluster_alpha",
@@ -313,7 +313,9 @@ mod tests {
         assert_eq!(rag_context.edges[0].relation, "AFFECTS");
 
         // Verify Markdown is generated cleanly
-        assert!(rag_context.formatted_markdown.contains("# 🧠 FaizDB Fused GraphRAG Context"));
+        assert!(rag_context
+            .formatted_markdown
+            .contains("# 🧠 FaizDB Fused GraphRAG Context"));
         assert!(rag_context.formatted_markdown.contains("Incident"));
 
         // 4. Graph-Constrained Vector Search

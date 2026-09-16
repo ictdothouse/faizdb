@@ -9,9 +9,10 @@ pub mod sharding;
 pub use crdt::{CrdtDocument, LwwRegister, OrSet, PnCounter, VersionVector};
 pub use geo::{GeoReplicationEngine, RegionConfig, ReplicationDelta};
 pub use raft::{
-    AppendEntriesArgs, AppendEntriesReply, ClusterNodeInfo, InMemoryRaftRouter, InstallSnapshotArgs,
-    InstallSnapshotReply, LogEntry, LogIndex, NodeRole, RaftConfig, RaftDiskStore, RaftNode,
-    RaftRpcTransport, RaftTickAction, RequestVoteArgs, RequestVoteReply, Term,
+    AppendEntriesArgs, AppendEntriesReply, ClusterNodeInfo, InMemoryRaftRouter,
+    InstallSnapshotArgs, InstallSnapshotReply, LogEntry, LogIndex, NodeRole, RaftConfig,
+    RaftDiskStore, RaftNode, RaftRpcTransport, RaftTickAction, RequestVoteArgs, RequestVoteReply,
+    Term,
 };
 pub use scatter_gather::{
     MergedQueryResult, PartitionResult, ScatterGatherCoordinator, ScatterPartition, ScatterQuery,

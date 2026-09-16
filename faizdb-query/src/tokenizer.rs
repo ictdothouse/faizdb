@@ -35,22 +35,22 @@ pub enum TokenKind {
     BooleanLiteral(bool),
     NullLiteral,
     // Operators
-    Eq,         // =
-    Neq,        // != or <>
-    Lt,         // <
-    Gt,         // >
-    Lte,        // <=
-    Gte,        // >=
-    Plus,       // +
-    Minus,      // -
-    Star,       // *
-    Slash,      // /
+    Eq,    // =
+    Neq,   // != or <>
+    Lt,    // <
+    Gt,    // >
+    Lte,   // <=
+    Gte,   // >=
+    Plus,  // +
+    Minus, // -
+    Star,  // *
+    Slash, // /
     // Punctuation
-    Comma,      // ,
-    Semicolon,  // ;
-    Dot,        // .
-    LParen,     // (
-    RParen,     // )
+    Comma,     // ,
+    Semicolon, // ;
+    Dot,       // .
+    LParen,    // (
+    RParen,    // )
     // End of input
     Eof,
 }
@@ -232,11 +232,9 @@ impl Tokenizer {
         // Already consumed /*
         loop {
             match self.advance() {
-                Some('*') => {
-                    if self.peek() == Some('/') {
-                        self.advance();
-                        return Ok(());
-                    }
+                Some('*') if self.peek() == Some('/') => {
+                    self.advance();
+                    return Ok(());
                 }
                 None => {
                     return Err(format!(
@@ -283,45 +281,118 @@ impl Tokenizer {
 
         // Single-character tokens
         match ch {
-            ',' => { self.advance(); return Ok(Token { kind: TokenKind::Comma, span }); }
-            ';' => { self.advance(); return Ok(Token { kind: TokenKind::Semicolon, span }); }
-            '.' => { self.advance(); return Ok(Token { kind: TokenKind::Dot, span }); }
-            '(' => { self.advance(); return Ok(Token { kind: TokenKind::LParen, span }); }
-            ')' => { self.advance(); return Ok(Token { kind: TokenKind::RParen, span }); }
-            '*' => { self.advance(); return Ok(Token { kind: TokenKind::Star, span }); }
-            '+' => { self.advance(); return Ok(Token { kind: TokenKind::Plus, span }); }
-            '/' => { self.advance(); return Ok(Token { kind: TokenKind::Slash, span }); }
+            ',' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::Comma,
+                    span,
+                });
+            }
+            ';' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::Semicolon,
+                    span,
+                });
+            }
+            '.' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::Dot,
+                    span,
+                });
+            }
+            '(' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::LParen,
+                    span,
+                });
+            }
+            ')' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::RParen,
+                    span,
+                });
+            }
+            '*' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::Star,
+                    span,
+                });
+            }
+            '+' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::Plus,
+                    span,
+                });
+            }
+            '/' => {
+                self.advance();
+                return Ok(Token {
+                    kind: TokenKind::Slash,
+                    span,
+                });
+            }
             _ => {}
         }
 
         // Multi-character operators
         if ch == '!' && self.peek_ahead(1) == Some('=') {
-            self.advance(); self.advance();
-            return Ok(Token { kind: TokenKind::Neq, span });
+            self.advance();
+            self.advance();
+            return Ok(Token {
+                kind: TokenKind::Neq,
+                span,
+            });
         }
         if ch == '<' && self.peek_ahead(1) == Some('>') {
-            self.advance(); self.advance();
-            return Ok(Token { kind: TokenKind::Neq, span });
+            self.advance();
+            self.advance();
+            return Ok(Token {
+                kind: TokenKind::Neq,
+                span,
+            });
         }
         if ch == '<' && self.peek_ahead(1) == Some('=') {
-            self.advance(); self.advance();
-            return Ok(Token { kind: TokenKind::Lte, span });
+            self.advance();
+            self.advance();
+            return Ok(Token {
+                kind: TokenKind::Lte,
+                span,
+            });
         }
         if ch == '>' && self.peek_ahead(1) == Some('=') {
-            self.advance(); self.advance();
-            return Ok(Token { kind: TokenKind::Gte, span });
+            self.advance();
+            self.advance();
+            return Ok(Token {
+                kind: TokenKind::Gte,
+                span,
+            });
         }
         if ch == '<' {
             self.advance();
-            return Ok(Token { kind: TokenKind::Lt, span });
+            return Ok(Token {
+                kind: TokenKind::Lt,
+                span,
+            });
         }
         if ch == '>' {
             self.advance();
-            return Ok(Token { kind: TokenKind::Gt, span });
+            return Ok(Token {
+                kind: TokenKind::Gt,
+                span,
+            });
         }
         if ch == '=' {
             self.advance();
-            return Ok(Token { kind: TokenKind::Eq, span });
+            return Ok(Token {
+                kind: TokenKind::Eq,
+                span,
+            });
         }
 
         // Minus (could be negative number or operator)
@@ -333,7 +404,10 @@ impl Tokenizer {
                     return self.read_number(span, true);
                 }
             }
-            return Ok(Token { kind: TokenKind::Minus, span });
+            return Ok(Token {
+                kind: TokenKind::Minus,
+                span,
+            });
         }
 
         // String literals
@@ -389,11 +463,16 @@ impl Tokenizer {
                         Some('t') => s.push('\t'),
                         Some('\\') => s.push('\\'),
                         Some('\'') => s.push('\''),
-                        Some(c) => { s.push('\\'); s.push(c); }
-                        None => return Err(format!(
-                            "Unterminated string literal at line {} col {}",
-                            span.line, span.col
-                        )),
+                        Some(c) => {
+                            s.push('\\');
+                            s.push(c);
+                        }
+                        None => {
+                            return Err(format!(
+                                "Unterminated string literal at line {} col {}",
+                                span.line, span.col
+                            ))
+                        }
                     }
                 }
                 Some(c) => s.push(c),
@@ -482,7 +561,10 @@ impl Tokenizer {
                     kind: TokenKind::FloatLiteral(f),
                     span,
                 }),
-                Err(_) => Err(format!("Invalid float literal '{}' at line {} col {}", s, span.line, span.col)),
+                Err(_) => Err(format!(
+                    "Invalid float literal '{}' at line {} col {}",
+                    s, span.line, span.col
+                )),
             }
         } else {
             match s.parse::<i64>() {
@@ -490,7 +572,10 @@ impl Tokenizer {
                     kind: TokenKind::IntegerLiteral(i),
                     span,
                 }),
-                Err(_) => Err(format!("Invalid integer literal '{}' at line {} col {}", s, span.line, span.col)),
+                Err(_) => Err(format!(
+                    "Invalid integer literal '{}' at line {} col {}",
+                    s, span.line, span.col
+                )),
             }
         }
     }
@@ -1016,7 +1101,10 @@ impl<'a> ExprParser<'a> {
             return match tok.kind {
                 TokenKind::IntegerLiteral(i) => Ok(Value::Integer(-i)),
                 TokenKind::FloatLiteral(f) => Ok(Value::Float(-f)),
-                _ => Err(format!("Expected numeric literal after '-' at line {} col {}", tok.span.line, tok.span.col)),
+                _ => Err(format!(
+                    "Expected numeric literal after '-' at line {} col {}",
+                    tok.span.line, tok.span.col
+                )),
             };
         }
 
@@ -1033,9 +1121,7 @@ impl<'a> ExprParser<'a> {
             TokenKind::Identifier(ref s) if s.eq_ignore_ascii_case("false") => {
                 Ok(Value::Boolean(false))
             }
-            TokenKind::Identifier(ref s) if s.eq_ignore_ascii_case("null") => {
-                Ok(Value::Null)
-            }
+            TokenKind::Identifier(ref s) if s.eq_ignore_ascii_case("null") => Ok(Value::Null),
             _ => Err(format!(
                 "Expected literal value but got {:?} at line {} col {}",
                 tok.kind, tok.span.line, tok.span.col
@@ -1062,27 +1148,41 @@ mod tests {
     #[test]
     fn test_string_literals() {
         let tokens = Tokenizer::tokenize("SELECT * FROM t WHERE name = 'hello world'").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::StringLiteral("hello world".to_string())));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::StringLiteral("hello world".to_string())));
     }
 
     #[test]
     fn test_escaped_quotes() {
         let tokens = Tokenizer::tokenize("SELECT 'it''s escaped'").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::StringLiteral("it's escaped".to_string())));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::StringLiteral("it's escaped".to_string())));
     }
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_numeric_literals() {
         let tokens = Tokenizer::tokenize("SELECT 42, 3.14, -100, 1e5").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::IntegerLiteral(42)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::FloatLiteral(3.14)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::IntegerLiteral(-100)));
-        assert!(tokens.iter().any(|t| matches!(&t.kind, TokenKind::FloatLiteral(f) if (*f - 1e5).abs() < 1.0)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::IntegerLiteral(42)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::FloatLiteral(3.14)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::IntegerLiteral(-100)));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(&t.kind, TokenKind::FloatLiteral(f) if (*f - 1e5).abs() < 1.0)));
     }
 
     #[test]
     fn test_operators() {
-        let tokens = Tokenizer::tokenize("a = 1 AND b != 2 AND c <> 3 AND d >= 4 AND e <= 5").unwrap();
+        let tokens =
+            Tokenizer::tokenize("a = 1 AND b != 2 AND c <> 3 AND d >= 4 AND e <= 5").unwrap();
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Eq));
         assert!(tokens.iter().filter(|t| t.kind == TokenKind::Neq).count() == 2);
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Gte));
@@ -1092,37 +1192,62 @@ mod tests {
     #[test]
     fn test_quoted_identifiers() {
         let tokens = Tokenizer::tokenize(r#"SELECT "user name" FROM `my table`"#).unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Identifier("user name".to_string())));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Identifier("my table".to_string())));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Identifier("user name".to_string())));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Identifier("my table".to_string())));
     }
 
     #[test]
     fn test_comments() {
         let tokens = Tokenizer::tokenize("SELECT 1 -- this is a comment\n FROM t").unwrap();
         // Comments should be skipped
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::From)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::From)));
     }
 
     #[test]
     fn test_block_comments() {
         let tokens = Tokenizer::tokenize("SELECT /* skip this */ 1 FROM t").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::IntegerLiteral(1)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::From)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::IntegerLiteral(1)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::From)));
     }
 
     #[test]
     fn test_between_like_keywords() {
-        let tokens = Tokenizer::tokenize("WHERE age BETWEEN 18 AND 65 AND name LIKE '%faiz%'").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Between)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Like)));
+        let tokens =
+            Tokenizer::tokenize("WHERE age BETWEEN 18 AND 65 AND name LIKE '%faiz%'").unwrap();
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Between)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Like)));
     }
 
     #[test]
     fn test_is_null() {
         let tokens = Tokenizer::tokenize("WHERE email IS NULL AND name IS NOT NULL").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Is)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Not)));
-        assert!(tokens.iter().filter(|t| t.kind == TokenKind::NullLiteral).count() == 2);
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Is)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Not)));
+        assert!(
+            tokens
+                .iter()
+                .filter(|t| t.kind == TokenKind::NullLiteral)
+                .count()
+                == 2
+        );
     }
 
     #[test]
@@ -1136,9 +1261,15 @@ mod tests {
     #[test]
     fn test_alter_table_keywords() {
         let tokens = Tokenizer::tokenize("ALTER TABLE users ADD COLUMN email").unwrap();
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Alter)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Add)));
-        assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Column)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Alter)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Add)));
+        assert!(tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Column)));
     }
 
     #[test]
@@ -1177,8 +1308,16 @@ mod tests {
         match expr {
             FilterExpr::And(clauses) => {
                 assert_eq!(clauses.len(), 2);
-                assert!(matches!(&clauses[0], FilterExpr::Field { op: Operator::Between, .. }));
-                assert!(matches!(&clauses[1], FilterExpr::Not(inner) if matches!(**inner, FilterExpr::Field { op: Operator::Between, .. })));
+                assert!(matches!(
+                    &clauses[0],
+                    FilterExpr::Field {
+                        op: Operator::Between,
+                        ..
+                    }
+                ));
+                assert!(
+                    matches!(&clauses[1], FilterExpr::Not(inner) if matches!(**inner, FilterExpr::Field { op: Operator::Between, .. }))
+                );
             }
             _ => panic!("Expected AND containing BETWEEN and NOT BETWEEN"),
         }
@@ -1191,10 +1330,34 @@ mod tests {
         match expr {
             FilterExpr::And(clauses) => {
                 assert_eq!(clauses.len(), 4);
-                assert!(matches!(&clauses[0], FilterExpr::Field { op: Operator::In, .. }));
-                assert!(matches!(&clauses[1], FilterExpr::Field { op: Operator::Like, .. }));
-                assert!(matches!(&clauses[2], FilterExpr::Field { op: Operator::IsNull, .. }));
-                assert!(matches!(&clauses[3], FilterExpr::Field { op: Operator::IsNotNull, .. }));
+                assert!(matches!(
+                    &clauses[0],
+                    FilterExpr::Field {
+                        op: Operator::In,
+                        ..
+                    }
+                ));
+                assert!(matches!(
+                    &clauses[1],
+                    FilterExpr::Field {
+                        op: Operator::Like,
+                        ..
+                    }
+                ));
+                assert!(matches!(
+                    &clauses[2],
+                    FilterExpr::Field {
+                        op: Operator::IsNull,
+                        ..
+                    }
+                ));
+                assert!(matches!(
+                    &clauses[3],
+                    FilterExpr::Field {
+                        op: Operator::IsNotNull,
+                        ..
+                    }
+                ));
             }
             _ => panic!("Expected 4-clause AND expression"),
         }

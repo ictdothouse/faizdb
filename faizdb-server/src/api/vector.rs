@@ -321,7 +321,9 @@ pub async fn delete_vector(
         None => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(ApiResponse::err(format!("Vector index '{index_name}' not found"))),
+                Json(ApiResponse::err(format!(
+                    "Vector index '{index_name}' not found"
+                ))),
             );
         }
     };
@@ -381,4 +383,3 @@ pub async fn drop_vector_index(
         )
     }
 }
-

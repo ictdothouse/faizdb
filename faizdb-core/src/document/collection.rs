@@ -365,7 +365,8 @@ impl Collection {
                         if now_ms >= expire_at_ms {
                             // Document expired while offline/rebooting: do not revive; purge from persistent storage
                             if let Some(storage) = &self.storage {
-                                let key = format!("doc:{}:{}", self.config.name, id_str).into_bytes();
+                                let key =
+                                    format!("doc:{}:{}", self.config.name, id_str).into_bytes();
                                 let _ = storage.delete(&key);
                             }
                             return;
@@ -655,11 +656,11 @@ impl Collection {
                         self.total_size
                             .fetch_add(new_size - old_size, Ordering::Relaxed);
                     } else {
-                        let _ = self
-                            .total_size
-                            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
-                                Some(s.saturating_sub(old_size - new_size))
-                            });
+                        let _ = self.total_size.fetch_update(
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                            |s| Some(s.saturating_sub(old_size - new_size)),
+                        );
                     }
 
                     let doc_text = extract_doc_text(&doc);
@@ -702,7 +703,8 @@ impl Collection {
                 }
                 let updated = doc.clone();
                 if let Some(storage) = &self.storage {
-                    let key = format!("doc:{}:{}", self.config.name, updated.id.as_str()).into_bytes();
+                    let key =
+                        format!("doc:{}:{}", self.config.name, updated.id.as_str()).into_bytes();
                     if let Ok(val) = serde_json::to_vec(&updated) {
                         let _ = storage.put(&key, &val);
                     }
@@ -729,7 +731,8 @@ impl Collection {
                                 for (key, value) in updates {
                                     doc.set(key.clone(), value.clone());
                                 }
-                                let key = format!("doc:{}:{}", self.config.name, id_str).into_bytes();
+                                let key =
+                                    format!("doc:{}:{}", self.config.name, id_str).into_bytes();
                                 if let Ok(val) = serde_json::to_vec(&doc) {
                                     let _ = storage.put(&key, &val);
                                 }

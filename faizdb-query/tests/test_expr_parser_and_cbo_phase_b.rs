@@ -14,7 +14,8 @@ use faizdb_query::tokenizer::ExprParser;
 #[test]
 fn test_phase_b_expr_parser_deeply_nested() {
     let where_clause = "((status = 'active' OR status = 'pending') AND (age >= 18 OR score BETWEEN 80 AND 100)) AND NOT (is_banned = true)";
-    let filter = ExprParser::parse_from_str(where_clause).expect("Should parse nested boolean expression");
+    let filter =
+        ExprParser::parse_from_str(where_clause).expect("Should parse nested boolean expression");
 
     // Matching document: active, 20, banned=false
     let mut doc_match = Document::new();
@@ -51,7 +52,7 @@ fn test_phase_b_expr_parser_deeply_nested() {
 
 #[test]
 fn test_phase_b_multi_column_order_by_execution() {
-    let mut ctx = DatabaseContext::new();
+    let ctx = DatabaseContext::new();
 
     // Create employees table
     let create_stmt = parse_query("CREATE TABLE employees").unwrap();
@@ -105,16 +106,28 @@ fn test_phase_b_multi_column_order_by_execution() {
     assert_eq!(docs[1].get("department").unwrap().as_str(), Some("Design"));
     assert_eq!(docs[1].get("salary").unwrap().as_i64(), Some(110_000));
 
-    assert_eq!(docs[2].get("department").unwrap().as_str(), Some("Engineering"));
+    assert_eq!(
+        docs[2].get("department").unwrap().as_str(),
+        Some("Engineering")
+    );
     assert_eq!(docs[2].get("salary").unwrap().as_i64(), Some(150_000));
 
-    assert_eq!(docs[3].get("department").unwrap().as_str(), Some("Engineering"));
+    assert_eq!(
+        docs[3].get("department").unwrap().as_str(),
+        Some("Engineering")
+    );
     assert_eq!(docs[3].get("salary").unwrap().as_i64(), Some(120_000));
 
-    assert_eq!(docs[4].get("department").unwrap().as_str(), Some("Engineering"));
+    assert_eq!(
+        docs[4].get("department").unwrap().as_str(),
+        Some("Engineering")
+    );
     assert_eq!(docs[4].get("salary").unwrap().as_i64(), Some(90_000));
 
-    assert_eq!(docs[5].get("department").unwrap().as_str(), Some("Marketing"));
+    assert_eq!(
+        docs[5].get("department").unwrap().as_str(),
+        Some("Marketing")
+    );
     assert_eq!(docs[5].get("salary").unwrap().as_i64(), Some(100_000));
 }
 
@@ -143,8 +156,16 @@ fn test_phase_b_cbo_advanced_cost_modeling() {
     let stats = TableStatistics::analyze("students", &docs);
 
     let query_and = FilterExpr::And(vec![
-        FilterExpr::Field { field: "age".to_string(), op: Operator::Gte, value: Value::Float(50.0) },
-        FilterExpr::Field { field: "score".to_string(), op: Operator::Lte, value: Value::Float(300.0) },
+        FilterExpr::Field {
+            field: "age".to_string(),
+            op: Operator::Gte,
+            value: Value::Float(50.0),
+        },
+        FilterExpr::Field {
+            field: "score".to_string(),
+            op: Operator::Lte,
+            value: Value::Float(300.0),
+        },
     ]);
     let sel = QueryOptimizer::estimate_selectivity(&stats, &query_and);
     assert!(sel > 0.0 && sel <= 1.0);

@@ -352,7 +352,13 @@ pub async fn run_multi_protocol_server(
         }
     });
 
-    let _ = tokio::try_join!(mongo_handle, pg_handle, mysql_handle, grpc_handle, http_handle)?;
+    let _ = tokio::try_join!(
+        mongo_handle,
+        pg_handle,
+        mysql_handle,
+        grpc_handle,
+        http_handle
+    )?;
 
     tracing::info!("💾 Finalizing and flushing storage engine data to disk on shutdown...");
     if let Err(e) = db.flush() {

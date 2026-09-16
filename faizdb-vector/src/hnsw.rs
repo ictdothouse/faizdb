@@ -4,12 +4,12 @@
 //! short-range links and upper layers contain fewer vertices with long-range skip links.
 //! Searching begins at top layer (fast skip) and zooms in at bottom layers.
 
+use parking_lot::RwLock;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 use crate::distance::DistanceMetric;
 use crate::quantization::{
@@ -170,7 +170,7 @@ impl IdBitset {
 
     /// Create an empty bitset with pre-allocated capacity for max_id elements
     pub fn with_capacity(max_id: usize) -> Self {
-        let num_words = (max_id + 63) / 64;
+        let num_words = max_id.div_ceil(64);
         Self {
             words: vec![0u64; num_words],
             count: 0,
@@ -733,15 +733,16 @@ impl HnswIndex {
                         }
 
                         // Only add to results if node matches filter criteria and is not deleted
-                        if !self.deleted.contains(&nbr) && filter(nbr, &self.nodes[nbr].id) {
-                            if d < furthest || results.len() < ef {
-                                results.push(MaxCandidate {
-                                    idx: nbr,
-                                    distance: d,
-                                });
-                                if results.len() > ef {
-                                    results.pop();
-                                }
+                        if !self.deleted.contains(&nbr)
+                            && filter(nbr, &self.nodes[nbr].id)
+                            && (d < furthest || results.len() < ef)
+                        {
+                            results.push(MaxCandidate {
+                                idx: nbr,
+                                distance: d,
+                            });
+                            if results.len() > ef {
+                                results.pop();
                             }
                         }
                     }
@@ -846,7 +847,12 @@ impl HnswIndex {
     }
 
     /// Search K nearest neighbors with predicate filter on external ID (In-Graph Filtered Search)
-    pub fn search_with_filter<F>(&self, query: &[f32], top_k: usize, filter: F) -> Vec<VectorSearchResult>
+    pub fn search_with_filter<F>(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        filter: F,
+    ) -> Vec<VectorSearchResult>
     where
         F: Fn(&str) -> bool,
     {
@@ -1331,7 +1337,12 @@ impl ConcurrentHnswIndex {
     }
 
     /// Search the k nearest neighbors with a predicate filter (multiple concurrent readers allowed)
-    pub fn search_with_filter<F>(&self, query: &[f32], top_k: usize, filter: F) -> Vec<VectorSearchResult>
+    pub fn search_with_filter<F>(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        filter: F,
+    ) -> Vec<VectorSearchResult>
     where
         F: Fn(&str) -> bool,
     {
@@ -1339,7 +1350,12 @@ impl ConcurrentHnswIndex {
     }
 
     /// Search the k nearest neighbors using a pre-computed bitset filter (multiple concurrent readers allowed)
-    pub fn search_with_bitset(&self, query: &[f32], top_k: usize, bitset: &IdBitset) -> Vec<VectorSearchResult> {
+    pub fn search_with_bitset(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        bitset: &IdBitset,
+    ) -> Vec<VectorSearchResult> {
         self.inner.read().search_with_bitset(query, top_k, bitset)
     }
 

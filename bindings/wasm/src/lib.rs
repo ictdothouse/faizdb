@@ -88,9 +88,9 @@ impl FaizDbWasm {
     #[wasm_bindgen]
     pub fn find_by_id(&self, collection_name: &str, id: &str) -> Result<Option<String>, JsValue> {
         let cols = self.collections.read();
-        let collection = cols
-            .get(collection_name)
-            .ok_or_else(|| JsValue::from_str(&format!("Collection '{collection_name}' not found")))?;
+        let collection = cols.get(collection_name).ok_or_else(|| {
+            JsValue::from_str(&format!("Collection '{collection_name}' not found"))
+        })?;
 
         match collection.find_by_id(id) {
             Ok(doc) => {
@@ -106,9 +106,9 @@ impl FaizDbWasm {
     #[wasm_bindgen]
     pub fn count(&self, collection_name: &str) -> Result<usize, JsValue> {
         let cols = self.collections.read();
-        let collection = cols
-            .get(collection_name)
-            .ok_or_else(|| JsValue::from_str(&format!("Collection '{collection_name}' not found")))?;
+        let collection = cols.get(collection_name).ok_or_else(|| {
+            JsValue::from_str(&format!("Collection '{collection_name}' not found"))
+        })?;
 
         Ok(collection.count(&[]) as usize)
     }
@@ -284,10 +284,16 @@ mod tests {
         let db = FaizDbWasm::new();
         assert!(db.create_vector_index("embeddings", 4, "cosine").unwrap());
 
-        assert!(db.insert_vector("embeddings", "doc_1", &[1.0, 0.0, 0.0, 0.0]).unwrap());
-        assert!(db.insert_vector("embeddings", "doc_2", &[0.0, 1.0, 0.0, 0.0]).unwrap());
+        assert!(db
+            .insert_vector("embeddings", "doc_1", &[1.0, 0.0, 0.0, 0.0])
+            .unwrap());
+        assert!(db
+            .insert_vector("embeddings", "doc_2", &[0.0, 1.0, 0.0, 0.0])
+            .unwrap());
 
-        let results_json = db.vector_search("embeddings", &[1.0, 0.0, 0.0, 0.0], 2).unwrap();
+        let results_json = db
+            .vector_search("embeddings", &[1.0, 0.0, 0.0, 0.0], 2)
+            .unwrap();
         assert!(results_json.contains("doc_1"));
     }
 
@@ -295,7 +301,8 @@ mod tests {
     fn test_wasm_engine_persistence_export_import() {
         let db = FaizDbWasm::new();
         db.create_collection("products").unwrap();
-        db.insert("products", r#"{"title": "Database Book", "price": 49}"#).unwrap();
+        db.insert("products", r#"{"title": "Database Book", "price": 49}"#)
+            .unwrap();
         assert_eq!(db.count("products").unwrap(), 1);
 
         // Export state (like saving to localStorage / IndexedDB)

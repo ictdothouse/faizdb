@@ -264,7 +264,10 @@ fn dispatch_command(
             vec![]
         };
         let roles = if let Some(ref r) = session.role {
-            vec![bson::to_bson(&doc! { "role": format!("{r:?}"), "db": "admin" }).unwrap_or(Bson::Null)]
+            vec![
+                bson::to_bson(&doc! { "role": format!("{r:?}"), "db": "admin" })
+                    .unwrap_or(Bson::Null),
+            ]
         } else {
             vec![]
         };
@@ -1019,11 +1022,7 @@ fn handle_update(
     }
 }
 
-fn handle_distinct(
-    db: &Arc<DatabaseContext>,
-    col_name: &str,
-    cmd: &BsonDocument,
-) -> BsonDocument {
+fn handle_distinct(db: &Arc<DatabaseContext>, col_name: &str, cmd: &BsonDocument) -> BsonDocument {
     let key = cmd.get_str("key").unwrap_or("_id");
     let col = db.get_or_create_collection(col_name);
     let filter_doc = cmd.get_document("query").ok();
@@ -1243,8 +1242,8 @@ fn handle_rename_collection(
         Ok(t) => t,
         Err(_) => return doc! { "ok": 0.0, "errmsg": "Missing 'to' target collection" },
     };
-    let from_name = from_full.split('.').last().unwrap_or(from_full);
-    let to_name = to_full.split('.').last().unwrap_or(to_full);
+    let from_name = from_full.split('.').next_back().unwrap_or(from_full);
+    let to_name = to_full.split('.').next_back().unwrap_or(to_full);
 
     let from_col = db.get_or_create_collection(from_name);
     let to_col = db.get_or_create_collection(to_name);

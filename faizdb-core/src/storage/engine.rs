@@ -206,8 +206,7 @@ impl StorageEngine {
         );
 
         let cache_capacity = config.block_cache_size.max(16);
-        let block_cache =
-            crate::storage::arc_cache::ShardedArcCache::new(cache_capacity);
+        let block_cache = crate::storage::arc_cache::ShardedArcCache::new(cache_capacity);
 
         // Initialize Tiered Storage Manager and load existing Cold SSTables if configured
         let mut cold_sstables = Vec::new();
@@ -237,7 +236,10 @@ impl StorageEngine {
                         match SSTableReader::open(&cold_path) {
                             Ok(reader) => cold_sstables.push(reader),
                             Err(e) => {
-                                tracing::warn!("Failed to open Cold SSTable {}: {e}", cold_path.display());
+                                tracing::warn!(
+                                    "Failed to open Cold SSTable {}: {e}",
+                                    cold_path.display()
+                                );
                             }
                         }
                     }
@@ -626,7 +628,8 @@ impl StorageEngine {
             .join(format!("sst_{gen_num:06}.sst"));
 
         // Write SSTable with configured compression (default LZ4)
-        let mut writer = SSTableWriter::with_compression(&sst_path, entries.len(), self.config.compression)?;
+        let mut writer =
+            SSTableWriter::with_compression(&sst_path, entries.len(), self.config.compression)?;
         for (key, entry) in &entries {
             writer.write_entry(key, entry)?;
         }
@@ -822,7 +825,9 @@ impl StorageEngine {
             for p in &cold_paths {
                 m.remove_sstable(p);
             }
-            let merged_size = fs::metadata(&merged_path).map(|meta| meta.len()).unwrap_or(0);
+            let merged_size = fs::metadata(&merged_path)
+                .map(|meta| meta.len())
+                .unwrap_or(0);
             m.register_cold_sstable(merged_path.clone(), merged_size);
         }
 
@@ -882,7 +887,9 @@ impl StorageEngine {
             for p in &sst_paths {
                 m.remove_sstable(p);
             }
-            let merged_size = fs::metadata(&merged_path).map(|meta| meta.len()).unwrap_or(0);
+            let merged_size = fs::metadata(&merged_path)
+                .map(|meta| meta.len())
+                .unwrap_or(0);
             m.register_sstable(merged_path.clone(), merged_size);
         }
 

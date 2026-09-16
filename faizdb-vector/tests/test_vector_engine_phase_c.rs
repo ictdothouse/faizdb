@@ -6,7 +6,7 @@
 
 use faizdb_vector::distance::DistanceMetric;
 use faizdb_vector::hnsw::{ConcurrentHnswIndex, HnswConfig, HnswIndex, IdBitset};
-use faizdb_vector::quantization::{QuantizationType, QuantizedVector, ScalarQuantizer};
+use faizdb_vector::quantization::ScalarQuantizer;
 
 #[test]
 fn test_phase_c_id_bitset_large_scale() {
@@ -49,7 +49,7 @@ fn test_phase_c_in_graph_bitset_filtering_precision() {
     let bitset = index.build_id_bitset(allowed_ids);
     assert_eq!(bitset.len(), 4);
 
-    let query_vec = index.search(&[1.0; 16], 1)[0].distance;
+    let _baseline_dist = index.search(&[1.0; 16], 1)[0].distance;
     let mut query = vec![0.0f32; dim];
     query[10 % dim] = 1.0;
     faizdb_vector::distance::normalize_in_place(&mut query);
@@ -69,25 +69,33 @@ fn test_phase_c_in_graph_bitset_filtering_precision() {
 
 #[test]
 fn test_phase_c_optimized_adc_unrolled_accuracy() {
-    let raw_v = vec![0.1, 0.5, -0.2, 0.8, 1.2, -0.9, 0.4, 0.3, 0.7, -0.5, 0.0, 0.9];
-    let query = vec![0.2, 0.4, -0.1, 0.9, 1.0, -0.8, 0.3, 0.2, 0.6, -0.4, 0.1, 0.8];
+    let raw_v = vec![
+        0.1, 0.5, -0.2, 0.8, 1.2, -0.9, 0.4, 0.3, 0.7, -0.5, 0.0, 0.9,
+    ];
+    let query = vec![
+        0.2, 0.4, -0.1, 0.9, 1.0, -0.8, 0.3, 0.2, 0.6, -0.4, 0.1, 0.8,
+    ];
 
     let quantized = ScalarQuantizer::quantize(&raw_v);
 
     // Compare Cosine ADC
-    let dist_cosine = ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Cosine);
-    assert!(dist_cosine >= 0.0 && dist_cosine <= 2.0);
+    let dist_cosine =
+        ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Cosine);
+    assert!((0.0..=2.0).contains(&dist_cosine));
 
     // Compare Euclidean ADC
-    let dist_l2 = ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Euclidean);
+    let dist_l2 =
+        ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Euclidean);
     assert!(dist_l2 >= 0.0);
 
     // Compare DotProduct ADC
-    let dist_dot = ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::DotProduct);
+    let dist_dot =
+        ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::DotProduct);
     assert!(dist_dot < 0.0); // positive correlation yields negative dot distance
 
     // Compare Manhattan ADC
-    let dist_manhattan = ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Manhattan);
+    let dist_manhattan =
+        ScalarQuantizer::asymmetric_distance(&query, &quantized, DistanceMetric::Manhattan);
     assert!(dist_manhattan >= 0.0);
 }
 

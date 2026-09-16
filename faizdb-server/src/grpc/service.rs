@@ -113,7 +113,6 @@ impl FaizDbService for FaizDbGrpcService {
                         | faizdb_query::Statement::Analyze { .. }
                         | faizdb_query::Statement::CreateEdge { .. }
                         | faizdb_query::Statement::DeleteEdge { .. } => {
-
                             return Err(Status::permission_denied(
                                 "ReadOnly role is not authorized to execute modifying queries",
                             ));

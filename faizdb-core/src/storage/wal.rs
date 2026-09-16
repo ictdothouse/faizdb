@@ -138,7 +138,9 @@ impl WalRecord {
         if payload_len as u64 > MAX_WAL_SIZE {
             return Err(FaizError::WalCorrupted {
                 offset,
-                detail: format!("Payload length {payload_len} exceeds maximum WAL size ({MAX_WAL_SIZE})"),
+                detail: format!(
+                    "Payload length {payload_len} exceeds maximum WAL size ({MAX_WAL_SIZE})"
+                ),
             });
         }
 
@@ -168,7 +170,9 @@ impl WalRecord {
         if payload_len < 17 {
             return Err(FaizError::WalCorrupted {
                 offset,
-                detail: format!("Payload length {payload_len} is less than minimum record header (17 bytes)"),
+                detail: format!(
+                    "Payload length {payload_len} is less than minimum record header (17 bytes)"
+                ),
             });
         }
 
@@ -205,14 +209,19 @@ impl WalRecord {
         // Value
         let val_len = u32::from_le_bytes(payload[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
-        let val_end = pos.checked_add(val_len).ok_or_else(|| FaizError::WalCorrupted {
-            offset,
-            detail: format!("Value length {val_len} arithmetic overflow"),
-        })?;
+        let val_end = pos
+            .checked_add(val_len)
+            .ok_or_else(|| FaizError::WalCorrupted {
+                offset,
+                detail: format!("Value length {val_len} arithmetic overflow"),
+            })?;
         if val_end != payload_len {
             return Err(FaizError::WalCorrupted {
                 offset,
-                detail: format!("Value length {val_len} does not match remaining payload (expected {})", payload_len - pos),
+                detail: format!(
+                    "Value length {val_len} does not match remaining payload (expected {})",
+                    payload_len - pos
+                ),
             });
         }
         let value = payload[pos..pos + val_len].to_vec();

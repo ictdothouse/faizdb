@@ -8,7 +8,6 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-
 /// A cached item in the semantic cache
 #[derive(Debug, Clone)]
 pub struct SemanticCacheEntry {

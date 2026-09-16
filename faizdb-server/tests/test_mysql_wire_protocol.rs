@@ -4,8 +4,8 @@ use bytes::BytesMut;
 use faizdb_query::DatabaseContext;
 use faizdb_security::UserStore;
 use faizdb_server::wire::mysql::codec::{
-    build_handshake_v10, encode_packet, parse_handshake_response,
-    CLIENT_CONNECT_WITH_DB, CLIENT_PLUGIN_AUTH, CLIENT_PROTOCOL_41,
+    build_handshake_v10, encode_packet, parse_handshake_response, CLIENT_CONNECT_WITH_DB,
+    CLIENT_PLUGIN_AUTH, CLIENT_PROTOCOL_41,
 };
 use faizdb_server::wire::mysql::handler::handle_mysql_query;
 use faizdb_server::wire::mysql::run_mysql_server_with_shutdown;
@@ -37,7 +37,10 @@ fn test_mysql_codec_handshake_roundtrip() {
     let resp = parse_handshake_response(payload.freeze()).expect("Valid client response");
     assert_eq!(resp.username, "root");
     assert_eq!(resp.database.as_deref(), Some("faizdb"));
-    assert_eq!(resp.auth_plugin_name.as_deref(), Some("mysql_native_password"));
+    assert_eq!(
+        resp.auth_plugin_name.as_deref(),
+        Some("mysql_native_password")
+    );
 }
 
 #[test]
@@ -112,7 +115,8 @@ async fn test_mysql_wire_full_tcp_handshake_and_ping() {
     // 1. Read Server Initial HandshakeV10 packet
     let mut header = [0u8; 4];
     client.read_exact(&mut header).await.unwrap();
-    let payload_len = (header[0] as usize) | ((header[1] as usize) << 8) | ((header[2] as usize) << 16);
+    let payload_len =
+        (header[0] as usize) | ((header[1] as usize) << 8) | ((header[2] as usize) << 16);
     let seq_id = header[3];
     assert_eq!(seq_id, 0);
 
@@ -138,7 +142,8 @@ async fn test_mysql_wire_full_tcp_handshake_and_ping() {
     // 3. Read OK_Packet
     let mut ok_header = [0u8; 4];
     client.read_exact(&mut ok_header).await.unwrap();
-    let ok_len = (ok_header[0] as usize) | ((ok_header[1] as usize) << 8) | ((ok_header[2] as usize) << 16);
+    let ok_len =
+        (ok_header[0] as usize) | ((ok_header[1] as usize) << 8) | ((ok_header[2] as usize) << 16);
     let mut ok_payload = vec![0u8; ok_len];
     client.read_exact(&mut ok_payload).await.unwrap();
     assert_eq!(ok_payload[0], 0x00); // OK Header

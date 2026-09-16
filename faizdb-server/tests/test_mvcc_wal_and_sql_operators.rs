@@ -28,8 +28,10 @@ fn test_mvcc_atomic_conflict_validation() {
     let mut txn2 = mgr.begin();
 
     // Both write to the same key
-    txn1.put(b"shared_account".to_vec(), b"100".to_vec()).unwrap();
-    txn2.put(b"shared_account".to_vec(), b"200".to_vec()).unwrap();
+    txn1.put(b"shared_account".to_vec(), b"100".to_vec())
+        .unwrap();
+    txn2.put(b"shared_account".to_vec(), b"200".to_vec())
+        .unwrap();
 
     // First commit succeeds
     assert!(mgr.commit(&mut txn1).is_ok());
@@ -67,7 +69,10 @@ fn test_wal_sequence_continuity_on_empty_rotated_segment() {
     {
         let wal = Wal::open(dir.path()).unwrap();
         let s3 = wal.log_put(b"k3", b"v3").unwrap();
-        assert_eq!(s3, 3, "Sequence number should continue from 3, not reset to 0");
+        assert_eq!(
+            s3, 3,
+            "Sequence number should continue from 3, not reset to 0"
+        );
     }
 }
 
@@ -126,13 +131,21 @@ fn test_collection_id_find_and_query_sorting() {
 
     // 1. Verify finding by _id and id on Collection
     let res1 = items_col
-        .find(&[("_id".to_string(), Value::String("item_1".into()))], None, None)
+        .find(
+            &[("_id".to_string(), Value::String("item_1".into()))],
+            None,
+            None,
+        )
         .unwrap();
     assert_eq!(res1.len(), 1);
     assert_eq!(res1[0].id.as_str(), "item_1");
 
     let res2 = items_col
-        .find(&[("id".to_string(), Value::String("item_2".into()))], None, None)
+        .find(
+            &[("id".to_string(), Value::String("item_2".into()))],
+            None,
+            None,
+        )
         .unwrap();
     assert_eq!(res2.len(), 1);
     assert_eq!(res2[0].id.as_str(), "item_2");
@@ -162,27 +175,49 @@ fn test_hash_join_null_key_isolation() {
     let users_col = db.get_or_create_collection("users");
     let orders_col = db.get_or_create_collection("orders");
 
-    users_col.insert(Document::with_id("u1").field("name", "Alice")).unwrap();
-    users_col.insert(Document::with_id("u2").field("name", "Bob")).unwrap();
+    users_col
+        .insert(Document::with_id("u1").field("name", "Alice"))
+        .unwrap();
+    users_col
+        .insert(Document::with_id("u2").field("name", "Bob"))
+        .unwrap();
 
-    orders_col.insert(Document::with_id("o1").field("user_id", "u1").field("amount", 100)).unwrap();
-    orders_col.insert(Document::with_id("o2").field("amount", 200)).unwrap(); // no user_id
+    orders_col
+        .insert(
+            Document::with_id("o1")
+                .field("user_id", "u1")
+                .field("amount", 100),
+        )
+        .unwrap();
+    orders_col
+        .insert(Document::with_id("o2").field("amount", 200))
+        .unwrap(); // no user_id
 
     // 1. INNER JOIN: order o2 has no user_id, so it MUST NOT match any user!
-    let join_stmt = parse_query("SELECT * FROM orders INNER JOIN users ON orders.user_id = users.id").unwrap();
+    let join_stmt =
+        parse_query("SELECT * FROM orders INNER JOIN users ON orders.user_id = users.id").unwrap();
 
     if let QueryResult::Documents(docs) = db.execute(join_stmt).unwrap() {
-        assert_eq!(docs.len(), 1, "Only order o1 should match user u1 in INNER JOIN");
+        assert_eq!(
+            docs.len(),
+            1,
+            "Only order o1 should match user u1 in INNER JOIN"
+        );
         assert_eq!(docs[0].id.as_str(), "o1");
     } else {
         panic!("Expected documents");
     }
 
     // 2. LEFT JOIN: order o2 has no user_id, but MUST still be returned with its fields
-    let left_join_stmt = parse_query("SELECT * FROM orders LEFT JOIN users ON orders.user_id = users.id").unwrap();
+    let left_join_stmt =
+        parse_query("SELECT * FROM orders LEFT JOIN users ON orders.user_id = users.id").unwrap();
 
     if let QueryResult::Documents(docs) = db.execute(left_join_stmt).unwrap() {
-        assert_eq!(docs.len(), 2, "Both o1 and o2 must be returned in LEFT JOIN");
+        assert_eq!(
+            docs.len(),
+            2,
+            "Both o1 and o2 must be returned in LEFT JOIN"
+        );
     } else {
         panic!("Expected documents");
     }
@@ -193,9 +228,25 @@ fn test_sql_ansi_where_operators() {
     let db = Arc::new(DatabaseContext::new());
     let col = db.get_or_create_collection("articles");
 
-    col.insert(Document::with_id("a1").field("title", "FaizDB Architecture").field("status", "published")).unwrap(); // deleted_at absent (NULL)
-    col.insert(Document::with_id("a2").field("title", "Rust Performance Guide").field("status", "draft")).unwrap(); // deleted_at absent (NULL)
-    col.insert(Document::with_id("a3").field("title", "Deprecated Post").field("status", "archived").field("deleted_at", "2026-01-01")).unwrap();
+    col.insert(
+        Document::with_id("a1")
+            .field("title", "FaizDB Architecture")
+            .field("status", "published"),
+    )
+    .unwrap(); // deleted_at absent (NULL)
+    col.insert(
+        Document::with_id("a2")
+            .field("title", "Rust Performance Guide")
+            .field("status", "draft"),
+    )
+    .unwrap(); // deleted_at absent (NULL)
+    col.insert(
+        Document::with_id("a3")
+            .field("title", "Deprecated Post")
+            .field("status", "archived")
+            .field("deleted_at", "2026-01-01"),
+    )
+    .unwrap();
 
     // 1. Test <> (ANSI SQL not equal)
     let q1 = parse_query("SELECT * FROM articles WHERE status <> 'published'").unwrap();

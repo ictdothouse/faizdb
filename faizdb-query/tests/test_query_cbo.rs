@@ -124,9 +124,15 @@ fn test_distributed_explain_analyze_parser_and_strategies() {
     )
     .expect("Should parse EXPLAIN ANALYZE SQL query");
 
-    if let Statement::Explain { analyze, statement, .. } = &parsed {
+    if let Statement::Explain {
+        analyze, statement, ..
+    } = &parsed
+    {
         assert!(*analyze, "Analyze flag should be true");
-        if let Statement::Find { joins, collection, .. } = &**statement {
+        if let Statement::Find {
+            joins, collection, ..
+        } = &**statement
+        {
             assert_eq!(collection, "{tenant_1}:orders");
             assert_eq!(joins.len(), 1);
         } else {
@@ -149,7 +155,9 @@ fn test_distributed_explain_analyze_parser_and_strategies() {
             assert_eq!(plan.shard_metrics[0].cache_hit_pct, 100.0);
             assert_eq!(plan.shard_metrics[0].network_transfer_bytes, 0);
             assert!(plan.node_tree.is_some());
-            let pg_tree = plan.formatted_pg_tree.expect("formatted_pg_tree must exist");
+            let pg_tree = plan
+                .formatted_pg_tree
+                .expect("formatted_pg_tree must exist");
             assert!(pg_tree.contains("ColocatedHashJoin"));
             assert!(pg_tree.contains("Estimated Network I/O: 0 bytes"));
         }
@@ -157,12 +165,14 @@ fn test_distributed_explain_analyze_parser_and_strategies() {
     }
 
     // 3. Test parsing of EXPLAIN (ANALYZE, VERBOSE) syntax
-    let parsed_opt = faizdb_query::parse_query(
-        "EXPLAIN (ANALYZE, VERBOSE) SELECT * FROM {tenant_1}:orders",
-    )
-    .expect("Should parse EXPLAIN (ANALYZE, VERBOSE)");
+    let parsed_opt =
+        faizdb_query::parse_query("EXPLAIN (ANALYZE, VERBOSE) SELECT * FROM {tenant_1}:orders")
+            .expect("Should parse EXPLAIN (ANALYZE, VERBOSE)");
 
-    if let Statement::Explain { analyze, verbose, .. } = parsed_opt {
+    if let Statement::Explain {
+        analyze, verbose, ..
+    } = parsed_opt
+    {
         assert!(analyze);
         assert!(verbose);
     } else {

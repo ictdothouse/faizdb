@@ -143,7 +143,9 @@ fn test_sql_where_between_and_not_between() {
 
     // Query NOT BETWEEN 18 AND 30
     let res_not = db
-        .execute(parse_query("SELECT * FROM users_between WHERE age NOT BETWEEN 18 AND 30").unwrap())
+        .execute(
+            parse_query("SELECT * FROM users_between WHERE age NOT BETWEEN 18 AND 30").unwrap(),
+        )
         .unwrap();
     if let QueryResult::Documents(docs_not) = res_not {
         assert_eq!(docs_not.len(), 2);
@@ -178,7 +180,9 @@ fn test_sql_where_in_and_not_in() {
 
     // Query WHERE status IN ('active', 'pending')
     let res = db
-        .execute(parse_query("SELECT * FROM users_in WHERE status IN ('active', 'pending')").unwrap())
+        .execute(
+            parse_query("SELECT * FROM users_in WHERE status IN ('active', 'pending')").unwrap(),
+        )
         .unwrap();
     if let QueryResult::Documents(docs) = res {
         assert_eq!(docs.len(), 2);
@@ -231,7 +235,8 @@ fn test_sql_where_compound_or_and_nested_parens() {
         .unwrap();
     }
 
-    let q = "SELECT * FROM users_compound WHERE (status = 'active' OR role = 'admin') AND age >= 18";
+    let q =
+        "SELECT * FROM users_compound WHERE (status = 'active' OR role = 'admin') AND age >= 18";
     let res = db.execute(parse_query(q).unwrap()).unwrap();
     if let QueryResult::Documents(docs) = res {
         assert_eq!(docs.len(), 2);

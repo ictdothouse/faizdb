@@ -109,13 +109,13 @@ impl HttpWebhookTransport {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpStream;
 
-        let payload_json = serde_json::to_string(batch)
-            .map_err(|e| format!("Serialization error: {e}"))?;
+        let payload_json =
+            serde_json::to_string(batch).map_err(|e| format!("Serialization error: {e}"))?;
 
         // Parse host, port, and path from http://host:port/path
-        let url_stripped = endpoint
-            .strip_prefix("http://")
-            .ok_or_else(|| "Only http:// endpoints currently supported by native transport".to_string())?;
+        let url_stripped = endpoint.strip_prefix("http://").ok_or_else(|| {
+            "Only http:// endpoints currently supported by native transport".to_string()
+        })?;
 
         let (host_port, path) = match url_stripped.find('/') {
             Some(idx) => (&url_stripped[..idx], &url_stripped[idx..]),
@@ -286,10 +286,18 @@ impl CdcOutboundDispatcher {
 
         loop {
             attempts += 1;
-            match self.transport.dispatch(&self.config.endpoint_url, batch).await {
+            match self
+                .transport
+                .dispatch(&self.config.endpoint_url, batch)
+                .await
+            {
                 Ok(_) => {
-                    self.metrics.events_delivered.fetch_add(count, Ordering::Relaxed);
-                    self.metrics.batches_dispatched.fetch_add(1, Ordering::Relaxed);
+                    self.metrics
+                        .events_delivered
+                        .fetch_add(count, Ordering::Relaxed);
+                    self.metrics
+                        .batches_dispatched
+                        .fetch_add(1, Ordering::Relaxed);
                     batch.clear();
                     return;
                 }
@@ -298,7 +306,9 @@ impl CdcOutboundDispatcher {
                         error!(
                             "Failed to deliver CDC batch of {count} events after {attempts} attempts: {err}. Routing to DLQ drop."
                         );
-                        self.metrics.events_failed.fetch_add(count, Ordering::Relaxed);
+                        self.metrics
+                            .events_failed
+                            .fetch_add(count, Ordering::Relaxed);
                         batch.clear();
                         return;
                     }
@@ -330,8 +340,10 @@ mod tests {
             channel_capacity: 100,
         };
 
-        let (dispatcher, sender, metrics) =
-            CdcOutboundDispatcher::new(config, CdcTransportBackend::InMemory(Arc::clone(&transport)));
+        let (dispatcher, sender, metrics) = CdcOutboundDispatcher::new(
+            config,
+            CdcTransportBackend::InMemory(Arc::clone(&transport)),
+        );
 
         let handle = tokio::spawn(dispatcher.run());
 
@@ -366,8 +378,10 @@ mod tests {
             channel_capacity: 10,
         };
 
-        let (dispatcher, sender, metrics) =
-            CdcOutboundDispatcher::new(config, CdcTransportBackend::InMemory(Arc::clone(&transport)));
+        let (dispatcher, sender, metrics) = CdcOutboundDispatcher::new(
+            config,
+            CdcTransportBackend::InMemory(Arc::clone(&transport)),
+        );
 
         let handle = tokio::spawn(dispatcher.run());
 

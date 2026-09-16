@@ -26,4 +26,3 @@ pub use vector_graph::{FusedRagContext, FusedRagNode, VectorGraph};
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
-

@@ -26,8 +26,11 @@ fn test_tiered_storage_initialization_and_telemetry() {
         ..Default::default()
     };
 
-    let engine = StorageEngine::open(storage_cfg).expect("Failed to open engine with tiered storage");
-    let stats = engine.tiered_stats().expect("Tiered stats should be available");
+    let engine =
+        StorageEngine::open(storage_cfg).expect("Failed to open engine with tiered storage");
+    let stats = engine
+        .tiered_stats()
+        .expect("Tiered stats should be available");
     assert_eq!(stats.hot_sstable_count, 0);
     assert_eq!(stats.cold_sstable_count, 0);
     assert_eq!(stats.total_hot_bytes, 0);
@@ -88,7 +91,11 @@ fn test_transparent_point_lookup_across_hot_and_cold_tiers() {
         .unwrap()
         .filter_map(|e| e.ok())
         .collect();
-    assert_eq!(cold_files.len(), 1, "Cold directory should contain migrated SSTable");
+    assert_eq!(
+        cold_files.len(),
+        1,
+        "Cold directory should contain migrated SSTable"
+    );
 
     // 3. Ingest new active hot keys
     for i in 6..=10 {
@@ -104,7 +111,11 @@ fn test_transparent_point_lookup_across_hot_and_cold_tiers() {
 
     // Read from Cold tier (migrated SSTable in cold_dir)
     let cold_val = engine.get(b"cold_key_3").unwrap();
-    assert_eq!(cold_val, Some(b"historical_value_3".to_vec()), "Transparent cold lookup must succeed");
+    assert_eq!(
+        cold_val,
+        Some(b"historical_value_3".to_vec()),
+        "Transparent cold lookup must succeed"
+    );
 
     // Verify block cache now contains the cold key
     let cached_val = engine.get(b"cold_key_3").unwrap();
@@ -150,7 +161,11 @@ fn test_transparent_prefix_scan_across_hybrid_tiers() {
 
     // Prefix scan across hybrid tiers
     let results = engine.prefix_scan(b"sensor:temp:").unwrap();
-    assert_eq!(results.len(), 4, "Prefix scan must combine Cold and Hot records");
+    assert_eq!(
+        results.len(),
+        4,
+        "Prefix scan must combine Cold and Hot records"
+    );
     assert_eq!(results[0], (b"sensor:temp:001".to_vec(), b"21.5".to_vec()));
     assert_eq!(results[1], (b"sensor:temp:002".to_vec(), b"22.0".to_vec()));
     assert_eq!(results[2], (b"sensor:temp:003".to_vec(), b"23.1".to_vec()));
@@ -193,7 +208,10 @@ fn test_cold_sstable_persistence_and_reopen() {
     {
         let engine = StorageEngine::open(storage_cfg).unwrap();
         let stats = engine.tiered_stats().unwrap();
-        assert_eq!(stats.cold_sstable_count, 1, "Cold SSTables must be loaded upon reboot");
+        assert_eq!(
+            stats.cold_sstable_count, 1,
+            "Cold SSTables must be loaded upon reboot"
+        );
 
         let val_a = engine.get(b"archival:record:A").unwrap();
         assert_eq!(val_a, Some(b"payload_alpha".to_vec()));
@@ -231,8 +249,14 @@ fn test_automatic_tier_migration_on_flush() {
     engine.flush().unwrap();
 
     let stats = engine.stats();
-    assert_eq!(stats.sstable_count, 0, "Hot SSTable should have auto-migrated");
-    assert_eq!(stats.cold_sstable_count, 1, "Cold SSTable should be present");
+    assert_eq!(
+        stats.sstable_count, 0,
+        "Hot SSTable should have auto-migrated"
+    );
+    assert_eq!(
+        stats.cold_sstable_count, 1,
+        "Cold SSTable should be present"
+    );
 
     let val = engine.get(b"auto:hot_or_cold:1").unwrap();
     assert_eq!(val, Some(b"val_1".to_vec()));
@@ -279,12 +303,20 @@ fn test_hot_compaction_preserves_tombstones_preventing_cold_zombie_resurrection(
     engine.put(b"user:102", b"bob").unwrap();
     engine.flush().unwrap();
 
-    assert_eq!(engine.stats().sstable_count, 2, "Hot tier must have 2 SSTables");
+    assert_eq!(
+        engine.stats().sstable_count,
+        2,
+        "Hot tier must have 2 SSTables"
+    );
 
     // 4. Trigger Hot Compaction
     let compacted_count = engine.compact().unwrap();
     assert_eq!(compacted_count, 2, "Must compact the 2 hot SSTables");
-    assert_eq!(engine.stats().sstable_count, 1, "Hot tier now has 1 merged SSTable");
+    assert_eq!(
+        engine.stats().sstable_count,
+        1,
+        "Hot tier now has 1 merged SSTable"
+    );
 
     // 5. CRITICAL VERIFICATION: Tombstone MUST be retained in hot merged table
     // to shadow the old record in Cold tier and prevent zombie resurrection!
@@ -343,22 +375,38 @@ fn test_cold_sstable_compaction_and_purging() {
     engine.flush().unwrap();
     engine.trigger_tier_migration().unwrap();
 
-    assert_eq!(engine.stats().cold_sstable_count, 3, "Should have 3 cold SSTables");
+    assert_eq!(
+        engine.stats().cold_sstable_count,
+        3,
+        "Should have 3 cold SSTables"
+    );
 
     // Compact Cold tier
     let cold_compacted = engine.compact_cold().unwrap();
     assert_eq!(cold_compacted, 3, "All 3 cold SSTables should be merged");
-    assert_eq!(engine.stats().cold_sstable_count, 1, "Cold tier should now have 1 compacted table");
+    assert_eq!(
+        engine.stats().cold_sstable_count,
+        1,
+        "Cold tier should now have 1 compacted table"
+    );
 
     // Verify point lookups and prefix scans on compacted cold tier
-    assert_eq!(engine.get(b"archive:item1").unwrap(), Some(b"v1_updated".to_vec()));
-    assert_eq!(engine.get(b"archive:item2").unwrap(), None, "Deleted item2 should be tombstoned/purged");
-    assert_eq!(engine.get(b"archive:item3").unwrap(), Some(b"v3_created".to_vec()));
+    assert_eq!(
+        engine.get(b"archive:item1").unwrap(),
+        Some(b"v1_updated".to_vec())
+    );
+    assert_eq!(
+        engine.get(b"archive:item2").unwrap(),
+        None,
+        "Deleted item2 should be tombstoned/purged"
+    );
+    assert_eq!(
+        engine.get(b"archive:item3").unwrap(),
+        Some(b"v3_created".to_vec())
+    );
 
     let scan = engine.prefix_scan(b"archive:").unwrap();
     assert_eq!(scan.len(), 2);
     assert_eq!(scan[0], (b"archive:item1".to_vec(), b"v1_updated".to_vec()));
     assert_eq!(scan[1], (b"archive:item3".to_vec(), b"v3_created".to_vec()));
 }
-
-

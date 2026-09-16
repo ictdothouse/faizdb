@@ -15,13 +15,16 @@ fn test_scatter_gather_partition_routing_and_hash_colocation() {
     ];
 
     // 1. Single-key lookup routes to exactly one partition
-    let point_query = ScatterQuery::new("orders").with_filter("_id", Value::String("ord_100".into()));
+    let point_query =
+        ScatterQuery::new("orders").with_filter("_id", Value::String("ord_100".into()));
     let plan = coordinator.plan_scatter(&point_query, &partitions);
     assert_eq!(plan.len(), 1);
 
     // 2. Hash-tagged keys route deterministically to their respective partition
-    let tagged_query_1 = ScatterQuery::new("orders").with_filter("_id", Value::String("{tenant_alpha}:order_1".into()));
-    let tagged_query_2 = ScatterQuery::new("users").with_filter("_id", Value::String("{tenant_alpha}:user_1".into()));
+    let tagged_query_1 = ScatterQuery::new("orders")
+        .with_filter("_id", Value::String("{tenant_alpha}:order_1".into()));
+    let tagged_query_2 = ScatterQuery::new("users")
+        .with_filter("_id", Value::String("{tenant_alpha}:user_1".into()));
 
     let plan_1 = coordinator.plan_scatter(&tagged_query_1, &partitions);
     let plan_2 = coordinator.plan_scatter(&tagged_query_2, &partitions);
@@ -94,7 +97,16 @@ fn test_scatter_gather_sort_merge_and_columnar_aggregations() {
 
     // 3. Paginated sorted documents (top 3 by priority DESC: 40, 30, 10)
     assert_eq!(gathered.documents.len(), 3);
-    assert_eq!(gathered.documents[0].get("priority"), Some(&Value::Integer(40)));
-    assert_eq!(gathered.documents[1].get("priority"), Some(&Value::Integer(30)));
-    assert_eq!(gathered.documents[2].get("priority"), Some(&Value::Integer(10)));
+    assert_eq!(
+        gathered.documents[0].get("priority"),
+        Some(&Value::Integer(40))
+    );
+    assert_eq!(
+        gathered.documents[1].get("priority"),
+        Some(&Value::Integer(30))
+    );
+    assert_eq!(
+        gathered.documents[2].get("priority"),
+        Some(&Value::Integer(10))
+    );
 }

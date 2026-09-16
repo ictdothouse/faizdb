@@ -70,7 +70,11 @@ impl GraphQuery {
     }
 
     /// Add property filter on source vertex
-    pub fn where_source_property(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn where_source_property(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
         self.source_filters.push(PropertyFilter {
             key: key.into(),
             value: value.into(),
@@ -79,7 +83,11 @@ impl GraphQuery {
     }
 
     /// Add property filter on target vertex
-    pub fn where_target_property(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn where_target_property(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
         self.target_filters.push(PropertyFilter {
             key: key.into(),
             value: value.into(),
