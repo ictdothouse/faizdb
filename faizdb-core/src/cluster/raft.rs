@@ -763,8 +763,8 @@ impl RaftNode {
         } else {
             // Direct O(1) index into the log Vec using snapshot offset
             let log_offset = (args.prev_log_index - state.last_snapshot_index) as usize;
-            if log_offset > 0 && log_offset <= state.log.len() {
-                state.log[log_offset - 1].term == args.prev_log_term
+            if log_offset < state.log.len() {
+                state.log[log_offset].term == args.prev_log_term
             } else {
                 false
             }

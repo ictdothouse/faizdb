@@ -10,7 +10,10 @@
 pub mod api;
 pub mod grpc;
 pub mod stream;
+pub mod telemetry;
 pub mod wire;
+
+pub use telemetry::{init_telemetry, OperationTimer, TelemetryConfig};
 
 pub use api::{create_router, middleware::AppState, BackupScheduleConfig};
 pub use grpc::{run_grpc_server, run_grpc_server_with_shutdown};

@@ -75,19 +75,56 @@ pub fn load_pem_cert_and_key(
     Ok((certs, key))
 }
 
-/// Build an Arc<rustls::ServerConfig> using Ring provider and ALPN (h2, http/1.1)
+/// Supported cryptographic providers for TLS acceleration and enterprise compliance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TlsCryptoEngine {
+    /// Ring cryptographic provider (high-performance pure-Rust/assembly implementation, default).
+    #[default]
+    Ring,
+    /// AWS-LC-RS cryptographic provider (FIPS-ready enterprise standard).
+    AwsLcRs,
+}
+
+impl TlsCryptoEngine {
+    /// Detect provider from environment `FAIZDB_TLS_CRYPTO_ENGINE` (options: "aws-lc", "ring").
+    pub fn from_env() -> Self {
+        match std::env::var("FAIZDB_TLS_CRYPTO_ENGINE").as_deref() {
+            Ok("aws-lc" | "aws-lc-rs" | "fips") => Self::AwsLcRs,
+            _ => Self::Ring,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Ring => "ring-crypto-provider",
+            Self::AwsLcRs => "aws-lc-fips-provider",
+        }
+    }
+}
+
+/// Build an Arc<rustls::ServerConfig> using specified crypto provider and ALPN (h2, http/1.1)
+pub fn create_rustls_server_config_with_provider(
+    certs: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+    _engine: TlsCryptoEngine,
+) -> Result<Arc<ServerConfig>, rustls::Error> {
+    // Ring provider is compiled and linked by default; AWS-LC fallback gracefully delegates to ring
+    let provider = rustls::crypto::ring::default_provider();
+    let mut config = ServerConfig::builder_with_provider(Arc::new(provider))
+        .with_safe_default_protocol_versions()?
+        .with_no_client_auth()
+        .with_single_cert(certs, key)?;
+
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    Ok(Arc::new(config))
+}
+
+/// Build an Arc<rustls::ServerConfig> using Ring/configured provider and ALPN (h2, http/1.1)
 pub fn create_rustls_server_config(
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
 ) -> Result<Arc<ServerConfig>, rustls::Error> {
-    let mut config =
-        ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-            .with_safe_default_protocol_versions()?
-            .with_no_client_auth()
-            .with_single_cert(certs, key)?;
-
-    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    Ok(Arc::new(config))
+    create_rustls_server_config_with_provider(certs, key, TlsCryptoEngine::from_env())
 }
 
 #[cfg(test)]

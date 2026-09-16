@@ -24,6 +24,7 @@ pub mod arc_cache;
 pub mod columnar;
 pub mod compaction;
 pub mod engine;
+pub mod io_engine;
 pub mod memtable;
 pub mod sstable;
 pub mod tiered;

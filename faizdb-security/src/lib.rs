@@ -15,7 +15,10 @@ pub mod user_store;
 pub use audit::{AuditAction, AuditEvent, AuditLogger};
 pub use auth::{AuthManager, Claims, Role};
 pub use encryption::{Cipher, EncryptedData};
-pub use tls::{create_rustls_server_config, generate_self_signed_cert, load_pem_cert_and_key};
+pub use tls::{
+    create_rustls_server_config, create_rustls_server_config_with_provider,
+    generate_self_signed_cert, load_pem_cert_and_key, TlsCryptoEngine,
+};
 pub use user_store::{UserInfo, UserRecord, UserStore};
 
 /// Security engine version

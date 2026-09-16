@@ -760,12 +760,16 @@ impl TokenStream {
 /// tautologies (`1=1`, `TRUE`), and qualified column names (`table.column`).
 pub struct ExprParser<'a> {
     stream: &'a mut TokenStream,
+    depth: usize,
 }
 
 impl<'a> ExprParser<'a> {
+    /// Maximum allowable recursion nesting depth (prevents stack overflow on malicious inputs)
+    pub const MAX_EXPR_DEPTH: usize = 128;
+
     /// Create a new expression parser bound to a token stream cursor
     pub fn new(stream: &'a mut TokenStream) -> Self {
-        Self { stream }
+        Self { stream, depth: 0 }
     }
 
     /// Parse a complete SQL WHERE expression from raw text
@@ -832,7 +836,16 @@ impl<'a> ExprParser<'a> {
     fn parse_not(&mut self) -> Result<FilterExpr, String> {
         if self.stream.check_keyword(SqlKeyword::Not) {
             self.stream.advance(); // consume NOT
-            let inner = self.parse_not()?;
+            if self.depth >= Self::MAX_EXPR_DEPTH {
+                return Err(format!(
+                    "Maximum expression nesting depth ({}) exceeded; aborting to prevent stack overflow",
+                    Self::MAX_EXPR_DEPTH
+                ));
+            }
+            self.depth += 1;
+            let inner = self.parse_not();
+            self.depth -= 1;
+            let inner = inner?;
             Ok(FilterExpr::Not(Box::new(inner)))
         } else {
             self.parse_primary_or_comparison()
@@ -844,7 +857,16 @@ impl<'a> ExprParser<'a> {
         // 1. Parenthesized group: ( <expr> )
         if *self.stream.peek_kind() == TokenKind::LParen {
             self.stream.advance(); // consume (
-            let expr = self.parse_expr()?;
+            if self.depth >= Self::MAX_EXPR_DEPTH {
+                return Err(format!(
+                    "Maximum expression nesting depth ({}) exceeded; aborting to prevent stack overflow",
+                    Self::MAX_EXPR_DEPTH
+                ));
+            }
+            self.depth += 1;
+            let expr = self.parse_expr();
+            self.depth -= 1;
+            let expr = expr?;
             if *self.stream.peek_kind() == TokenKind::RParen {
                 self.stream.advance(); // consume )
                 return Ok(expr);

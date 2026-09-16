@@ -81,7 +81,7 @@ pub struct StorageEngine {
     wal: Option<Wal>,
 
     /// Active (mutable) MemTable
-    active_memtable: Arc<MemTable>,
+    active_memtable: RwLock<Arc<MemTable>>,
 
     /// Immutable MemTables waiting to be flushed to SSTables
     immutable_memtables: RwLock<Vec<Arc<MemTable>>>,
@@ -259,7 +259,7 @@ impl StorageEngine {
         Ok(Self {
             config,
             wal,
-            active_memtable: memtable,
+            active_memtable: RwLock::new(memtable),
             immutable_memtables: RwLock::new(Vec::new()),
             sstables: RwLock::new(sstables),
             cold_sstables: RwLock::new(cold_sstables),
@@ -296,13 +296,14 @@ impl StorageEngine {
         }
 
         // Step 2: Write to MemTable
-        self.active_memtable.put(key.to_vec(), value.to_vec())?;
+        let active = self.active_memtable.read().clone();
+        active.put(key.to_vec(), value.to_vec())?;
 
         // Update block cache (sharded, zero lock contention)
         self.block_cache.put(key.to_vec(), Some(value.to_vec()));
 
         // Step 3: Check if MemTable needs flushing
-        if self.active_memtable.should_flush() {
+        if active.should_flush() {
             self.maybe_flush_memtable()?;
         }
 
@@ -330,13 +331,14 @@ impl StorageEngine {
         }
 
         // Step 2: Write to MemTable & Block Cache (sharded)
+        let active = self.active_memtable.read().clone();
         for &(k, v) in entries {
-            self.active_memtable.put(k.to_vec(), v.to_vec())?;
+            active.put(k.to_vec(), v.to_vec())?;
             self.block_cache.put(k.to_vec(), Some(v.to_vec()));
         }
 
         // Step 3: Check if MemTable needs flushing
-        if self.active_memtable.should_flush() {
+        if active.should_flush() {
             self.maybe_flush_memtable()?;
         }
 
@@ -354,7 +356,7 @@ impl StorageEngine {
         self.check_open()?;
 
         // Step 1: Check active MemTable
-        if let Some(entry) = self.active_memtable.get(key) {
+        if let Some(entry) = self.active_memtable.read().get(key) {
             return match entry {
                 MemEntry::Value(v) => Ok(Some(v)),
                 MemEntry::Tombstone => Ok(None), // Deleted
@@ -440,12 +442,13 @@ impl StorageEngine {
         }
 
         // Insert tombstone into MemTable
-        self.active_memtable.delete(key.to_vec())?;
+        let active = self.active_memtable.read().clone();
+        active.delete(key.to_vec())?;
 
         // Invalidate in block cache
         self.block_cache.put(key.to_vec(), None);
 
-        if self.active_memtable.should_flush() {
+        if active.should_flush() {
             self.maybe_flush_memtable()?;
         }
 
@@ -512,7 +515,7 @@ impl StorageEngine {
         }
 
         // Scan active MemTable (newest, overwrites everything)
-        for (key, entry) in self.active_memtable.prefix_scan(prefix) {
+        for (key, entry) in self.active_memtable.read().prefix_scan(prefix) {
             match entry {
                 MemEntry::Value(v) => {
                     results.insert(key, Some(v));
@@ -544,9 +547,10 @@ impl StorageEngine {
         let cold_sstables = self.cold_sstables.read();
         let total_sstable_entries: u64 = sstables.iter().map(|s| s.entry_count()).sum::<u64>()
             + cold_sstables.iter().map(|s| s.entry_count()).sum::<u64>();
+        let active = self.active_memtable.read();
         StorageStats {
-            memtable_size: self.active_memtable.size(),
-            memtable_entries: self.active_memtable.entry_count(),
+            memtable_size: active.size(),
+            memtable_entries: active.entry_count(),
             immutable_memtables: self.immutable_memtables.read().len(),
             sstable_count: sstables.len(),
             cold_sstable_count: cold_sstables.len(),
@@ -565,7 +569,7 @@ impl StorageEngine {
         }
 
         // Flush active MemTable
-        if self.active_memtable.entry_count() > 0 {
+        if self.active_memtable.read().entry_count() > 0 {
             self.flush_memtable_to_sstable()?;
         }
 
@@ -606,20 +610,27 @@ impl StorageEngine {
     }
 
     fn maybe_flush_memtable(&self) -> FaizResult<()> {
-        if self.active_memtable.should_flush() {
+        if self.active_memtable.read().should_flush() {
             self.flush_memtable_to_sstable()?;
         }
         Ok(())
     }
 
     fn flush_memtable_to_sstable(&self) -> FaizResult<()> {
-        // Get all entries from the current MemTable
-        let entries = self.active_memtable.entries();
-        if entries.is_empty() {
-            return Ok(());
-        }
+        // Step 1: Atomically rotate active_memtable into immutable_memtables
+        let (memtable_to_flush, entries) = {
+            let mut active = self.active_memtable.write();
+            let entries = active.entries();
+            if entries.is_empty() {
+                return Ok(());
+            }
+            let old_memtable = active.clone();
+            *active = Arc::new(MemTable::new(self.config.memtable_size));
+            self.immutable_memtables.write().push(old_memtable.clone());
+            (old_memtable, entries)
+        };
 
-        // Generate new SSTable path
+        // Step 2: Write SSTable with configured compression (default LZ4)
         let gen_num = self.sstable_generation.fetch_add(1, Ordering::SeqCst) + 1;
         let sst_path = self
             .config
@@ -627,7 +638,6 @@ impl StorageEngine {
             .join("sst")
             .join(format!("sst_{gen_num:06}.sst"));
 
-        // Write SSTable with configured compression (default LZ4)
         let mut writer =
             SSTableWriter::with_compression(&sst_path, entries.len(), self.config.compression)?;
         for (key, entry) in &entries {
@@ -644,8 +654,11 @@ impl StorageEngine {
             sstables.insert(0, reader);
         }
 
-        // Clear the MemTable
-        self.active_memtable.clear();
+        // Step 3: Remove the flushed memtable from immutable_memtables
+        {
+            let mut immutables = self.immutable_memtables.write();
+            immutables.retain(|m| !Arc::ptr_eq(m, &memtable_to_flush));
+        }
 
         tracing::info!(
             "Flushed MemTable to SSTable: {} ({} entries)",

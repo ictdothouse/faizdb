@@ -29,6 +29,7 @@ ring = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 tempfile = { workspace = true }
+proptest = { workspace = true }
 
 [[bench]]
 name = "storage_bench"
