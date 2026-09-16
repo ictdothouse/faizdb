@@ -606,12 +606,16 @@ impl RaftNode {
             let _ = store.save_meta(state.current_term, Some(&self.node_id));
         }
 
-        let last_log = state.log.last().cloned().unwrap();
+        let (last_log_index, last_log_term) = state
+            .log
+            .last()
+            .map(|l| (l.index, l.term))
+            .unwrap_or((0, 0));
         let args = RequestVoteArgs {
             term: state.current_term,
             candidate_id: self.node_id.clone(),
-            last_log_index: last_log.index,
-            last_log_term: last_log.term,
+            last_log_index,
+            last_log_term,
         };
 
         let term = state.current_term;
@@ -655,13 +659,17 @@ impl RaftNode {
             return map;
         }
 
-        let last_log = state.log.last().cloned().unwrap();
+        let (last_log_index, last_log_term) = state
+            .log
+            .last()
+            .map(|l| (l.index, l.term))
+            .unwrap_or((0, 0));
         for (peer_id, peer_addr) in &state.peers {
             let args = AppendEntriesArgs {
                 term: state.current_term,
                 leader_id: self.node_id.clone(),
-                prev_log_index: last_log.index,
-                prev_log_term: last_log.term,
+                prev_log_index: last_log_index,
+                prev_log_term: last_log_term,
                 entries: Vec::new(),
                 leader_commit: state.commit_index,
             };
@@ -697,9 +705,13 @@ impl RaftNode {
         // 3. Check if vote can be granted
         let can_vote =
             state.voted_for.is_none() || state.voted_for.as_deref() == Some(&args.candidate_id);
-        let last_log = state.log.last().unwrap();
-        let log_is_up_to_date = args.last_log_term > last_log.term
-            || (args.last_log_term == last_log.term && args.last_log_index >= last_log.index);
+        let (last_log_index, last_log_term) = state
+            .log
+            .last()
+            .map(|l| (l.index, l.term))
+            .unwrap_or((0, 0));
+        let log_is_up_to_date = args.last_log_term > last_log_term
+            || (args.last_log_term == last_log_term && args.last_log_index >= last_log_index);
 
         if can_vote && log_is_up_to_date {
             state.voted_for = Some(args.candidate_id.clone());

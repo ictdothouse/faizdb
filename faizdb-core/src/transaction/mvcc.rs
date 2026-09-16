@@ -430,7 +430,10 @@ impl TransactionManager {
             return;
         }
 
-        let min_ts = *active.iter().min().unwrap();
+        let min_ts = match active.iter().min() {
+            Some(&ts) => ts,
+            None => return,
+        };
         let mut committed = self.committed_writes.write();
         committed.retain(|_, ts| *ts >= min_ts);
 

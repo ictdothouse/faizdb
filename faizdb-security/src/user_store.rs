@@ -1,8 +1,9 @@
 //! In-memory and persistent User Store for Role-Based Access Control and authentication.
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::auth::{AuthManager, Role};
 
@@ -80,7 +81,7 @@ impl UserStore {
             return Err("Password must be at least 4 characters".to_string());
         }
 
-        let mut users = self.users.write().unwrap();
+        let mut users = self.users.write();
         if users.contains_key(username_clean) {
             return Err(format!("User '{username_clean}' already exists"));
         }
@@ -106,7 +107,7 @@ impl UserStore {
 
     /// Verify credentials and return the user's role on success
     pub fn authenticate(&self, username: &str, password: &str) -> Option<Role> {
-        let users = self.users.read().unwrap();
+        let users = self.users.read();
         let record = users.get(username.trim())?;
         if AuthManager::verify_password(password, &record.password_hash) {
             Some(record.role)
@@ -117,7 +118,7 @@ impl UserStore {
 
     /// List all registered users
     pub fn list_users(&self) -> Vec<UserInfo> {
-        let users = self.users.read().unwrap();
+        let users = self.users.read();
         users
             .values()
             .map(|u| UserInfo {
@@ -130,7 +131,7 @@ impl UserStore {
 
     /// Delete a user (preventing deletion of the last admin)
     pub fn delete_user(&self, username: &str) -> Result<bool, String> {
-        let mut users = self.users.write().unwrap();
+        let mut users = self.users.write();
         let record = match users.get(username.trim()) {
             Some(r) => r,
             None => return Ok(false),
@@ -152,7 +153,7 @@ impl UserStore {
         if new_password.len() < 4 {
             return Err("Password must be at least 4 characters".to_string());
         }
-        let mut users = self.users.write().unwrap();
+        let mut users = self.users.write();
         let record = users
             .get_mut(username.trim())
             .ok_or_else(|| format!("User '{username}' not found"))?;

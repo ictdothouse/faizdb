@@ -675,7 +675,7 @@ fn handle_find(
         reap_expired_cursors();
         let new_id = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_nanos() as i64)
             .abs()
             % 1_000_000_000

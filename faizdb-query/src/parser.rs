@@ -196,7 +196,7 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
 
 /// Parse MongoDB syntax: `db.<collection>.<action>(<args>)`
 fn parse_mongo_query(input: &str) -> Result<Statement, String> {
-    let without_db = input.strip_prefix("db.").unwrap();
+    let without_db = input.strip_prefix("db.").ok_or("Expected 'db.' prefix")?;
     let dot_pos = without_db
         .find('.')
         .ok_or("Expected collection name after 'db.'")?;
@@ -441,7 +441,7 @@ fn parse_json_filter(json_str: &str) -> Result<FilterExpr, String> {
     if and_clauses.is_empty() {
         Ok(FilterExpr::AlwaysTrue)
     } else if and_clauses.len() == 1 {
-        Ok(and_clauses.pop().unwrap())
+        Ok(and_clauses.pop().unwrap_or(FilterExpr::AlwaysTrue))
     } else {
         Ok(FilterExpr::And(and_clauses))
     }
@@ -2007,8 +2007,7 @@ fn parse_cypher_node(node_str: &str) -> Result<CypherNode, String> {
         (None, Vec::new(), Document::new())
     };
 
-    let (var, label) = if var_and_label.contains(':') {
-        let (v, l) = var_and_label.split_once(':').unwrap();
+    let (var, label) = if let Some((v, l)) = var_and_label.split_once(':') {
         let var_name = v.trim().to_string();
         let label_name = l.trim().to_string();
         (
@@ -2072,8 +2071,8 @@ fn parse_cypher_edge(edge_str: &str) -> Result<(Option<String>, usize, Option<f3
             }
         }
 
-        if rel_part.contains(':') {
-            let rel = rel_part.split_once(':').unwrap().1.trim();
+        if let Some((_, rel_suffix)) = rel_part.split_once(':') {
+            let rel = rel_suffix.trim();
             if !rel.is_empty() {
                 relation = Some(rel.to_string());
             }
@@ -2347,7 +2346,7 @@ fn parse_cypher_match(input: &str) -> Result<Statement, String> {
     let filter = if all_filters.is_empty() {
         None
     } else if all_filters.len() == 1 {
-        Some(all_filters.pop().unwrap())
+        all_filters.pop()
     } else {
         Some(FilterExpr::And(all_filters))
     };

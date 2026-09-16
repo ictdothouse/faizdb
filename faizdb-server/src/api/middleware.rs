@@ -140,7 +140,7 @@ pub async fn cors_middleware(req: Request<Body>, next: Next) -> Response {
         Response::builder()
             .status(StatusCode::NO_CONTENT)
             .body(Body::empty())
-            .unwrap()
+            .unwrap_or_else(|_| Response::default())
     } else {
         next.run(req).await
     };

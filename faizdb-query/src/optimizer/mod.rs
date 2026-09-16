@@ -39,8 +39,8 @@ impl ColumnHistogram {
         }
 
         values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let min_val = *values.first().unwrap();
-        let max_val = *values.last().unwrap();
+        let min_val = *values.first()?;
+        let max_val = *values.last()?;
         let total_samples = values.len();
 
         if (max_val - min_val).abs() < f64::EPSILON || bucket_count <= 1 {

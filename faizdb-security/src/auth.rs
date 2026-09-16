@@ -139,7 +139,7 @@ impl AuthManager {
     ) -> Result<String, String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs() as usize;
 
         let claims = Claims {
@@ -163,7 +163,7 @@ impl AuthManager {
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs() as usize;
 
         // RFC 7519: current date/time MUST be before expiration date/time
