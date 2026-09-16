@@ -4,7 +4,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.88+_|__edition_2024-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![Status](https://img.shields.io/badge/status-v0.1.0--Developer_Preview-blue.svg?style=for-the-badge)](https://github.com/ictdothouse/faizdb)
-[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/license-BSL_1.1-purple.svg?style=for-the-badge)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg?style=for-the-badge&logo=githubactions)](https://github.com/ictdothouse/faizdb/actions)
 [![Audit](https://img.shields.io/badge/audit-Grade_A+_(98.5%2F100)-success.svg?style=for-the-badge)](CHANGELOG.md)
 [![Security](https://img.shields.io/badge/security-EdDSA_Ed25519_%7C_AES--256--GCM-red.svg?style=for-the-badge)](SECURITY.md)
@@ -840,7 +840,13 @@ Rather than claiming instant battle-tested maturity for decade-old banking mainf
 
 ## 📜 License
 
-Licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for details.
+FaizDB is licensed under the **Business Source License 1.1 (BSL 1.1)**.
+
+* **100% Free & Unrestricted** for individual developers, startups, academic research, internal enterprise workloads, self-hosted deployments, and private SaaS applications.
+* **Anti-DBaaS Protection:** Third parties and commercial cloud providers are prohibited from offering FaizDB as a commercial managed database-as-a-service (DBaaS) without a commercial license agreement.
+* **Automatic Open-Source Conversion:** On **September 16, 2030**, the license converts automatically to the **Apache License, Version 2.0**.
+
+See the full [LICENSE](LICENSE) and [Intellectual Property & Licensing Safeguards](docs/INTELLECTUAL_PROPERTY_AND_ANTI_POACHING.md) for complete details.
 
 ---
 

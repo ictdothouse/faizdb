@@ -51,10 +51,11 @@ Following the strict enterprise audit prior to public launch, all core modules s
 - **In-Graph Filtered HNSW Traversal (`search_with_in_graph_filter`)**: Dual-heap search algorithm maintaining global spatial navigation via candidate queue while strictly populating result top-K with matching elements, yielding 100% recall even under high predicate selectivity.
 - **`IdBitset` Acceleration (`faizdb-vector/src/hnsw.rs`)**: 64-bit word-aligned bitset providing $\mathcal{O}(1)$ nanosecond filter membership testing with zero heap allocations during search loops.
 - **Optimized Asymmetric Distance Computation (ADC) (`faizdb-vector/src/quantization.rs`)**: 4-way instruction-level parallelism (ILP) unrolled accumulators for SQ8 Cosine, Euclidean, Dot Product, and Manhattan distances, reducing CPU cycles and memory stalls.
-### 6. Intellectual Property, Prior Art & Anti-Poaching (`docs/INTELLECTUAL_PROPERTY_AND_ANTI_POACHING.md`)
+### 6. Intellectual Property, Prior Art & Anti-Poaching (`docs/INTELLECTUAL_PROPERTY_AND_ANTI_POACHING.md`, `LICENSE`)
 - **Author & Inventor Declaration**: Ahmad Faiz (September 2026).
+- **Enforceable Legal License**: Transitioned to **Business Source License 1.1 (BSL 1.1)** (Change Date: September 16, 2030 → Apache 2.0). 100% free for individual developers, startups, research, edge silicon, and self-hosted deployments.
+- **Anti-Cloud DBaaS Enforceability**: BSL 1.1 legally bars cloud hyperscalers (AWS, Azure, GCP) from commercializing FaizDB as a hosted Managed Database-as-a-Service (DBaaS) without an explicit commercial license agreement.
 - **Cryptographic Prior Art Defense**: Technical innovations disclosed with SHA-256 hashes in Whitepaper and Research Paper under international patent conventions (PCT/EPO/USPTO § 102).
-- **Anti-Cloud Hyperscaler DBaaS Restriction**: Free for developers, SaaS backends, and internal enterprise systems, but strictly bars commercial cloud giants from offering FaizDB as a hosted managed database service without commercial license.
 - **Trademark Protection**: FaizDB™ and FaizQL™ proprietary marks.
 
 ### 7. Protocol Compatibility Matrix & Production Hardening (`docs/COMPATIBILITY_MATRIX.md`, `faizdb-server/src/lib.rs`)

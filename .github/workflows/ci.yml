@@ -20,7 +20,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - run: cargo fmt --all -- --check || true
+      - run: cargo fmt --all -- --check
 
   # ── 2. Clippy Lint Check ──────────────────────────────────────────
   clippy:
@@ -32,7 +32,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --all-features || true
+      - run: cargo clippy --all-targets -- -D warnings
 
   # ── 3. Build & Test ──────────────────────────────────────────────
   test:

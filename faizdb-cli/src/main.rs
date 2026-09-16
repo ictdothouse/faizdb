@@ -275,7 +275,7 @@ fn print_info() {
 ║   The AI-Native NoSQL Database Engine                            ║
 ║                                                                  ║
 ║   Created by: Ahmad Faiz                                         ║
-║   License: Apache 2.0 (Open Source)                              ║
+║   License: BSL 1.1 (Business Source License)                     ║
 ║                                                                  ║
 ║   Core Highlights:                                               ║
 ║   • Multi-Dialect Query Engine (SQL, MongoDB JSON, FaizQL)       ║

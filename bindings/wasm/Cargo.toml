@@ -3,7 +3,7 @@ name = "faizdb-wasm"
 version = "0.1.0"
 edition = "2021"
 authors = ["Ahmad Faiz <faiz@ict.house>"]
-license = "Apache-2.0"
+license = "BSL-1.1"
 description = "WebAssembly (WASM) in-browser headless database engine for FaizDB"
 
 [lib]

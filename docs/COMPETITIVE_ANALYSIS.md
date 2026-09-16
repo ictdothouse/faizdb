@@ -50,7 +50,7 @@ Modern development teams are plagued by **"Architecture Sprawl"**—where an eng
 | **Knowledge Graph (GraphRAG)**| ✅ Native Built-in | ⚠️ Basic Graph | ❌ None | ✅ AQL Graph | ❌ None | ❌ None | ✅ Graph Leader | ❌ None | ⚠️ Apache AGE (Complex) |
 | **Clustering & Consensus** | ✅ **Raft Disk Log + CRDTs**| ⚠️ TiKV Dependency | ❌ External DB Bound | ✅ Sharding | ✅ Raft Sharding | ✅ Multi-Raft Ranges | ⚠️ Causal Cluster | ✅ Sharded Clusters | ❌ Citus / Manual |
 | **GC Pause & Jitter** | ✅ **Zero GC Spikes** | ✅ Low | ❌ GC Overhead (Go) | ⚠️ High (C++) | ✅ Low | ❌ GC Overhead (Go) | ❌ Heavy (JVM GC) | ⚠️ Cache Overhead | ⚠️ Table/Index Bloat |
-| **License Model** | **Apache 2.0 (Open Source)** | BSL / FSL | Apache 2.0 | Apache / Enterprise | Apache 2.0 | BSL (Commercial) | GPL / Enterprise | SSPL (Proprietary) | PostgreSQL License |
+| **License Model** | **BSL 1.1 (Source-Available)** | BSL / FSL | Apache 2.0 | Apache / Enterprise | Apache 2.0 | BSL (Commercial) | GPL / Enterprise | SSPL (Proprietary) | PostgreSQL License |
 
 ---
 
