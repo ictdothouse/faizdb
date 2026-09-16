@@ -3,6 +3,8 @@
 //! Provides the AST, multi-dialect parser (SQL, MongoDB JSON, FaizQL),
 //! and execution engine for querying FaizDB collections.
 
+#![forbid(unsafe_code)]
+
 pub mod aggregation;
 pub mod ast;
 pub mod cache;

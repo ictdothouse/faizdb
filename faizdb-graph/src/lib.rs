@@ -3,6 +3,8 @@
 //! Provides native relationship graph storage, traversal, and GraphRAG context
 //! extraction integrated directly with FaizDB documents.
 
+#![forbid(unsafe_code)]
+
 pub mod algorithms;
 pub mod cache;
 pub mod graph;

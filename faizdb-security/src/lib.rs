@@ -6,6 +6,8 @@
 //! - **JWT** token generation & RBAC verification
 //! - Tamper-evident architecture
 
+#![forbid(unsafe_code)]
+
 pub mod audit;
 pub mod auth;
 pub mod encryption;

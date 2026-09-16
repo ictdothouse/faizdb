@@ -7,6 +7,8 @@
 //!   faizdb vector-demo             - Run AI vector similarity search demo
 //!   faizdb graph-demo              - Run GraphRAG relationship traversal demo
 
+#![forbid(unsafe_code)]
+
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;

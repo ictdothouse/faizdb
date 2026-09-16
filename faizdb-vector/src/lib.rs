@@ -9,6 +9,8 @@
 //! - High dimensional support (up to 4096 dimensions for standard text & multimodal embeddings)
 //! - Thread-safe vector index management
 
+#![forbid(unsafe_code)]
+
 pub mod distance;
 pub mod hnsw;
 pub mod quantization;

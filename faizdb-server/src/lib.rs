@@ -7,6 +7,8 @@
 //! 4. **gRPC & Protocol Buffers** (Port 50051) — ultra-low latency IPC for microservices & streaming AI vectors.
 //! 5. **REST / HTTP & WebSocket Change Streams** (Port 27018) — for web clients, microservices, and reactive subscriptions.
 
+#![forbid(unsafe_code)]
+
 pub mod api;
 pub mod grpc;
 pub mod stream;
