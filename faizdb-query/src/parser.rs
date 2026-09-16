@@ -612,28 +612,55 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
                 i += 1;
             }
         } else if token_upper == "ORDER" {
-            // ORDER BY field [ASC|DESC]
+            // ORDER BY field [ASC|DESC] [, field2 [ASC|DESC]]
             i += 1;
             if i < tokens.len() && tokens[i].eq_ignore_ascii_case("BY") {
                 i += 1;
             }
-            if i < tokens.len() {
-                let field = tokens[i]
-                    .trim_matches(|c| c == ';' || c == ',' || c == '"' || c == '\'')
+            let mut order_pairs: Vec<(String, i8)> = Vec::new();
+            while i < tokens.len() {
+                let next_up = tokens[i].to_uppercase();
+                if [
+                    "LIMIT", "SKIP", "OFFSET", "VECTOR", "TRAVERSE", "JOIN", "INNER", "LEFT",
+                ]
+                .contains(&next_up.as_str())
+                {
+                    break;
+                }
+                let raw_token = tokens[i];
+                let field = raw_token
+                    .trim_matches(|c| c == ';' || c == ',' || c == '"' || c == '\'' || c == '`')
                     .to_string();
                 i += 1;
                 let mut dir = 1i8;
                 if i < tokens.len() {
-                    let next_up = tokens[i].to_uppercase();
-                    if next_up.starts_with("DESC") {
+                    let dir_up = tokens[i].to_uppercase();
+                    if dir_up.starts_with("DESC") {
                         dir = -1;
                         i += 1;
-                    } else if next_up.starts_with("ASC") {
+                    } else if dir_up.starts_with("ASC") {
                         dir = 1;
                         i += 1;
                     }
                 }
-                sort_by = Some((field, dir));
+                if !field.is_empty() {
+                    order_pairs.push((field, dir));
+                }
+                if i < tokens.len() && tokens[i] == "," {
+                    i += 1;
+                }
+            }
+
+            if order_pairs.len() == 1 {
+                sort_by = Some(order_pairs.remove(0));
+            } else if order_pairs.len() > 1 {
+                let primary_dir = order_pairs[0].1;
+                let encoded = order_pairs
+                    .iter()
+                    .map(|(f, d)| format!("{}:{}", f, d))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                sort_by = Some((encoded, primary_dir));
             }
         } else if token_upper == "VECTOR" {
             // VECTOR NEAR [0.1, 0.2] TOP 10 [USING INDEX index_name]
@@ -1198,12 +1225,25 @@ fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
 
 /// SQL WHERE parser supporting compound conditions (AND/OR), parenthesized groups,
 /// BETWEEN, IN, LIKE, IS NULL, booleans, tautologies (`1=1`), and comparisons.
+///
+/// Uses the Pratt/recursive-descent ExprParser from `tokenizer` as primary engine,
+/// with robust fallback to legacy string splitter if needed.
 pub fn parse_sql_where(where_str: &str) -> Result<FilterExpr, String> {
     let trimmed = where_str.trim();
     if trimmed.is_empty() {
         return Ok(FilterExpr::AlwaysTrue);
     }
 
+    // Attempt lexer-driven recursive-descent parsing first
+    if let Ok(expr) = crate::tokenizer::ExprParser::parse_from_str(trimmed) {
+        return Ok(expr);
+    }
+
+    // Fallback to legacy string splitter
+    legacy_parse_sql_where(trimmed)
+}
+
+fn legacy_parse_sql_where(trimmed: &str) -> Result<FilterExpr, String> {
     // Outer enclosing parentheses: ( a = 1 OR b = 2 )
     if has_enclosing_parens(trimmed) {
         return parse_sql_where(&trimmed[1..trimmed.len() - 1]);

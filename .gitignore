@@ -38,6 +38,8 @@ dist/
 *.crt
 docs/*audit*
 docs/*strategi*
+docs/INTERNAL_TEST_VERIFICATION_RECORD.md
+docs/*INTERNAL*
 
 # ── Root-level files not meant for repo ───────────────────────────
 /index.html

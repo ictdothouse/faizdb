@@ -213,7 +213,7 @@ pub fn handle_mysql_query(
         let mut rows = Vec::new();
         for c in collections {
             let col = db.get_or_create_collection(&c);
-            let count = col.count(None);
+            let count = col.count(&[]);
             rows.push(vec![
                 Some(c),
                 Some("FaizDB".to_string()),
@@ -284,7 +284,7 @@ pub fn handle_mysql_query(
             "Index_comment".to_string(),
         ];
         let col = db.get_or_create_collection(table_name);
-        let count = col.count(None);
+        let count = col.count(&[]);
         let rows = vec![vec![
             Some(table_name.to_string()),
             Some("0".to_string()),

@@ -10,6 +10,9 @@
 //! - Punctuation (, ; . ( ) *)
 //! - SQL comments (-- line, /* */ block)
 
+use crate::ast::{FilterExpr, Operator};
+use faizdb_core::document::model::Value;
+
 /// Position in source for error reporting
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
@@ -623,7 +626,6 @@ impl TokenStream {
             }
             // Allow keywords to be used as identifiers in certain contexts
             TokenKind::Keyword(_) => {
-                let s = format!("{:?}", tok.kind);
                 // Extract the keyword name to use as identifier
                 let ident = match &tok.kind {
                     TokenKind::Keyword(kw) => format!("{:?}", kw).to_lowercase(),
@@ -662,6 +664,383 @@ impl TokenStream {
 
     pub fn reset(&mut self, pos: usize) {
         self.pos = pos;
+    }
+}
+
+/// Recursive-descent Pratt expression parser for SQL WHERE conditions.
+///
+/// Handles arbitrary nesting of `(A OR B) AND (C OR (D AND E))`,
+/// operator precedence (`OR` < `AND` < `NOT` < Comparison < Primary),
+/// `BETWEEN ... AND ...`, `IN (...)`, `LIKE '...'`, `IS [NOT] NULL`,
+/// tautologies (`1=1`, `TRUE`), and qualified column names (`table.column`).
+pub struct ExprParser<'a> {
+    stream: &'a mut TokenStream,
+}
+
+impl<'a> ExprParser<'a> {
+    /// Create a new expression parser bound to a token stream cursor
+    pub fn new(stream: &'a mut TokenStream) -> Self {
+        Self { stream }
+    }
+
+    /// Parse a complete SQL WHERE expression from raw text
+    pub fn parse_from_str(sql: &str) -> Result<FilterExpr, String> {
+        let mut stream = TokenStream::from_sql(sql)?;
+        let mut parser = ExprParser::new(&mut stream);
+        let expr = parser.parse_expr()?;
+
+        // Ensure no unconsumed trailing tokens remain (except optional semicolon / EOF)
+        if !parser.stream.is_eof() && *parser.stream.peek_kind() != TokenKind::Semicolon {
+            return Err(format!(
+                "Unexpected trailing tokens after expression at {:?}",
+                parser.stream.peek_kind()
+            ));
+        }
+
+        Ok(expr)
+    }
+
+    /// Entrypoint: parses expressions with lowest precedence (OR)
+    pub fn parse_expr(&mut self) -> Result<FilterExpr, String> {
+        self.parse_or()
+    }
+
+    /// Level 1 Precedence: OR (Disjunction)
+    fn parse_or(&mut self) -> Result<FilterExpr, String> {
+        let mut left = self.parse_and()?;
+
+        while self.stream.check_keyword(SqlKeyword::Or) {
+            self.stream.advance(); // consume OR
+            let right = self.parse_and()?;
+            left = match left {
+                FilterExpr::Or(mut list) => {
+                    list.push(right);
+                    FilterExpr::Or(list)
+                }
+                _ => FilterExpr::Or(vec![left, right]),
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// Level 2 Precedence: AND (Conjunction)
+    fn parse_and(&mut self) -> Result<FilterExpr, String> {
+        let mut left = self.parse_not()?;
+
+        while self.stream.check_keyword(SqlKeyword::And) {
+            self.stream.advance(); // consume AND
+            let right = self.parse_not()?;
+            left = match left {
+                FilterExpr::And(mut list) => {
+                    list.push(right);
+                    FilterExpr::And(list)
+                }
+                _ => FilterExpr::And(vec![left, right]),
+            };
+        }
+
+        Ok(left)
+    }
+
+    /// Level 3 Precedence: NOT (Prefix Negation)
+    fn parse_not(&mut self) -> Result<FilterExpr, String> {
+        if self.stream.check_keyword(SqlKeyword::Not) {
+            self.stream.advance(); // consume NOT
+            let inner = self.parse_not()?;
+            Ok(FilterExpr::Not(Box::new(inner)))
+        } else {
+            self.parse_primary_or_comparison()
+        }
+    }
+
+    /// Level 4 & 5 Precedence: Primary expressions, parenthesized groups, comparisons
+    fn parse_primary_or_comparison(&mut self) -> Result<FilterExpr, String> {
+        // 1. Parenthesized group: ( <expr> )
+        if *self.stream.peek_kind() == TokenKind::LParen {
+            self.stream.advance(); // consume (
+            let expr = self.parse_expr()?;
+            if *self.stream.peek_kind() == TokenKind::RParen {
+                self.stream.advance(); // consume )
+                return Ok(expr);
+            } else {
+                return Err("Expected closing parenthesis ')'".to_string());
+            }
+        }
+
+        // 2. Boolean literals: TRUE / FALSE
+        if let TokenKind::BooleanLiteral(b) = *self.stream.peek_kind() {
+            self.stream.advance();
+            return if b {
+                Ok(FilterExpr::AlwaysTrue)
+            } else {
+                Ok(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)))
+            };
+        }
+
+        // 3. Left-hand side literal (e.g. 1 = 1, 'active' = status, 1)
+        if self.is_literal(self.stream.peek_kind()) {
+            let left_lit = self.parse_literal_value()?;
+
+            if let Some(op) = self.peek_operator() {
+                self.stream.advance(); // consume op
+
+                if self.is_literal(self.stream.peek_kind()) {
+                    let right_lit = self.parse_literal_value()?;
+                    let matches = match op {
+                        Operator::Eq => left_lit == right_lit,
+                        Operator::Neq => left_lit != right_lit,
+                        Operator::Gt => match (&left_lit, &right_lit) {
+                            (Value::Integer(a), Value::Integer(b)) => a > b,
+                            (Value::Float(a), Value::Float(b)) => a > b,
+                            _ => false,
+                        },
+                        Operator::Gte => match (&left_lit, &right_lit) {
+                            (Value::Integer(a), Value::Integer(b)) => a >= b,
+                            (Value::Float(a), Value::Float(b)) => a >= b,
+                            _ => false,
+                        },
+                        Operator::Lt => match (&left_lit, &right_lit) {
+                            (Value::Integer(a), Value::Integer(b)) => a < b,
+                            (Value::Float(a), Value::Float(b)) => a < b,
+                            _ => false,
+                        },
+                        Operator::Lte => match (&left_lit, &right_lit) {
+                            (Value::Integer(a), Value::Integer(b)) => a <= b,
+                            (Value::Float(a), Value::Float(b)) => a <= b,
+                            _ => false,
+                        },
+                        _ => false,
+                    };
+                    return if matches {
+                        Ok(FilterExpr::AlwaysTrue)
+                    } else {
+                        Ok(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue)))
+                    };
+                } else {
+                    // Literal on left, column on right: e.g. 100 <= price -> price >= 100
+                    let field = self.parse_column_name()?;
+                    let inverted_op = match op {
+                        Operator::Eq => Operator::Eq,
+                        Operator::Neq => Operator::Neq,
+                        Operator::Lt => Operator::Gt,
+                        Operator::Lte => Operator::Gte,
+                        Operator::Gt => Operator::Lt,
+                        Operator::Gte => Operator::Lte,
+                        other => other,
+                    };
+                    return Ok(FilterExpr::Field {
+                        field,
+                        op: inverted_op,
+                        value: left_lit,
+                    });
+                }
+            } else {
+                // Bare literal tautology/contradiction: "1" => true, "0" => false
+                return match left_lit {
+                    Value::Integer(1) => Ok(FilterExpr::AlwaysTrue),
+                    Value::Integer(0) => Ok(FilterExpr::Not(Box::new(FilterExpr::AlwaysTrue))),
+                    _ => Ok(FilterExpr::AlwaysTrue),
+                };
+            }
+        }
+
+        // 4. Column identifier followed by predicate
+        let field = self.parse_column_name()?;
+
+        // 4a. IS [NOT] NULL
+        if self.stream.check_keyword(SqlKeyword::Is) {
+            self.stream.advance(); // consume IS
+            if self.stream.check_keyword(SqlKeyword::Not) {
+                self.stream.advance(); // consume NOT
+                if *self.stream.peek_kind() == TokenKind::NullLiteral {
+                    self.stream.advance(); // consume NULL
+                    return Ok(FilterExpr::Field {
+                        field,
+                        op: Operator::IsNotNull,
+                        value: Value::Null,
+                    });
+                } else {
+                    return Err("Expected NULL after IS NOT".to_string());
+                }
+            } else if *self.stream.peek_kind() == TokenKind::NullLiteral {
+                self.stream.advance(); // consume NULL
+                return Ok(FilterExpr::Field {
+                    field,
+                    op: Operator::IsNull,
+                    value: Value::Null,
+                });
+            } else {
+                return Err("Expected NULL or NOT NULL after IS".to_string());
+            }
+        }
+
+        // 4b. Check for NOT BETWEEN, NOT IN, NOT LIKE
+        let mut is_negated = false;
+        if self.stream.check_keyword(SqlKeyword::Not) {
+            let save_pos = self.stream.position();
+            self.stream.advance();
+            if self.stream.check_keyword(SqlKeyword::Between)
+                || self.stream.check_keyword(SqlKeyword::In)
+                || self.stream.check_keyword(SqlKeyword::Like)
+            {
+                is_negated = true;
+            } else {
+                self.stream.reset(save_pos);
+            }
+        }
+
+        // 4c. BETWEEN low AND high
+        if self.stream.check_keyword(SqlKeyword::Between) {
+            self.stream.advance(); // consume BETWEEN
+            let low = self.parse_literal_value()?;
+            if !self.stream.consume_if_keyword(SqlKeyword::And) {
+                return Err("Expected AND in BETWEEN expression".to_string());
+            }
+            let high = self.parse_literal_value()?;
+            let expr = FilterExpr::Field {
+                field,
+                op: Operator::Between,
+                value: Value::Array(vec![low, high]),
+            };
+            return if is_negated {
+                Ok(FilterExpr::Not(Box::new(expr)))
+            } else {
+                Ok(expr)
+            };
+        }
+
+        // 4d. IN (val1, val2, ...)
+        if self.stream.check_keyword(SqlKeyword::In) {
+            self.stream.advance(); // consume IN
+            if *self.stream.peek_kind() != TokenKind::LParen {
+                return Err("Expected '(' after IN".to_string());
+            }
+            self.stream.advance(); // consume (
+            let mut items = Vec::new();
+            while *self.stream.peek_kind() != TokenKind::RParen && !self.stream.is_eof() {
+                let val = self.parse_literal_value()?;
+                items.push(val);
+                if *self.stream.peek_kind() == TokenKind::Comma {
+                    self.stream.advance(); // consume comma
+                } else {
+                    break;
+                }
+            }
+            if *self.stream.peek_kind() != TokenKind::RParen {
+                return Err("Expected ')' to close IN list".to_string());
+            }
+            self.stream.advance(); // consume )
+            let expr = FilterExpr::Field {
+                field,
+                op: Operator::In,
+                value: Value::Array(items),
+            };
+            return if is_negated {
+                Ok(FilterExpr::Not(Box::new(expr)))
+            } else {
+                Ok(expr)
+            };
+        }
+
+        // 4e. LIKE pattern
+        if self.stream.check_keyword(SqlKeyword::Like) {
+            self.stream.advance(); // consume LIKE
+            let pattern = self.parse_literal_value()?;
+            let expr = FilterExpr::Field {
+                field,
+                op: Operator::Like,
+                value: pattern,
+            };
+            return if is_negated {
+                Ok(FilterExpr::Not(Box::new(expr)))
+            } else {
+                Ok(expr)
+            };
+        }
+
+        // 4f. Binary comparisons: =, !=, <>, <, <=, >, >=
+        if let Some(op) = self.peek_operator() {
+            self.stream.advance(); // consume op
+            let value = self.parse_literal_value()?;
+            return Ok(FilterExpr::Field { field, op, value });
+        }
+
+        Err(format!(
+            "Unexpected token {:?} following field '{}'",
+            self.stream.peek_kind(),
+            field
+        ))
+    }
+
+    /// Parse column identifier, supporting qualified names (table.column or database.table.column)
+    fn parse_column_name(&mut self) -> Result<String, String> {
+        let mut col = self.stream.expect_identifier()?;
+        while *self.stream.peek_kind() == TokenKind::Dot {
+            self.stream.advance(); // consume .
+            let sub = self.stream.expect_identifier()?;
+            col.push('.');
+            col.push_str(&sub);
+        }
+        Ok(col)
+    }
+
+    fn is_literal(&self, kind: &TokenKind) -> bool {
+        matches!(
+            kind,
+            TokenKind::StringLiteral(_)
+                | TokenKind::IntegerLiteral(_)
+                | TokenKind::FloatLiteral(_)
+                | TokenKind::BooleanLiteral(_)
+                | TokenKind::NullLiteral
+        )
+    }
+
+    fn peek_operator(&self) -> Option<Operator> {
+        match self.stream.peek_kind() {
+            TokenKind::Eq => Some(Operator::Eq),
+            TokenKind::Neq => Some(Operator::Neq),
+            TokenKind::Lt => Some(Operator::Lt),
+            TokenKind::Lte => Some(Operator::Lte),
+            TokenKind::Gt => Some(Operator::Gt),
+            TokenKind::Gte => Some(Operator::Gte),
+            _ => None,
+        }
+    }
+
+    fn parse_literal_value(&mut self) -> Result<Value, String> {
+        // Handle unary minus for numbers if not already fused
+        if *self.stream.peek_kind() == TokenKind::Minus {
+            self.stream.advance();
+            let tok = self.stream.advance().clone();
+            return match tok.kind {
+                TokenKind::IntegerLiteral(i) => Ok(Value::Integer(-i)),
+                TokenKind::FloatLiteral(f) => Ok(Value::Float(-f)),
+                _ => Err(format!("Expected numeric literal after '-' at line {} col {}", tok.span.line, tok.span.col)),
+            };
+        }
+
+        let tok = self.stream.advance().clone();
+        match tok.kind {
+            TokenKind::StringLiteral(s) => Ok(Value::String(s)),
+            TokenKind::IntegerLiteral(i) => Ok(Value::Integer(i)),
+            TokenKind::FloatLiteral(f) => Ok(Value::Float(f)),
+            TokenKind::BooleanLiteral(b) => Ok(Value::Boolean(b)),
+            TokenKind::NullLiteral => Ok(Value::Null),
+            TokenKind::Identifier(ref s) if s.eq_ignore_ascii_case("true") => {
+                Ok(Value::Boolean(true))
+            }
+            TokenKind::Identifier(ref s) if s.eq_ignore_ascii_case("false") => {
+                Ok(Value::Boolean(false))
+            }
+            TokenKind::Identifier(ref s) if s.eq_ignore_ascii_case("null") => {
+                Ok(Value::Null)
+            }
+            _ => Err(format!(
+                "Expected literal value but got {:?} at line {} col {}",
+                tok.kind, tok.span.line, tok.span.col
+            )),
+        }
     }
 }
 
@@ -760,5 +1139,85 @@ mod tests {
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Alter)));
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Add)));
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Keyword(SqlKeyword::Column)));
+    }
+
+    #[test]
+    fn test_expr_parser_nested_boolean() {
+        let sql = "(status = 'active' OR type = 'admin') AND (age >= 21 OR score > 90)";
+        let expr = ExprParser::parse_from_str(sql).unwrap();
+        match expr {
+            FilterExpr::And(clauses) => {
+                assert_eq!(clauses.len(), 2);
+                assert!(matches!(&clauses[0], FilterExpr::Or(list) if list.len() == 2));
+                assert!(matches!(&clauses[1], FilterExpr::Or(list) if list.len() == 2));
+            }
+            _ => panic!("Expected FilterExpr::And at top-level"),
+        }
+    }
+
+    #[test]
+    fn test_expr_parser_operator_precedence() {
+        // In SQL: A OR B AND C is parsed as A OR (B AND C)
+        let sql = "a = 1 OR b = 2 AND c = 3";
+        let expr = ExprParser::parse_from_str(sql).unwrap();
+        match expr {
+            FilterExpr::Or(branches) => {
+                assert_eq!(branches.len(), 2);
+                assert!(matches!(&branches[0], FilterExpr::Field { field, .. } if field == "a"));
+                assert!(matches!(&branches[1], FilterExpr::And(sub) if sub.len() == 2));
+            }
+            _ => panic!("Expected OR at top-level due to lower precedence than AND"),
+        }
+    }
+
+    #[test]
+    fn test_expr_parser_between_and_not_between() {
+        let sql = "age BETWEEN 18 AND 30 AND score NOT BETWEEN 0 AND 50";
+        let expr = ExprParser::parse_from_str(sql).unwrap();
+        match expr {
+            FilterExpr::And(clauses) => {
+                assert_eq!(clauses.len(), 2);
+                assert!(matches!(&clauses[0], FilterExpr::Field { op: Operator::Between, .. }));
+                assert!(matches!(&clauses[1], FilterExpr::Not(inner) if matches!(**inner, FilterExpr::Field { op: Operator::Between, .. })));
+            }
+            _ => panic!("Expected AND containing BETWEEN and NOT BETWEEN"),
+        }
+    }
+
+    #[test]
+    fn test_expr_parser_in_and_like_and_null() {
+        let sql = "role IN ('admin', 'mod') AND email LIKE '%@example.com' AND deleted_at IS NULL AND verified IS NOT NULL";
+        let expr = ExprParser::parse_from_str(sql).unwrap();
+        match expr {
+            FilterExpr::And(clauses) => {
+                assert_eq!(clauses.len(), 4);
+                assert!(matches!(&clauses[0], FilterExpr::Field { op: Operator::In, .. }));
+                assert!(matches!(&clauses[1], FilterExpr::Field { op: Operator::Like, .. }));
+                assert!(matches!(&clauses[2], FilterExpr::Field { op: Operator::IsNull, .. }));
+                assert!(matches!(&clauses[3], FilterExpr::Field { op: Operator::IsNotNull, .. }));
+            }
+            _ => panic!("Expected 4-clause AND expression"),
+        }
+    }
+
+    #[test]
+    fn test_expr_parser_tautology_and_qualified_columns() {
+        let sql = "1 = 1 AND users.account_id = 42";
+        let expr = ExprParser::parse_from_str(sql).unwrap();
+        match expr {
+            FilterExpr::And(clauses) => {
+                assert_eq!(clauses.len(), 2);
+                assert_eq!(clauses[0], FilterExpr::AlwaysTrue);
+                match &clauses[1] {
+                    FilterExpr::Field { field, op, value } => {
+                        assert_eq!(field, "users.account_id");
+                        assert_eq!(*op, Operator::Eq);
+                        assert_eq!(*value, Value::Integer(42));
+                    }
+                    _ => panic!("Expected qualified field"),
+                }
+            }
+            _ => panic!("Expected AND expression"),
+        }
     }
 }

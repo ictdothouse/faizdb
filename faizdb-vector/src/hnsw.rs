@@ -152,6 +152,70 @@ pub struct VectorSearchResult {
     pub similarity: f32,
 }
 
+/// Compact 64-bit word-aligned bitset for ultra-fast O(1) filter membership checks
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct IdBitset {
+    words: Vec<u64>,
+    count: usize,
+}
+
+impl IdBitset {
+    /// Create an empty bitset
+    pub fn new() -> Self {
+        Self {
+            words: Vec::new(),
+            count: 0,
+        }
+    }
+
+    /// Create an empty bitset with pre-allocated capacity for max_id elements
+    pub fn with_capacity(max_id: usize) -> Self {
+        let num_words = (max_id + 63) / 64;
+        Self {
+            words: vec![0u64; num_words],
+            count: 0,
+        }
+    }
+
+    /// Mark index as allowed / present
+    #[inline]
+    pub fn insert(&mut self, idx: usize) {
+        let word_idx = idx / 64;
+        let bit_idx = idx % 64;
+        if word_idx >= self.words.len() {
+            self.words.resize(word_idx + 1, 0);
+        }
+        if (self.words[word_idx] & (1u64 << bit_idx)) == 0 {
+            self.words[word_idx] |= 1u64 << bit_idx;
+            self.count += 1;
+        }
+    }
+
+    /// Test if an index is present in O(1) without allocations or branching
+    #[inline]
+    pub fn contains(&self, idx: usize) -> bool {
+        let word_idx = idx / 64;
+        let bit_idx = idx % 64;
+        if word_idx < self.words.len() {
+            (self.words[word_idx] & (1u64 << bit_idx)) != 0
+        } else {
+            false
+        }
+    }
+
+    /// Total number of set bits (matching candidate IDs)
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.count
+    }
+
+    /// Whether the bitset is empty
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
 /// HNSW Vector Index
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HnswIndex {
@@ -617,10 +681,98 @@ impl HnswIndex {
             .collect()
     }
 
-    /// Search K nearest neighbors with predicate filter on external ID (Filtered Vector Search)
-    pub fn search_with_filter<F>(&self, query: &[f32], top_k: usize, filter: F) -> Vec<VectorSearchResult>
+    /// Search within a specific layer with in-graph predicate filtering
+    fn search_layer_filtered<F>(
+        &self,
+        query: &[f32],
+        enter_points: &[usize],
+        ef: usize,
+        layer: usize,
+        filter: &F,
+    ) -> Vec<Candidate>
     where
-        F: Fn(&str) -> bool,
+        F: Fn(usize, &str) -> bool,
+    {
+        let mut visited = HashSet::new();
+        let mut candidates = BinaryHeap::new(); // min-heap (best first for graph exploration)
+        let mut results = BinaryHeap::new(); // max-heap (furthest of top ef first, ONLY valid matching nodes)
+
+        for &ep in enter_points {
+            let dist = self.dist(query, ep);
+            visited.insert(ep);
+            candidates.push(Candidate {
+                idx: ep,
+                distance: dist,
+            });
+            if !self.deleted.contains(&ep) && filter(ep, &self.nodes[ep].id) {
+                results.push(MaxCandidate {
+                    idx: ep,
+                    distance: dist,
+                });
+            }
+        }
+
+        while let Some(current) = candidates.pop() {
+            let furthest_dist = results.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
+            if current.distance > furthest_dist && results.len() >= ef {
+                break;
+            }
+
+            if layer < self.nodes[current.idx].neighbors.len() {
+                for &nbr in &self.nodes[current.idx].neighbors[layer] {
+                    if visited.insert(nbr) {
+                        let d = self.dist(query, nbr);
+                        let furthest = results.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
+
+                        // Always push into candidate queue to maintain topological navigation
+                        if d < furthest || results.len() < ef {
+                            candidates.push(Candidate {
+                                idx: nbr,
+                                distance: d,
+                            });
+                        }
+
+                        // Only add to results if node matches filter criteria and is not deleted
+                        if !self.deleted.contains(&nbr) && filter(nbr, &self.nodes[nbr].id) {
+                            if d < furthest || results.len() < ef {
+                                results.push(MaxCandidate {
+                                    idx: nbr,
+                                    distance: d,
+                                });
+                                if results.len() > ef {
+                                    results.pop();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut sorted: Vec<Candidate> = results
+            .into_iter()
+            .map(|c| Candidate {
+                idx: c.idx,
+                distance: c.distance,
+            })
+            .collect();
+        sorted.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(Ordering::Equal)
+        });
+        sorted
+    }
+
+    /// Search K nearest neighbors with custom in-graph predicate filter
+    pub fn search_with_in_graph_filter<F>(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        filter: F,
+    ) -> Vec<VectorSearchResult>
+    where
+        F: Fn(usize, &str) -> bool,
     {
         if self.is_empty() || top_k == 0 {
             return Vec::new();
@@ -661,17 +813,21 @@ impl HnswIndex {
             }
         }
 
-        // Layer 0: Search with expanded ef to account for filtered out elements
-        let ef = self
+        // Layer 0: Search with in-graph filtering
+        let mut ef = self
             .config
             .ef_search
             .max(top_k * 4 + self.deleted.len().min(self.config.ef_search));
-        let candidates = self.search_layer(query, &[curr_ep], ef, 0);
+        let mut candidates = self.search_layer_filtered(query, &[curr_ep], ef, 0, &filter);
+
+        // Adaptive expansion: if results are fewer than top_k, expand ef dynamically
+        if candidates.len() < top_k && self.nodes.len() > candidates.len() {
+            ef = (ef * 4).min(self.nodes.len());
+            candidates = self.search_layer_filtered(query, &[curr_ep], ef, 0, &filter);
+        }
 
         candidates
             .into_iter()
-            .filter(|c| !self.deleted.contains(&c.idx))
-            .filter(|c| filter(&self.nodes[c.idx].id))
             .take(top_k)
             .map(|c| {
                 let id = self.nodes[c.idx].id.clone();
@@ -687,6 +843,40 @@ impl HnswIndex {
                 }
             })
             .collect()
+    }
+
+    /// Search K nearest neighbors with predicate filter on external ID (In-Graph Filtered Search)
+    pub fn search_with_filter<F>(&self, query: &[f32], top_k: usize, filter: F) -> Vec<VectorSearchResult>
+    where
+        F: Fn(&str) -> bool,
+    {
+        self.search_with_in_graph_filter(query, top_k, |_idx, id| filter(id))
+    }
+
+    /// Search K nearest neighbors using a pre-computed IdBitset for O(1) membership check
+    pub fn search_with_bitset(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        bitset: &IdBitset,
+    ) -> Vec<VectorSearchResult> {
+        self.search_with_in_graph_filter(query, top_k, |idx, _id| bitset.contains(idx))
+    }
+
+    /// Create an IdBitset from a collection of external string IDs
+    pub fn build_id_bitset<'a, I>(&self, allowed_ids: I) -> IdBitset
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        let mut bitset = IdBitset::with_capacity(self.nodes.len());
+        for id in allowed_ids {
+            if let Some(&idx) = self.id_to_idx.get(id) {
+                if !self.deleted.contains(&idx) {
+                    bitset.insert(idx);
+                }
+            }
+        }
+        bitset
     }
 
     /// Magic header bytes for binary HNSW persistence (P4)
@@ -1148,6 +1338,19 @@ impl ConcurrentHnswIndex {
         self.inner.read().search_with_filter(query, top_k, filter)
     }
 
+    /// Search the k nearest neighbors using a pre-computed bitset filter (multiple concurrent readers allowed)
+    pub fn search_with_bitset(&self, query: &[f32], top_k: usize, bitset: &IdBitset) -> Vec<VectorSearchResult> {
+        self.inner.read().search_with_bitset(query, top_k, bitset)
+    }
+
+    /// Build an IdBitset from a collection of external string IDs
+    pub fn build_id_bitset<'a, I>(&self, allowed_ids: I) -> IdBitset
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        self.inner.read().build_id_bitset(allowed_ids)
+    }
+
     /// Save the HNSW index to a disk file path
     pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), String> {
         self.inner.read().save_to_file(path)
@@ -1470,5 +1673,78 @@ mod tests {
         // Search still works
         let res = index.search(&[1.0, 0.0, 0.0, 0.0], 1);
         assert_eq!(res[0].id, "b1");
+    }
+
+    #[test]
+    fn test_id_bitset_basics() {
+        let mut bitset = IdBitset::with_capacity(150);
+        assert!(bitset.is_empty());
+        assert_eq!(bitset.len(), 0);
+
+        bitset.insert(5);
+        bitset.insert(63);
+        bitset.insert(64);
+        bitset.insert(127);
+        bitset.insert(128);
+
+        assert_eq!(bitset.len(), 5);
+        assert!(!bitset.is_empty());
+
+        assert!(bitset.contains(5));
+        assert!(bitset.contains(63));
+        assert!(bitset.contains(64));
+        assert!(bitset.contains(127));
+        assert!(bitset.contains(128));
+
+        assert!(!bitset.contains(0));
+        assert!(!bitset.contains(6));
+        assert!(!bitset.contains(65));
+        assert!(!bitset.contains(200));
+    }
+
+    #[test]
+    fn test_in_graph_filtering_and_bitset_search() {
+        let config = HnswConfig::new(4, DistanceMetric::Cosine);
+        let mut index = HnswIndex::new(config);
+
+        // Insert 10 vectors
+        for i in 0..10 {
+            let mut v = vec![0.0f32; 4];
+            v[i % 4] = 1.0;
+            v[(i + 1) % 4] = 0.5;
+            crate::distance::normalize_in_place(&mut v);
+            index.insert(format!("item_{i}"), v).unwrap();
+        }
+
+        // Predicate: only items with even index: item_0, item_2, item_4, item_6, item_8
+        let results_pred = index.search_with_filter(&[1.0, 0.5, 0.0, 0.0], 3, |id| {
+            if let Some(num_str) = id.strip_prefix("item_") {
+                if let Ok(num) = num_str.parse::<usize>() {
+                    return num % 2 == 0;
+                }
+            }
+            false
+        });
+
+        assert!(!results_pred.is_empty());
+        for res in &results_pred {
+            let num: usize = res.id.strip_prefix("item_").unwrap().parse().unwrap();
+            assert_eq!(num % 2, 0, "Expected only even items, got {}", res.id);
+        }
+
+        // Test with pre-computed IdBitset
+        let allowed_ids = vec!["item_2", "item_4", "item_8"];
+        let bitset = index.build_id_bitset(allowed_ids);
+        assert_eq!(bitset.len(), 3);
+
+        let results_bitset = index.search_with_bitset(&[1.0, 0.5, 0.0, 0.0], 2, &bitset);
+        assert!(!results_bitset.is_empty());
+        for res in &results_bitset {
+            assert!(
+                res.id == "item_2" || res.id == "item_4" || res.id == "item_8",
+                "Got unexpected id: {}",
+                res.id
+            );
+        }
     }
 }

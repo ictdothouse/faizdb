@@ -1074,48 +1074,67 @@ impl DatabaseContext {
                     filtered = joined_results;
                 }
 
-                // Apply sort_by if specified (supporting _id and id fields)
+                // Apply sort_by if specified (supporting multi-column ORDER BY and _id/id fields)
                 if let Some((ref field, dir)) = sort_by {
-                    filtered.sort_by(|a, b| {
-                        let id_a;
-                        let id_b;
-                        let va = if field == "id" || field == "_id" {
-                            id_a = Value::String(a.id.as_str().to_string());
-                            Some(&id_a)
-                        } else {
-                            a.get_nested(field)
-                        };
-                        let vb = if field == "id" || field == "_id" {
-                            id_b = Value::String(b.id.as_str().to_string());
-                            Some(&id_b)
-                        } else {
-                            b.get_nested(field)
-                        };
-                        let cmp = match (va, vb) {
-                            (Some(x), Some(y)) => match (x, y) {
-                                (Value::Integer(ix), Value::Integer(iy)) => ix.cmp(iy),
-                                (Value::Float(fx), Value::Float(fy)) => {
-                                    fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal)
+                    let sort_specs: Vec<(&str, i8)> = if field.contains(':') {
+                        field
+                            .split(',')
+                            .filter_map(|part| {
+                                let mut pieces = part.split(':');
+                                let name = pieces.next()?.trim();
+                                let d = pieces.next().and_then(|s| s.parse::<i8>().ok()).unwrap_or(1);
+                                if !name.is_empty() {
+                                    Some((name, d))
+                                } else {
+                                    None
                                 }
-                                (Value::Integer(ix), Value::Float(fy)) => (*ix as f64)
-                                    .partial_cmp(fy)
-                                    .unwrap_or(std::cmp::Ordering::Equal),
-                                (Value::Float(fx), Value::Integer(iy)) => fx
-                                    .partial_cmp(&(*iy as f64))
-                                    .unwrap_or(std::cmp::Ordering::Equal),
-                                (Value::String(sx), Value::String(sy)) => sx.cmp(sy),
-                                (Value::Boolean(bx), Value::Boolean(by)) => bx.cmp(by),
-                                _ => std::cmp::Ordering::Equal,
-                            },
-                            (Some(_), None) => std::cmp::Ordering::Greater,
-                            (None, Some(_)) => std::cmp::Ordering::Less,
-                            (None, None) => std::cmp::Ordering::Equal,
-                        };
-                        if dir < 0 {
-                            cmp.reverse()
-                        } else {
-                            cmp
+                            })
+                            .collect()
+                    } else {
+                        vec![(field.as_str(), dir)]
+                    };
+
+                    filtered.sort_by(|a, b| {
+                        for &(col, d) in &sort_specs {
+                            let id_a;
+                            let id_b;
+                            let va = if col == "id" || col == "_id" {
+                                id_a = Value::String(a.id.as_str().to_string());
+                                Some(&id_a)
+                            } else {
+                                a.get_nested(col)
+                            };
+                            let vb = if col == "id" || col == "_id" {
+                                id_b = Value::String(b.id.as_str().to_string());
+                                Some(&id_b)
+                            } else {
+                                b.get_nested(col)
+                            };
+                            let cmp = match (va, vb) {
+                                (Some(x), Some(y)) => match (x, y) {
+                                    (Value::Integer(ix), Value::Integer(iy)) => ix.cmp(iy),
+                                    (Value::Float(fx), Value::Float(fy)) => {
+                                        fx.partial_cmp(fy).unwrap_or(std::cmp::Ordering::Equal)
+                                    }
+                                    (Value::Integer(ix), Value::Float(fy)) => (*ix as f64)
+                                        .partial_cmp(fy)
+                                        .unwrap_or(std::cmp::Ordering::Equal),
+                                    (Value::Float(fx), Value::Integer(iy)) => fx
+                                        .partial_cmp(&(*iy as f64))
+                                        .unwrap_or(std::cmp::Ordering::Equal),
+                                    (Value::String(sx), Value::String(sy)) => sx.cmp(sy),
+                                    (Value::Boolean(bx), Value::Boolean(by)) => bx.cmp(by),
+                                    _ => std::cmp::Ordering::Equal,
+                                },
+                                (Some(_), None) => std::cmp::Ordering::Greater,
+                                (None, Some(_)) => std::cmp::Ordering::Less,
+                                (None, None) => std::cmp::Ordering::Equal,
+                            };
+                            if cmp != std::cmp::Ordering::Equal {
+                                return if d < 0 { cmp.reverse() } else { cmp };
+                            }
                         }
+                        std::cmp::Ordering::Equal
                     });
                 }
 
@@ -1402,11 +1421,16 @@ impl DatabaseContext {
                 filter,
             } => {
                 let col = self.get_or_create_collection(&collection);
-                let docs = col.find_all(filter.as_ref());
+                let docs = col.find_all(None);
+                let filtered_docs = if let Some(ref f) = filter {
+                    docs.into_iter().filter(|d| f.matches(d)).collect()
+                } else {
+                    docs
+                };
                 let mut seen = std::collections::HashSet::new();
                 let mut distinct_docs = Vec::new();
 
-                for doc in docs {
+                for doc in filtered_docs {
                     let val_opt = if field == "id" || field == "_id" {
                         Some(Value::String(doc.id.as_str().to_string()))
                     } else {

@@ -25,7 +25,7 @@ pub use optimizer::{
     ColumnHistogram, CostModel, OptimizerDecision, QueryOptimizer, TableStatistics,
 };
 pub use parser::parse_query;
-pub use tokenizer::{SqlKeyword, Token, TokenKind, Tokenizer};
+pub use tokenizer::{ExprParser, SqlKeyword, Token, TokenKind, Tokenizer};
 
 /// Query engine version
 pub fn version() -> &'static str {

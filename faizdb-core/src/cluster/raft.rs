@@ -817,47 +817,6 @@ impl RaftNode {
         }
     }
 
-    /// Handle incoming InstallSnapshot RPC from leader
-    pub fn handle_install_snapshot(&self, args: InstallSnapshotArgs) -> InstallSnapshotReply {
-        let mut state = self.state.write();
-
-        if args.term < state.current_term {
-            return InstallSnapshotReply {
-                term: state.current_term,
-            };
-        }
-
-        if args.term > state.current_term {
-            state.current_term = args.term;
-            state.role = NodeRole::Follower;
-            state.voted_for = None;
-            state.leader_id = Some(args.leader_id.clone());
-
-            if let Some(ref store) = self.disk_store {
-                let _ = store.save_meta(state.current_term, None);
-            }
-        }
-
-        state.last_heartbeat = Utc::now();
-        state.last_snapshot_index = args.last_included_index;
-        state.last_snapshot_term = args.last_included_term;
-        state.commit_index = state.commit_index.max(args.last_included_index);
-
-        // Retain any log entries beyond the snapshot index
-        state.log.retain(|e| e.index > args.last_included_index);
-
-        if let Some(ref store) = self.disk_store {
-            let _ = store.save_snapshot(
-                args.last_included_index,
-                args.last_included_term,
-                &args.data,
-            );
-        }
-
-        InstallSnapshotReply {
-            term: state.current_term,
-        }
-    }
 
     /// Propose a new write log entry on the Leader and persist to disk
     pub fn propose(

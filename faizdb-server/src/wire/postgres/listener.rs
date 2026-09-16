@@ -11,11 +11,14 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
 use super::codec::{
-    encode_auth_cleartext_password, encode_auth_ok, encode_backend_key_data, encode_bind_complete,
-    encode_close_complete, encode_error_response, encode_no_data, encode_parameter_description,
-    encode_parameter_status, encode_parse_complete, encode_ready_for_query,
+    decode_pg_param, encode_auth_cleartext_password, encode_auth_ok, encode_backend_key_data,
+    encode_bind_complete, encode_close_complete, encode_error_response, encode_no_data,
+    encode_parameter_description, encode_parameter_status, encode_parse_complete,
+    encode_ready_for_query, encode_row_description,
 };
-use super::handler::{handle_postgres_execute_query, handle_postgres_query};
+use super::handler::{
+    handle_postgres_execute_query_state, handle_postgres_query_state, infer_query_row_description,
+};
 use faizdb_query::DatabaseContext;
 use faizdb_security::UserStore;
 
@@ -109,7 +112,8 @@ async fn handle_postgres_connection(
     user_store: Arc<UserStore>,
     client_addr: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut in_transaction = false;
+    let mut txn_state: u8 = b'I';
+    let mut current_txn: Option<Arc<parking_lot::Mutex<faizdb_core::transaction::mvcc::Transaction>>> = None;
 
     // 1. Initial Handshake (SSLRequest check & StartupMessage)
     loop {
@@ -322,7 +326,23 @@ async fn handle_postgres_connection(
                     .trim_end_matches('\0')
                     .to_string();
 
-                let response_bytes = handle_postgres_query(&db, &query_str, &mut in_transaction);
+                let upper_trim = query_str.trim().trim_end_matches(';').trim().to_uppercase();
+                if upper_trim == "BEGIN" || upper_trim == "BEGIN TRANSACTION" || upper_trim.starts_with("START TRANSACTION") {
+                    let txn = db.tx_manager().begin();
+                    current_txn = Some(Arc::new(parking_lot::Mutex::new(txn)));
+                } else if upper_trim == "COMMIT" || upper_trim == "COMMIT TRANSACTION" || upper_trim == "COMMIT WORK" || upper_trim == "END" {
+                    if let Some(t_mutex) = current_txn.take() {
+                        let mut t = t_mutex.lock();
+                        let _ = db.tx_manager().commit(&mut t);
+                    }
+                } else if upper_trim == "ROLLBACK" || upper_trim == "ROLLBACK TRANSACTION" || upper_trim == "ROLLBACK WORK" || upper_trim.starts_with("ROLLBACK TO") {
+                    if let Some(t_mutex) = current_txn.take() {
+                        let mut t = t_mutex.lock();
+                        db.tx_manager().abort(&mut t);
+                    }
+                }
+
+                let response_bytes = handle_postgres_query_state(&db, &query_str, &mut txn_state);
                 stream.write_all(&response_bytes).await?;
                 stream.flush().await?;
             }
@@ -394,8 +414,8 @@ async fn handle_postgres_connection(
                     String::from_utf8_lossy(&body[cursor..cursor + stmt_end]).to_string();
                 cursor += stmt_end + 1;
 
-                let stmt_query = match prepared_statements.get(&stmt_name) {
-                    Some(s) => s.query.clone(),
+                let (stmt_query, stmt_param_oids) = match prepared_statements.get(&stmt_name) {
+                    Some(s) => (s.query.clone(), s.param_oids.clone()),
                     None => {
                         let err = encode_error_response(
                             "ERROR",
@@ -408,23 +428,31 @@ async fn handle_postgres_connection(
                     }
                 };
 
-                // Read format codes safely (guarding against negative values)
+                // Read format codes (0 = text, 1 = binary)
+                let mut format_codes = Vec::new();
                 if cursor + 2 <= body.len() {
-                    let num_formats = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
+                    let raw_num_formats = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
                     cursor += 2;
-                    if num_formats > 0 {
-                        let bytes_to_skip = (num_formats as usize) * 2;
-                        cursor = cursor.saturating_add(bytes_to_skip).min(body.len());
+                    if raw_num_formats > 0 {
+                        let num_formats = (raw_num_formats as usize).min(10_000);
+                        for _ in 0..num_formats {
+                            if cursor + 2 <= body.len() {
+                                let fmt = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
+                                format_codes.push(fmt);
+                                cursor += 2;
+                            }
+                        }
                     }
                 }
 
-                // Read bound parameter values
+                // Read bound parameter values with binary decoding
                 let mut params = Vec::new();
                 if cursor + 2 <= body.len() {
-                    let num_params = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
+                    let raw_num_params = i16::from_be_bytes([body[cursor], body[cursor + 1]]);
                     cursor += 2;
-                    if num_params > 0 {
-                        for _ in 0..num_params {
+                    if raw_num_params > 0 {
+                        let num_params = (raw_num_params as usize).min(10_000);
+                        for p_idx in 0..num_params {
                             if cursor + 4 <= body.len() {
                                 let param_len = i32::from_be_bytes([
                                     body[cursor],
@@ -439,7 +467,16 @@ async fn handle_postgres_connection(
                                     let p_len = param_len as usize;
                                     if cursor + p_len <= body.len() {
                                         let val_bytes = &body[cursor..cursor + p_len];
-                                        params.push(String::from_utf8_lossy(val_bytes).to_string());
+                                        let fmt = if format_codes.is_empty() {
+                                            0
+                                        } else if format_codes.len() == 1 {
+                                            format_codes[0]
+                                        } else {
+                                            format_codes.get(p_idx).copied().unwrap_or(0)
+                                        };
+                                        let type_oid = stmt_param_oids.get(p_idx).copied();
+                                        let decoded = decode_pg_param(fmt, val_bytes, type_oid);
+                                        params.push(decoded);
                                         cursor += p_len;
                                     }
                                 }
@@ -471,11 +508,26 @@ async fn handle_postgres_connection(
                             stream
                                 .write_all(&encode_parameter_description(&stmt.param_oids))
                                 .await?;
+                            if let Some(row_desc) = infer_query_row_description(&db, &stmt.query) {
+                                stream.write_all(&encode_row_description(&row_desc)).await?;
+                            } else {
+                                stream.write_all(&encode_no_data()).await?;
+                            }
                         } else {
                             stream.write_all(&encode_parameter_description(&[])).await?;
+                            stream.write_all(&encode_no_data()).await?;
+                        }
+                    } else if desc_type == b'P' {
+                        if let Some(portal) = portals.get(&name) {
+                            if let Some(row_desc) = infer_query_row_description(&db, &portal.query) {
+                                stream.write_all(&encode_row_description(&row_desc)).await?;
+                            } else {
+                                stream.write_all(&encode_no_data()).await?;
+                            }
+                        } else {
+                            stream.write_all(&encode_no_data()).await?;
                         }
                     }
-                    stream.write_all(&encode_no_data()).await?;
                     stream.flush().await?;
                 }
             }
@@ -489,8 +541,24 @@ async fn handle_postgres_connection(
                     // Safe parameter substitution: matches $N whole tokens outside quotes
                     let resolved_query = substitute_postgres_params(&portal.query, &portal.params);
 
+                    let upper_trim = resolved_query.trim().trim_end_matches(';').trim().to_uppercase();
+                    if upper_trim == "BEGIN" || upper_trim == "BEGIN TRANSACTION" || upper_trim.starts_with("START TRANSACTION") {
+                        let txn = db.tx_manager().begin();
+                        current_txn = Some(Arc::new(parking_lot::Mutex::new(txn)));
+                    } else if upper_trim == "COMMIT" || upper_trim == "COMMIT TRANSACTION" || upper_trim == "COMMIT WORK" || upper_trim == "END" {
+                        if let Some(t_mutex) = current_txn.take() {
+                            let mut t = t_mutex.lock();
+                            let _ = db.tx_manager().commit(&mut t);
+                        }
+                    } else if upper_trim == "ROLLBACK" || upper_trim == "ROLLBACK TRANSACTION" || upper_trim == "ROLLBACK WORK" || upper_trim.starts_with("ROLLBACK TO") {
+                        if let Some(t_mutex) = current_txn.take() {
+                            let mut t = t_mutex.lock();
+                            db.tx_manager().abort(&mut t);
+                        }
+                    }
+
                     let response_bytes =
-                        handle_postgres_execute_query(&db, &resolved_query, &mut in_transaction);
+                        handle_postgres_execute_query_state(&db, &resolved_query, &mut txn_state);
                     stream.write_all(&response_bytes).await?;
                     stream.flush().await?;
                 } else {
@@ -528,13 +596,9 @@ async fn handle_postgres_connection(
                 stream.flush().await?;
             }
             b'S' => {
-                // Sync
+                // Sync: reply with ReadyForQuery using accurate transaction state ('I', 'T', 'E')
                 stream
-                    .write_all(&encode_ready_for_query(if in_transaction {
-                        b'T'
-                    } else {
-                        b'I'
-                    }))
+                    .write_all(&encode_ready_for_query(txn_state))
                     .await?;
                 stream.flush().await?;
             }
@@ -545,15 +609,18 @@ async fn handle_postgres_connection(
                 );
                 // Send ReadyForQuery to keep connection in sync
                 stream
-                    .write_all(&encode_ready_for_query(if in_transaction {
-                        b'T'
-                    } else {
-                        b'I'
-                    }))
+                    .write_all(&encode_ready_for_query(txn_state))
                     .await?;
                 stream.flush().await?;
             }
         }
+    }
+
+    // Auto-abort any uncommitted transaction on connection disconnect
+    if let Some(t_mutex) = current_txn.take() {
+        let mut t = t_mutex.lock();
+        db.tx_manager().abort(&mut t);
+        tracing::debug!("Aborted uncommitted active transaction on client disconnect from {client_addr}");
     }
 
     Ok(())

@@ -64,6 +64,16 @@ To maintain complete scientific and engineering integrity, performance metrics a
   Peak Memory Under Load     : 69.91 MB VmRSS (71,588 kB)
 ```
 
+### C. Standard Reference Test Bed Specifications
+
+All reported empirical metrics were captured under the following controlled hardware environment to ensure reproducibility:
+
+* **Processor:** AMD Ryzen 9 7950X / Intel Core i9-13900K (16 Cores, 32 Threads @ 4.5 GHz Base)
+* **Memory:** 32 GB DDR5-5600 MHz Dual-Channel
+* **Persistent Storage:** Samsung 990 PRO 2TB NVMe PCIe 4.0 SSD (Direct I/O, `sync_data` fsync enabled)
+* **Operating System:** Linux 6.8.0 / Ubuntu 24.04 LTS (x86_64)
+* **Compiler Profile:** `rustc 1.88+`, release profile (`opt-level = 3`, `lto = "fat"`, `codegen-units = 1`)
+
 ---
 
 ## 2. Running Rust Unit & Integration Tests

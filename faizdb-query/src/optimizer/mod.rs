@@ -289,6 +289,34 @@ impl CostModel {
         let cpu_cost = (estimated_rows as f64) * Self::CPU_INDEX_TUPLE_COST;
         index_traversal + doc_fetches + cpu_cost
     }
+
+    /// Compute estimated cost for SSTable sparse index lookup across LSM levels
+    pub fn sstable_sparse_scan_cost(total_docs: usize, lsm_levels: usize, estimated_rows: usize) -> f64 {
+        let block_lookup_cost = (lsm_levels as f64).max(1.0) * (total_docs as f64 + 1.0).log2().max(1.0) * 0.05;
+        let estimated_blocks = ((estimated_rows * 128) as f64 / (Self::PAGE_SIZE as f64)).ceil().max(1.0);
+        let disk_seek_cost = estimated_blocks * Self::RANDOM_PAGE_COST * 0.4;
+        let cpu_decompression = estimated_blocks * 0.02;
+        block_lookup_cost + disk_seek_cost + cpu_decompression + (estimated_rows as f64 * Self::CPU_TUPLE_COST)
+    }
+
+    /// Compute estimated cost of HNSW graph traversal for vector search
+    /// - `num_vectors`: total vectors in collection
+    /// - `ef_search`: beam width (e.g. 64)
+    /// - `dim`: vector dimensionality (e.g. 128, 384, 768, 1536)
+    pub fn hnsw_vector_search_cost(num_vectors: usize, ef_search: usize, dim: usize) -> f64 {
+        let log_n = ((num_vectors as f64) + 1.0).ln().max(1.0);
+        let distance_evaluations = (ef_search as f64) * log_n * 16.0;
+        let simd_vector_flop_cost = (dim as f64) * 0.000005; // SIMD AVX2/NEON dot product
+        let graph_pointer_hops = distance_evaluations * Self::CPU_INDEX_TUPLE_COST;
+        (distance_evaluations * simd_vector_flop_cost) + graph_pointer_hops
+    }
+
+    /// Compute estimated cost of brute-force flat vector scan
+    pub fn flat_vector_scan_cost(num_vectors: usize, dim: usize) -> f64 {
+        let sequential_read_cost = CostModel::seq_scan_cost(num_vectors, dim * 4);
+        let simd_distance_cost = (num_vectors as f64) * (dim as f64) * 0.000005;
+        sequential_read_cost + simd_distance_cost
+    }
 }
 
 /// Result of query optimization decision
@@ -319,6 +347,39 @@ impl QueryOptimizer {
                         return 1.0 / col.distinct_count as f64;
                     }
 
+                    // Null checks using column statistics
+                    if *op == Operator::IsNull && stats.total_documents > 0 {
+                        return (col.null_count as f64 / stats.total_documents as f64).clamp(0.0001, 0.99);
+                    }
+                    if *op == Operator::IsNotNull && stats.total_documents > 0 {
+                        let null_sel = (col.null_count as f64 / stats.total_documents as f64).clamp(0.0, 0.99);
+                        return (1.0 - null_sel).clamp(0.01, 1.0);
+                    }
+
+                    // BETWEEN operator with histogram range interpolation
+                    if *op == Operator::Between {
+                        if let (Some(ref hist), Value::Array(arr)) = (&col.histogram, value) {
+                            if arr.len() == 2 {
+                                let low_num = match &arr[0] {
+                                    Value::Integer(i) => Some(*i as f64),
+                                    Value::Float(f) => Some(*f),
+                                    _ => None,
+                                };
+                                let high_num = match &arr[1] {
+                                    Value::Integer(i) => Some(*i as f64),
+                                    Value::Float(f) => Some(*f),
+                                    _ => None,
+                                };
+                                if let (Some(l), Some(h)) = (low_num, high_num) {
+                                    let s_high = hist.estimate_selectivity(&Operator::Lte, h);
+                                    let s_low = hist.estimate_selectivity(&Operator::Lt, l);
+                                    return (s_high - s_low).clamp(0.0001, 1.0);
+                                }
+                            }
+                        }
+                        return 0.15;
+                    }
+
                     if let Some(ref hist) = col.histogram {
                         let target_num = match value {
                             Value::Integer(i) => Some(*i as f64),
@@ -330,12 +391,30 @@ impl QueryOptimizer {
                         }
                     }
                 }
-                // Default heuristic
+
+                // Default heuristic estimates for various operators
                 match op {
                     Operator::Eq => 0.01,
                     Operator::Lt | Operator::Lte | Operator::Gt | Operator::Gte => 0.33,
                     Operator::Neq => 0.95,
                     Operator::In => 0.15,
+                    Operator::Between => 0.15,
+                    Operator::Like => match value {
+                        Value::String(pat) => {
+                            if pat.starts_with('%') && pat.ends_with('%') {
+                                0.20
+                            } else if pat.ends_with('%') {
+                                0.05 // prefix query
+                            } else if !pat.contains('%') && !pat.contains('_') {
+                                0.01 // exact match
+                            } else {
+                                0.10
+                            }
+                        }
+                        _ => 0.15,
+                    },
+                    Operator::IsNull => 0.05,
+                    Operator::IsNotNull => 0.95,
                     _ => 0.20,
                 }
             }
@@ -343,11 +422,20 @@ impl QueryOptimizer {
                 if exprs.is_empty() {
                     return 1.0;
                 }
-                // Independence assumption
-                exprs
+                // Industry standard: sorted damped exponential decay to prevent under-estimation
+                let mut selectivities: Vec<f64> = exprs
                     .iter()
-                    .map(|e| Self::estimate_selectivity(stats, e))
-                    .fold(1.0, |acc, s| acc * s)
+                    .map(|e| Self::estimate_selectivity(stats, e).clamp(0.0001, 1.0))
+                    .collect();
+                selectivities.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+                let mut combined = 1.0;
+                let mut exponent = 1.0;
+                for s in selectivities {
+                    combined *= s.powf(exponent);
+                    exponent = (exponent * 0.75).max(0.25);
+                }
+                combined.clamp(0.0001, 1.0)
             }
             FilterExpr::Or(exprs) => {
                 if exprs.is_empty() {
@@ -358,9 +446,65 @@ impl QueryOptimizer {
                     let s = Self::estimate_selectivity(stats, e);
                     p_none *= 1.0 - s;
                 }
-                1.0 - p_none
+                (1.0 - p_none).clamp(0.0, 1.0)
             }
-            FilterExpr::Not(inner) => 1.0 - Self::estimate_selectivity(stats, inner),
+            FilterExpr::Not(inner) => (1.0 - Self::estimate_selectivity(stats, inner)).clamp(0.0, 1.0),
+        }
+    }
+
+    /// Choose optimal vector search execution plan (HNSW index vs flat scan)
+    pub fn choose_vector_plan(
+        num_vectors: usize,
+        dim: usize,
+        ef_search: usize,
+        has_index: bool,
+    ) -> OptimizerDecision {
+        let flat_cost = CostModel::flat_vector_scan_cost(num_vectors, dim);
+
+        if !has_index {
+            return OptimizerDecision {
+                chosen_plan: "FlatVectorScan".to_string(),
+                index_used: None,
+                estimated_cost: flat_cost,
+                seq_scan_cost: flat_cost,
+                index_scan_cost: None,
+                selectivity_pct: 100.0,
+                estimated_rows: num_vectors,
+                rationale: "No HNSW vector index built; falling back to brute-force SIMD flat scan"
+                    .to_string(),
+            };
+        }
+
+        let hnsw_cost = CostModel::hnsw_vector_search_cost(num_vectors, ef_search, dim);
+
+        if hnsw_cost < flat_cost {
+            OptimizerDecision {
+                chosen_plan: "HnswIndexScan".to_string(),
+                index_used: Some("HNSW_AVX2".to_string()),
+                estimated_cost: hnsw_cost,
+                seq_scan_cost: flat_cost,
+                index_scan_cost: Some(hnsw_cost),
+                selectivity_pct: (1.0 / (num_vectors as f64).max(1.0)) * 100.0,
+                estimated_rows: ef_search,
+                rationale: format!(
+                    "HNSW index chosen: estimated traversal cost ({:.2}) is vastly cheaper than flat scan ({:.2}) for N={}",
+                    hnsw_cost, flat_cost, num_vectors
+                ),
+            }
+        } else {
+            OptimizerDecision {
+                chosen_plan: "FlatVectorScan".to_string(),
+                index_used: None,
+                estimated_cost: flat_cost,
+                seq_scan_cost: flat_cost,
+                index_scan_cost: Some(hnsw_cost),
+                selectivity_pct: 100.0,
+                estimated_rows: num_vectors,
+                rationale: format!(
+                    "Flat scan chosen: small dataset (N={}) overhead of HNSW graph ({:.2}) exceeds linear SIMD scan ({:.2})",
+                    num_vectors, hnsw_cost, flat_cost
+                ),
+            }
         }
     }
 
@@ -535,5 +679,71 @@ mod tests {
         );
         assert!(decision_broad.chosen_plan.starts_with("SequentialScan"));
         assert!(decision_broad.rationale.contains("Adaptive fallback"));
+    }
+
+    #[test]
+    fn test_cbo_sstable_sparse_scan_cost() {
+        let cost_1k = CostModel::sstable_sparse_scan_cost(1000, 3, 50);
+        let cost_100k = CostModel::sstable_sparse_scan_cost(100_000, 5, 50);
+        assert!(cost_100k > cost_1k);
+        assert!(cost_1k > 0.0);
+    }
+
+    #[test]
+    fn test_cbo_vector_plan_selection() {
+        // For large N (10,000 vectors, dim=128): HNSW index search must win by far
+        let decision_large = QueryOptimizer::choose_vector_plan(10_000, 128, 64, true);
+        assert_eq!(decision_large.chosen_plan, "HnswIndexScan");
+        assert!(decision_large.estimated_cost < decision_large.seq_scan_cost);
+
+        // For tiny N (5 vectors, dim=128): flat scan should win due to HNSW graph traversal overhead
+        let decision_tiny = QueryOptimizer::choose_vector_plan(5, 128, 64, true);
+        assert_eq!(decision_tiny.chosen_plan, "FlatVectorScan");
+
+        // When no index is built: always FlatVectorScan
+        let decision_no_idx = QueryOptimizer::choose_vector_plan(10_000, 128, 64, false);
+        assert_eq!(decision_no_idx.chosen_plan, "FlatVectorScan");
+    }
+
+    #[test]
+    fn test_cbo_advanced_selectivity_operators() {
+        let mut docs = Vec::new();
+        for i in 1..=100 {
+            let mut d = Document::new();
+            d.set("val", i as f64);
+            if i % 10 == 0 {
+                d.set("email", Value::Null);
+            } else {
+                d.set("email", format!("user{}@example.com", i));
+            }
+            docs.push(d);
+        }
+        let stats = TableStatistics::analyze("users", &docs);
+
+        // BETWEEN 20 AND 40: expected ~0.20
+        let bet_filter = FilterExpr::Field {
+            field: "val".to_string(),
+            op: Operator::Between,
+            value: Value::Array(vec![Value::Float(20.0), Value::Float(40.0)]),
+        };
+        let sel_bet = QueryOptimizer::estimate_selectivity(&stats, &bet_filter);
+        assert!((sel_bet - 0.20).abs() < 0.08, "Expected ~0.20, got {sel_bet}");
+
+        // IS NULL: 10 out of 100 nulls -> expected 0.10
+        let null_filter = FilterExpr::Field {
+            field: "email".to_string(),
+            op: Operator::IsNull,
+            value: Value::Null,
+        };
+        let sel_null = QueryOptimizer::estimate_selectivity(&stats, &null_filter);
+        assert!((sel_null - 0.10).abs() < 0.02, "Expected ~0.10, got {sel_null}");
+
+        // Multi-AND damping
+        let multi_and = FilterExpr::And(vec![
+            FilterExpr::Field { field: "val".to_string(), op: Operator::Gt, value: Value::Float(20.0) },
+            FilterExpr::Field { field: "val".to_string(), op: Operator::Lt, value: Value::Float(80.0) },
+        ]);
+        let sel_and = QueryOptimizer::estimate_selectivity(&stats, &multi_and);
+        assert!(sel_and > 0.0 && sel_and <= 1.0);
     }
 }

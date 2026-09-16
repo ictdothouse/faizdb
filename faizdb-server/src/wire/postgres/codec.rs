@@ -258,3 +258,111 @@ pub fn encode_parameter_description(param_oids: &[i32]) -> Vec<u8> {
     }
     buf.to_vec()
 }
+
+/// Encode `NoticeResponse` message: 'N' + len + fields ('S' severity, 'C' code, 'M' message, '\0')
+pub fn encode_notice_response(severity: &str, code: &str, message: &str) -> Vec<u8> {
+    let mut payload_len = 4;
+    payload_len += 1 + severity.len() + 1; // 'S'
+    payload_len += 1 + code.len() + 1; // 'C'
+    payload_len += 1 + message.len() + 1; // 'M'
+    payload_len += 1; // Terminator '\0'
+
+    let mut buf = BytesMut::with_capacity(1 + payload_len);
+    buf.put_u8(b'N');
+    buf.put_i32(payload_len as i32);
+
+    buf.put_u8(b'S');
+    buf.put_slice(severity.as_bytes());
+    buf.put_u8(0);
+
+    buf.put_u8(b'C');
+    buf.put_slice(code.as_bytes());
+    buf.put_u8(0);
+
+    buf.put_u8(b'M');
+    buf.put_slice(message.as_bytes());
+    buf.put_u8(0);
+
+    buf.put_u8(0);
+    buf.to_vec()
+}
+
+/// Decodes parameter values from PostgreSQL wire Bind ('B') message based on format code.
+/// - format_code == 0: Text format
+/// - format_code == 1: Binary network format (big-endian integer, float, or boolean)
+pub fn decode_pg_param(format_code: i16, param_bytes: &[u8], type_oid: Option<i32>) -> String {
+    if format_code == 0 {
+        // Text format
+        return String::from_utf8_lossy(param_bytes).to_string();
+    }
+
+    // Binary format (format_code == 1)
+    match (param_bytes.len(), type_oid.unwrap_or(0)) {
+        (1, _) => {
+            // boolean
+            if param_bytes[0] == 0 {
+                "false".to_string()
+            } else {
+                "true".to_string()
+            }
+        }
+        (2, _) => {
+            // int2 (i16)
+            let val = i16::from_be_bytes([param_bytes[0], param_bytes[1]]);
+            val.to_string()
+        }
+        (4, PG_TYPE_FLOAT4) => {
+            // float4
+            let val = f32::from_be_bytes([
+                param_bytes[0],
+                param_bytes[1],
+                param_bytes[2],
+                param_bytes[3],
+            ]);
+            val.to_string()
+        }
+        (4, _) => {
+            // int4 (i32) default
+            let val = i32::from_be_bytes([
+                param_bytes[0],
+                param_bytes[1],
+                param_bytes[2],
+                param_bytes[3],
+            ]);
+            val.to_string()
+        }
+        (8, PG_TYPE_FLOAT8) => {
+            // float8
+            let val = f64::from_be_bytes([
+                param_bytes[0],
+                param_bytes[1],
+                param_bytes[2],
+                param_bytes[3],
+                param_bytes[4],
+                param_bytes[5],
+                param_bytes[6],
+                param_bytes[7],
+            ]);
+            val.to_string()
+        }
+        (8, _) => {
+            // int8 (i64) default
+            let val = i64::from_be_bytes([
+                param_bytes[0],
+                param_bytes[1],
+                param_bytes[2],
+                param_bytes[3],
+                param_bytes[4],
+                param_bytes[5],
+                param_bytes[6],
+                param_bytes[7],
+            ]);
+            val.to_string()
+        }
+        _ => {
+            // Fallback to UTF-8
+            String::from_utf8_lossy(param_bytes).to_string()
+        }
+    }
+}
+

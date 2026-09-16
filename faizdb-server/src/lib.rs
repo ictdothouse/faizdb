@@ -39,10 +39,35 @@ fn init_server_state() -> (
         }),
     );
 
+    // Check production mode
+    let is_production = std::env::var("FAIZDB_ENV")
+        .map(|v| v.eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+        || std::env::var("ENV")
+            .map(|v| v.eq_ignore_ascii_case("production"))
+            .unwrap_or(false);
+
     // Initialise AuthManager with JWT secret from env
-    let jwt_secret = std::env::var("FAIZDB_JWT_SECRET").unwrap_or_else(|_| {
+    let raw_secret = std::env::var("FAIZDB_JWT_SECRET").ok();
+    if is_production {
+        if let Some(ref s) = raw_secret {
+            if s == "faizdb-jwt-secret-change-in-production" || s.len() < 32 {
+                tracing::error!(
+                    "🚨 [CRITICAL SECURITY GUARD] Production environment detected, but FAIZDB_JWT_SECRET is an insecure default or fewer than 32 characters! Refusing startup."
+                );
+                panic!("FATAL: FAIZDB_JWT_SECRET must be configured with a cryptographically secure key (>= 32 chars) in production mode.");
+            }
+        } else {
+            tracing::error!(
+                "🚨 [CRITICAL SECURITY GUARD] Production environment detected, but FAIZDB_JWT_SECRET is unset! Refusing startup."
+            );
+            panic!("FATAL: FAIZDB_JWT_SECRET must be set in production mode.");
+        }
+    }
+
+    let jwt_secret = raw_secret.unwrap_or_else(|| {
         tracing::warn!(
-            "⚠️  FAIZDB_JWT_SECRET is not set — using insecure default. \
+            "⚠️  FAIZDB_JWT_SECRET is not set — using insecure default for non-production development. \
              Set FAIZDB_JWT_SECRET in production to prevent unauthorized access!"
         );
         "faizdb-jwt-secret-change-in-production".to_string()

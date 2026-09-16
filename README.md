@@ -42,7 +42,7 @@ Its distinguishing engineering advantage is **Automatic Polyglot Comprehension**
 * **1. Native Unified Query Language (FaizQL):** FaizDB features its own built-in parser and query planner, giving you full multi-model capabilities natively.
 * **2. Native High-Performance gRPC Engine (Port 50051):** Direct, zero-copy Protocol Buffers serialization for high-throughput AI microservices and inter-service telemetry.
 * **3. In-Process Embedded Library Mode (`faizdb-core`):** Like SQLite or RocksDB, embed FaizDB directly inside your Rust application with zero network daemons and zero background services.
-* **4. Automatic Wire Ingress Gateways (Ports 5432, 3306 & 27017):** Built-in listeners that automatically decode incoming PostgreSQL, MySQL, and MongoDB traffic into FaizQL AST on-the-fly, giving you zero-code-change drop-in interoperability.
+* **4. Automatic Wire Ingress Gateways (Ports 5432, 3306 & 27017):** Built-in listeners that automatically decode incoming PostgreSQL, MySQL, and MongoDB traffic into FaizQL AST on-the-fly, giving you zero-code-change wire-protocol compatibility.
 
 #### 🛡️ Pragmatic Engineering: Collection-Level Paradigm Isolation
 > **Do NOT mix arbitrary unstructured JSON into strongly-typed relational SQL tables.**  
@@ -100,7 +100,48 @@ A common question from seasoned architects is: *"Why not just run PostgreSQL wit
 
 ---
 
-## 💎 Why FaizDB Beats Incumbent Databases
+## 💎 Architectural Comparison: FaizDB vs. Incumbent Databases
+
+### 🏛️ Design Philosophy, Architectural Niche & Non-Goals
+
+To maintain rigorous engineering integrity and establish transparent expectations for developers and enterprise architects, FaizDB defines its operational sweet spot and explicit non-goals:
+
+#### 🎯 Where FaizDB Excels (The Sweet Spot):
+* **AI Agent & Autonomous Systems Memory:** Eliminates "database sprawl" by consolidating dense HNSW Vector embeddings, episodic Knowledge Graphs (openCypher), and Relational State into a single 7.7 MB zero-dependency binary.
+* **Resource-Constrained Edge & Microservices:** Boots in < 2ms with an idle physical memory footprint under 25 MB RAM, running natively on edge silicon, single-board computers, robotics, and containerized microservices without multi-gigabyte daemon bloat.
+* **Unified Multi-Wire Ingress:** Enables polyglot engineering teams to query and mutate data simultaneously using their existing client libraries (`psql`, `mongosh`, `mysql`, Prisma, Drizzle, SQLAlchemy, PyMongo) without maintaining and syncing three separate database clusters.
+
+#### 🚫 Non-Goals (What FaizDB is NOT):
+* **Not a Multi-Petabyte Analytical Warehouse:** FaizDB is not designed to replace column-oriented OLAP engines (e.g., ClickHouse, Snowflake, BigQuery) for multi-terabyte data warehousing scans.
+* **Not Aiming for 100% Legacy Procedural Emulation:** FaizDB does not implement vendor-specific legacy procedural languages (e.g., PL/pgSQL, Oracle PL/SQL, or MySQL triggers). Business logic belongs in modern application services or embedded Rust libraries.
+* **Not an In-Place Mainframe Banking Drop-In (v0.1.0):** While FaizDB guarantees WAL durability, CRC32 verification, and MVCC Serializable Snapshot Isolation (SSI), as a v0.1.0 developer preview, mission-critical Tier-1 core banking deployments should perform staging verification before v1.0 Enterprise GA.
+
+---
+
+### 📊 Protocol Compatibility Matrix & Verified Integrations
+
+FaizDB publishes an official, transparent **[Wire Protocol Compatibility Matrix](docs/COMPATIBILITY_MATRIX.md)** detailing precisely what features are fully supported, partially implemented, and scheduled in the engineering roadmap:
+
+* 🐘 **PostgreSQL (Port 5432 / 5433):** Full Extended Query Protocol (`P/B/D/E/S/C`), Pratt expression evaluation (`AND/OR/NOT/BETWEEN/IN/LIKE/IS NULL`), multi-column `ORDER BY`, MVCC SSI transactions, and virtual system catalogs (`pg_class`, `pg_attribute`, `pg_am`, `pg_type`) for ORM introspection.
+* 🍃 **MongoDB (Port 27017):** Wire BSON parsing (`OP_MSG`/`OP_QUERY`), full CRUD lifecycle, stateful cursor pagination, index management, and core aggregation pipeline stages (`$match`, `$project`, `$group`, `$sort`, `$limit`).
+* 🐬 **MySQL / MariaDB (Port 3306):** Protocol v10 handshake, standard DML queries, and reflection statements (`SHOW TABLES`, `SHOW DATABASES`, `SHOW COLUMNS`, `DESCRIBE`) verified with PHP PDO and Laravel Eloquent.
+* 🧪 **Verified Client Ecosystem:** Empirically tested with `psql` (v14–v16), `mongosh` (v2.x), `mysql` CLI, DBeaver Universal Tool, TablePlus, Prisma ORM, Drizzle ORM, SQLAlchemy, and PyMongo.
+
+*👉 Read the complete [docs/COMPATIBILITY_MATRIX.md](docs/COMPATIBILITY_MATRIX.md) for detailed syntax and protocol specifications.*
+
+---
+
+### 🛡️ Intellectual Property, Prior Art & Anti-Poaching Safeguards
+
+FaizDB is an independent, clean-slate computer system created and architected by **Ahmad Faiz (September 2026)**.
+
+* **Immutable Prior Art:** Novel architectural implementations—including *In-Graph Bitset HNSW traversal (`IdBitset`)*, *Multi-Wire Gateway over Single-Kernel LSM SkipMap*, and *Zero-Copy Hybrid MVCC SSI*—are publicly disclosed and cryptographically hashed in our [Architecture Whitepaper](docs/FAIZDB_ARCHITECTURE_WHITEPAPER.md) and [Research Paper](docs/FAIZDB_MIND_RESEARCH_PAPER.md), establishing definitive prior art under international patent law (PCT/EPO/USPTO § 102).
+* **Cloud Hyperscaler Anti-Poaching Policy:** FaizDB is 100% free for individual developers, startups, SaaS backends, edge devices, and internal enterprise software. However, commercial cloud providers are strictly prohibited from offering FaizDB as a hosted managed database service (DBaaS) to third parties without an explicit commercial license agreement.
+* **Trademark Protection:** **FaizDB™** and **FaizQL™** are proprietary marks.
+
+*👉 Read the complete [docs/INTELLECTUAL_PROPERTY_AND_ANTI_POACHING.md](docs/INTELLECTUAL_PROPERTY_AND_ANTI_POACHING.md) for full licensing boundaries and commercial terms.*
+
+---
 
 | Capability | Legacy MongoDB | PostgreSQL + Plugins | Redis | 🚀 **FaizDB (Unified)** |
 |:---|:---:|:---:|:---:|:---:|
@@ -750,9 +791,9 @@ Rather than claiming instant battle-tested maturity for decade-old banking mainf
 - [x] Native HNSW Vector Similarity Search (up to 4096 dimensions)
 - [x] Native Knowledge Graph & GraphRAG Engine
 - [x] Native openCypher Graph Syntax Parser (`MATCH` & `CREATE` patterns)
-- [x] MongoDB Wire Protocol Parser (Drop-in support on Port 27017)
-- [x] PostgreSQL Wire Protocol Engine (Drop-in support on Port 5432/5433 for psql, DBeaver & SQL ORMs)
-- [x] MySQL / MariaDB Wire Protocol Engine (Drop-in support on Port 3306 for MySQL CLI, PHP mysqli/PDO, Laravel Eloquent)
+- [x] MongoDB Wire Protocol Parser (Wire-level support on Port 27017 for mongosh, PyMongo & Prisma)
+- [x] PostgreSQL Wire Protocol Engine (Wire-level support on Port 5432/5433 for psql, DBeaver, Drizzle & SQL ORMs)
+- [x] MySQL / MariaDB Wire Protocol Engine (Wire-level support on Port 3306 for MySQL CLI, PHP mysqli/PDO, Laravel Eloquent)
 - [x] gRPC & Protocol Buffers Gateway (Port 50051 for High-Performance Microservices & Vector Streaming)
 - [x] Real-time Change Streams (WebSockets)
 - [x] Distributed Raft Consensus Engine & 16,384 Virtual Hash Slots Auto-Sharding

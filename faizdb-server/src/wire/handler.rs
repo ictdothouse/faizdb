@@ -1138,7 +1138,7 @@ fn handle_find_and_modify(
     if let Some(doc) = matched_doc {
         let old_bson = faiz_document_to_bson(&doc);
         if is_remove {
-            let _ = col.delete_by_id(&doc.id);
+            let _ = col.delete_by_id(doc.id.as_str());
             return doc! {
                 "value": old_bson,
                 "lastErrorObject": doc! { "n": 1 },
@@ -1160,7 +1160,7 @@ fn handle_find_and_modify(
                     }
                 }
             }
-            let _ = col.update_by_id(&id, |target| {
+            let _ = col.update_by_id(id.as_str(), |target| {
                 *target = updated_doc.clone();
             });
 
@@ -1193,7 +1193,7 @@ fn handle_coll_stats(
 ) -> BsonDocument {
     let db_name = cmd.get_str("$db").unwrap_or("default");
     let col = db.get_or_create_collection(col_name);
-    let count = col.count(None);
+    let count = col.count(&[]);
     let size = (count * 128) as i64;
     let avg = if count > 0 { 128.0 } else { 0.0 };
 
@@ -1215,7 +1215,7 @@ fn handle_db_stats(db: &Arc<DatabaseContext>, cmd: &BsonDocument) -> BsonDocumen
     let mut total_docs = 0;
     for c in &collections {
         let col = db.get_or_create_collection(c);
-        total_docs += col.count(None);
+        total_docs += col.count(&[]);
     }
     let data_size = (total_docs * 128) as i64;
 
