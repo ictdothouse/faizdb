@@ -70,6 +70,9 @@ pub enum FaizError {
     #[error("Transaction conflict: {0}")]
     TransactionConflict(String),
 
+    #[error("Serialization failure (write skew): {0}")]
+    SerializationFailure(String),
+
     #[error("Transaction aborted: {0}")]
     TransactionAborted(String),
 

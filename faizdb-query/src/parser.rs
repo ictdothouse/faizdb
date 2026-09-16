@@ -183,6 +183,10 @@ pub fn parse_query(input: &str) -> Result<Statement, String> {
         return parse_count_query(trimmed);
     }
 
+    if upper.starts_with("ALTER TABLE ") || upper.starts_with("ALTER COLLECTION ") {
+        return parse_alter_table(trimmed);
+    }
+
     Err(format!("Unrecognized query syntax: '{trimmed}'"))
 }
 
@@ -449,6 +453,8 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
     let mut collection = String::new();
     let mut i = 0;
     let mut is_count_query = false;
+    let mut is_distinct = false;
+    let mut distinct_field = String::new();
 
     if tokens[i].eq_ignore_ascii_case("SELECT") {
         i += 1;
@@ -458,10 +464,23 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
             col_tokens.push(tokens[i]);
             i += 1;
         }
+
         let col_str = col_tokens.join(" ");
         let upper_cols = col_str.to_uppercase();
         if upper_cols.contains("COUNT(") {
             is_count_query = true;
+        } else if upper_cols.starts_with("DISTINCT ") {
+            is_distinct = true;
+            let field_part = col_str[9..].trim();
+            distinct_field = field_part
+                .trim_matches(|c| c == '`' || c == '"' || c == '\'' || c == '(' || c == ')')
+                .to_string();
+        } else if upper_cols.starts_with("DISTINCT(") && upper_cols.ends_with(')') {
+            is_distinct = true;
+            let field_part = &col_str[9..col_str.len() - 1];
+            distinct_field = field_part
+                .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+                .to_string();
         }
 
         if i < tokens.len() && tokens[i].eq_ignore_ascii_case("FROM") {
@@ -714,6 +733,14 @@ fn parse_select_query(input: &str) -> Result<Statement, String> {
         } else {
             i += 1;
         }
+    }
+
+    if is_distinct {
+        return Ok(Statement::Distinct {
+            collection,
+            field: distinct_field,
+            filter,
+        });
     }
 
     if is_count_query {
@@ -999,14 +1026,14 @@ fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
             let field = extract_field(&part[..pos]);
             return Ok(FilterExpr::Field {
                 field,
-                op: Operator::Neq,
+                op: Operator::IsNotNull,
                 value: Value::Null,
             });
         } else if after_is.to_uppercase().starts_with("NULL") {
             let field = extract_field(&part[..pos]);
             return Ok(FilterExpr::Field {
                 field,
-                op: Operator::Eq,
+                op: Operator::IsNull,
                 value: Value::Null,
             });
         }
@@ -1021,18 +1048,11 @@ fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
             if let Some(and_pos) = find_keyword_top_level(between_args, "AND") {
                 let low = parse_literal(between_args[..and_pos].trim());
                 let high = parse_literal(between_args[and_pos + 3..].trim());
-                return Ok(FilterExpr::Or(vec![
-                    FilterExpr::Field {
-                        field: field.clone(),
-                        op: Operator::Lt,
-                        value: low,
-                    },
-                    FilterExpr::Field {
-                        field,
-                        op: Operator::Gt,
-                        value: high,
-                    },
-                ]));
+                return Ok(FilterExpr::Not(Box::new(FilterExpr::Field {
+                    field,
+                    op: Operator::Between,
+                    value: Value::Array(vec![low, high]),
+                })));
             }
         }
     }
@@ -1044,18 +1064,11 @@ fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
         if let Some(and_pos) = find_keyword_top_level(between_args, "AND") {
             let low = parse_literal(between_args[..and_pos].trim());
             let high = parse_literal(between_args[and_pos + 3..].trim());
-            return Ok(FilterExpr::And(vec![
-                FilterExpr::Field {
-                    field: field.clone(),
-                    op: Operator::Gte,
-                    value: low,
-                },
-                FilterExpr::Field {
-                    field,
-                    op: Operator::Lte,
-                    value: high,
-                },
-            ]));
+            return Ok(FilterExpr::Field {
+                field,
+                op: Operator::Between,
+                value: Value::Array(vec![low, high]),
+            });
         }
     }
 
@@ -1102,19 +1115,10 @@ fn parse_single_predicate(part: &str) -> Result<FilterExpr, String> {
     if let Some(like_pos) = find_keyword_top_level(part, "LIKE") {
         let field = extract_field(&part[..like_pos]);
         let pattern_raw = part[like_pos + 4..].trim().trim_matches(|c| c == '\'' || c == '"');
-        let (op, pattern) = if pattern_raw.starts_with('%') && pattern_raw.ends_with('%') && pattern_raw.len() >= 2 {
-            (Operator::Contains, &pattern_raw[1..pattern_raw.len() - 1])
-        } else if let Some(stripped) = pattern_raw.strip_prefix('%') {
-            (Operator::EndsWith, stripped)
-        } else if let Some(stripped) = pattern_raw.strip_suffix('%') {
-            (Operator::StartsWith, stripped)
-        } else {
-            (Operator::Eq, pattern_raw)
-        };
         return Ok(FilterExpr::Field {
             field,
-            op,
-            value: Value::String(pattern.to_string()),
+            op: Operator::Like,
+            value: Value::String(pattern_raw.to_string()),
         });
     }
 
@@ -1318,29 +1322,44 @@ fn parse_insert_query(input: &str) -> Result<Statement, String> {
             Vec::new()
         };
 
-        let val_paren_start = after_values.find('(').ok_or("Expected '(' after VALUES")?;
-        let val_paren_end = after_values.rfind(')').ok_or("Expected ')' after VALUES")?;
-        let val_strs: Vec<&str> = after_values[val_paren_start + 1..val_paren_end]
-            .split(',')
-            .map(|s| s.trim())
-            .collect();
-
-        let mut doc = Document::new();
-        if !cols.is_empty() {
-            for (idx, col) in cols.iter().enumerate() {
-                if let Some(val_str) = val_strs.get(idx) {
-                    doc.set(col.as_str(), parse_literal(val_str));
+        // Support single or multiple value groups: VALUES (1, 'a'), (2, 'b')
+        let mut docs = Vec::new();
+        let mut remaining = after_values;
+        while let Some(open) = remaining.find('(') {
+            if let Some(close) = remaining[open..].find(')') {
+                let close_idx = open + close;
+                let inner = &remaining[open + 1..close_idx];
+                let val_strs = split_list_outside_quotes(inner);
+                let mut doc = Document::new();
+                if !cols.is_empty() {
+                    for (idx, col) in cols.iter().enumerate() {
+                        if let Some(val_str) = val_strs.get(idx) {
+                            doc.set(col.as_str(), parse_literal(val_str));
+                        }
+                    }
+                } else {
+                    for (idx, val_str) in val_strs.iter().enumerate() {
+                        doc.set(format!("field_{idx}"), parse_literal(val_str));
+                    }
                 }
+                docs.push(doc);
+                remaining = remaining[close_idx + 1..].trim();
+                if remaining.starts_with(',') {
+                    remaining = remaining[1..].trim();
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
-        } else {
-            for (idx, val_str) in val_strs.iter().enumerate() {
-                doc.set(format!("field_{idx}"), parse_literal(val_str));
-            }
+        }
+        if docs.is_empty() {
+            return Err("Expected at least one value tuple in VALUES (...)".to_string());
         }
 
         return Ok(Statement::Insert {
             collection,
-            documents: vec![doc],
+            documents: docs,
         });
     }
 
@@ -1451,6 +1470,88 @@ fn parse_count_query(input: &str) -> Result<Statement, String> {
     };
 
     Ok(Statement::Count { collection, filter })
+}
+
+/// Parse ALTER TABLE / ALTER COLLECTION
+fn parse_alter_table(input: &str) -> Result<Statement, String> {
+    let clean = input.trim_end_matches(';').trim();
+    let upper = clean.to_uppercase();
+    let is_table = upper.starts_with("ALTER TABLE ");
+    let prefix_len = if is_table { 12 } else { 17 };
+    let rest = clean[prefix_len..].trim();
+
+    let parts: Vec<&str> = rest.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("Expected table name after ALTER TABLE".to_string());
+    }
+
+    let collection = parts[0]
+        .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+        .to_string();
+    let after_name = rest[parts[0].len()..].trim();
+    let upper_after = after_name.to_uppercase();
+
+    if upper_after.starts_with("ADD ") || upper_after.starts_with("ADD COLUMN ") {
+        let after_add = if upper_after.starts_with("ADD COLUMN ") {
+            after_name[11..].trim()
+        } else {
+            after_name[4..].trim()
+        };
+        let add_parts: Vec<&str> = after_add.split_whitespace().collect();
+        if add_parts.is_empty() {
+            return Err("Expected column name after ADD COLUMN".to_string());
+        }
+        let col_name = add_parts[0]
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string();
+
+        let mut default = None;
+        if let Some(def_pos) = after_add.to_uppercase().find("DEFAULT ") {
+            let def_str = after_add[def_pos + 8..].trim();
+            default = Some(parse_literal(def_str));
+        }
+
+        return Ok(Statement::AlterTable {
+            collection,
+            action: crate::ast::AlterAction::AddColumn {
+                name: col_name,
+                default,
+            },
+        });
+    }
+
+    if upper_after.starts_with("DROP ") || upper_after.starts_with("DROP COLUMN ") {
+        let after_drop = if upper_after.starts_with("DROP COLUMN ") {
+            after_name[12..].trim()
+        } else {
+            after_name[5..].trim()
+        };
+        let drop_parts: Vec<&str> = after_drop.split_whitespace().collect();
+        if drop_parts.is_empty() {
+            return Err("Expected column name after DROP COLUMN".to_string());
+        }
+        let col_name = drop_parts[0]
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string();
+
+        return Ok(Statement::AlterTable {
+            collection,
+            action: crate::ast::AlterAction::DropColumn { name: col_name },
+        });
+    }
+
+    if upper_after.starts_with("RENAME TO ") {
+        let new_name = after_name[10..]
+            .trim()
+            .trim_matches(|c| c == '`' || c == '"' || c == '\'')
+            .to_string();
+        return Ok(Statement::AlterTable {
+            collection,
+            action: crate::ast::AlterAction::RenameTable { new_name },
+        });
+    }
+
+    Err(format!("Unsupported ALTER TABLE clause: '{after_name}'"))
 }
 
 /// Parse CREATE [UNIQUE] INDEX [idx_name] ON <collection>(<field>) [UNIQUE]

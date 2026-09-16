@@ -271,6 +271,45 @@ impl HnswIndex {
         total
     }
 
+    /// Memory footprint in bytes of the HNSW index (alias for memory_bytes)
+    pub fn memory_usage_bytes(&self) -> usize {
+        self.memory_bytes()
+    }
+
+    /// Batch insert multiple vectors efficiently
+    pub fn insert_batch(&mut self, items: Vec<(String, Vec<f32>)>) -> Result<usize, String> {
+        let mut count = 0;
+        for (id, vec) in items {
+            self.insert(id, vec)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    /// Defragment and compact the HNSW graph: permanently purge tombstones and re-index
+    pub fn compact(&mut self) -> usize {
+        if self.deleted.is_empty() {
+            return 0;
+        }
+
+        let purged_count = self.deleted.len();
+        let mut new_index = HnswIndex::new(self.config.clone());
+        for (id, &old_idx) in &self.id_to_idx {
+            let old_node = &self.nodes[old_idx];
+            let vec = if !old_node.vector.is_empty() {
+                old_node.vector.clone()
+            } else if let Some(ref qv) = old_node.quantized {
+                ScalarQuantizer::dequantize(qv)
+            } else {
+                continue;
+            };
+            let _ = new_index.insert(id.clone(), vec);
+        }
+
+        *self = new_index;
+        purged_count
+    }
+
     /// Delete a vector by ID using tombstone deletion (GDPR & dynamic dataset compliant)
     pub fn delete(&mut self, id: &str) -> bool {
         if let Some(idx) = self.id_to_idx.remove(id) {
@@ -1395,5 +1434,41 @@ mod tests {
         for h in search_handles {
             h.join().unwrap();
         }
+    }
+
+    #[test]
+    fn test_batch_insert_and_compact() {
+        let config = HnswConfig::new(4, DistanceMetric::Cosine);
+        let mut index = HnswIndex::new(config);
+
+        let batch = vec![
+            ("b1".to_string(), vec![1.0, 0.0, 0.0, 0.0]),
+            ("b2".to_string(), vec![0.0, 1.0, 0.0, 0.0]),
+            ("b3".to_string(), vec![0.0, 0.0, 1.0, 0.0]),
+            ("b4".to_string(), vec![0.0, 0.0, 0.0, 1.0]),
+        ];
+        let count = index.insert_batch(batch).unwrap();
+        assert_eq!(count, 4);
+        assert_eq!(index.len(), 4);
+        assert!(index.memory_usage_bytes() > 0);
+
+        // Delete b2
+        assert!(index.delete("b2"));
+        assert_eq!(index.len(), 3);
+        assert_eq!(index.deleted_count(), 1);
+
+        // Compact
+        let purged = index.compact();
+        assert_eq!(purged, 1);
+        assert_eq!(index.deleted_count(), 0);
+        assert_eq!(index.len(), 3);
+        assert!(!index.contains_id("b2"));
+        assert!(index.contains_id("b1"));
+        assert!(index.contains_id("b3"));
+        assert!(index.contains_id("b4"));
+
+        // Search still works
+        let res = index.search(&[1.0, 0.0, 0.0, 0.0], 1);
+        assert_eq!(res[0].id, "b1");
     }
 }

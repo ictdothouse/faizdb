@@ -58,10 +58,11 @@ pub async fn cluster_join(
     })))
 }
 
-async fn send_raft_vote_rpc(
+async fn send_raft_rpc<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(
     peer_addr: &str,
-    args: &RequestVoteArgs,
-) -> Option<faizdb_core::cluster::RequestVoteReply> {
+    endpoint: &str,
+    args: &Req,
+) -> Option<Resp> {
     use std::time::Duration;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -82,7 +83,8 @@ async fn send_raft_vote_rpc(
 
     let body = serde_json::to_string(args).ok()?;
     let req = format!(
-        "POST /v1/cluster/raft/vote HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        endpoint,
         host_port,
         body.len(),
         body
@@ -104,14 +106,49 @@ async fn send_raft_vote_rpc(
     }
 }
 
+/// Concrete HTTP Transport for Raft consensus RPC communication across nodes
+#[derive(Debug, Clone, Default)]
+pub struct HttpRaftTransport;
+
+impl HttpRaftTransport {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub async fn send_vote(
+        &self,
+        peer_addr: &str,
+        args: &RequestVoteArgs,
+    ) -> Option<faizdb_core::cluster::RequestVoteReply> {
+        send_raft_rpc(peer_addr, "/v1/cluster/raft/vote", args).await
+    }
+
+    pub async fn send_append(
+        &self,
+        peer_addr: &str,
+        args: &AppendEntriesArgs,
+    ) -> Option<faizdb_core::cluster::AppendEntriesReply> {
+        send_raft_rpc(peer_addr, "/v1/cluster/raft/append", args).await
+    }
+
+    pub async fn send_snapshot(
+        &self,
+        peer_addr: &str,
+        args: &faizdb_core::cluster::InstallSnapshotArgs,
+    ) -> Option<faizdb_core::cluster::InstallSnapshotReply> {
+        send_raft_rpc(peer_addr, "/v1/cluster/raft/snapshot", args).await
+    }
+}
+
 /// POST /v1/cluster/failover — trigger active Raft leader election with real peer RPC dispatch
 pub async fn cluster_trigger_failover(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let transport = HttpRaftTransport::new();
     let (term, vote_args) = state.db.raft().start_election();
     let peers = state.db.raft().list_peers();
 
     let mut votes_granted = 1; // Vote for self
     for (peer_id, peer_addr) in &peers {
-        if let Some(reply) = send_raft_vote_rpc(peer_addr, &vote_args).await {
+        if let Some(reply) = transport.send_vote(peer_addr, &vote_args).await {
             if reply.vote_granted && state.db.raft().record_vote(peer_id, term, true) {
                 votes_granted += 1;
             }
@@ -151,6 +188,74 @@ pub async fn raft_append_entries(
     Json(args): Json<AppendEntriesArgs>,
 ) -> impl IntoResponse {
     Json(state.db.raft().handle_append_entries(args))
+}
+
+/// POST /v1/cluster/raft/snapshot — Raft InstallSnapshot RPC
+pub async fn raft_install_snapshot(
+    State(state): State<Arc<AppState>>,
+    Json(args): Json<faizdb_core::cluster::InstallSnapshotArgs>,
+) -> impl IntoResponse {
+    Json(state.db.raft().handle_install_snapshot(args))
+}
+
+/// Spawn the Raft consensus background tick daemon driving elections and leader heartbeats
+pub fn spawn_raft_tick_daemon(
+    raft: Arc<faizdb_core::cluster::RaftNode>,
+    mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(50));
+        let transport = HttpRaftTransport::new();
+
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let action = raft.tick();
+                    match action {
+                        faizdb_core::cluster::RaftTickAction::None => {}
+                        faizdb_core::cluster::RaftTickAction::SendHeartbeat => {
+                            let heartbeats = raft.prepare_heartbeats();
+                            for (_peer_id, (peer_addr, args)) in heartbeats {
+                                let raft_clone = raft.clone();
+                                let transport_clone = transport.clone();
+                                tokio::spawn(async move {
+                                    if let Some(reply) = transport_clone.send_append(&peer_addr, &args).await {
+                                        if reply.term > args.term {
+                                            raft_clone.step_down(reply.term);
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        faizdb_core::cluster::RaftTickAction::StartElection => {
+                            let (term, vote_args) = raft.start_election();
+                            let peers = raft.list_peers();
+                            if peers.is_empty() {
+                                raft.trigger_election();
+                            } else {
+                                for (peer_id, peer_addr) in peers {
+                                    let raft_clone = raft.clone();
+                                    let transport_clone = transport.clone();
+                                    let vote_args_clone = vote_args.clone();
+                                    tokio::spawn(async move {
+                                        if let Some(reply) = transport_clone.send_vote(&peer_addr, &vote_args_clone).await {
+                                            if reply.vote_granted {
+                                                raft_clone.record_vote(&peer_id, term, true);
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    tracing::info!("Raft background tick daemon shutting down");
+                    break;
+                }
+            }
+        }
+    })
 }
 
 /// GET /v1/cluster/regions

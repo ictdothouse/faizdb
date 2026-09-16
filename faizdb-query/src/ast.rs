@@ -16,6 +16,14 @@ pub enum Operator {
     Contains,
     StartsWith,
     EndsWith,
+    /// SQL BETWEEN: field BETWEEN low AND high
+    Between,
+    /// SQL LIKE: field LIKE '%pattern%'
+    Like,
+    /// SQL IS NULL
+    IsNull,
+    /// SQL IS NOT NULL
+    IsNotNull,
 }
 
 /// Filter Expression (supports nesting with AND/OR/NOT)
@@ -111,8 +119,76 @@ impl FilterExpr {
                 (val, Value::Array(arr)) => arr.contains(val),
                 _ => false,
             },
+            Operator::Between => match (actual, target) {
+                // Target is an Array [low, high]
+                (Value::Integer(a), Value::Array(arr)) if arr.len() == 2 => {
+                    match (&arr[0], &arr[1]) {
+                        (Value::Integer(lo), Value::Integer(hi)) => a >= lo && a <= hi,
+                        (Value::Float(lo), Value::Float(hi)) => (*a as f64) >= *lo && (*a as f64) <= *hi,
+                        _ => false,
+                    }
+                }
+                (Value::Float(a), Value::Array(arr)) if arr.len() == 2 => {
+                    match (&arr[0], &arr[1]) {
+                        (Value::Float(lo), Value::Float(hi)) => a >= lo && a <= hi,
+                        (Value::Integer(lo), Value::Integer(hi)) => *a >= (*lo as f64) && *a <= (*hi as f64),
+                        _ => false,
+                    }
+                }
+                (Value::String(a), Value::Array(arr)) if arr.len() == 2 => {
+                    match (&arr[0], &arr[1]) {
+                        (Value::String(lo), Value::String(hi)) => a >= lo && a <= hi,
+                        _ => false,
+                    }
+                }
+                _ => false,
+            },
+            Operator::Like => match (actual, target) {
+                (Value::String(s), Value::String(pattern)) => {
+                    sql_like_match(s, pattern)
+                }
+                _ => false,
+            },
+            Operator::IsNull => actual.is_null(),
+            Operator::IsNotNull => !actual.is_null(),
         }
     }
+}
+
+/// SQL LIKE pattern matching: supports `%` (any sequence) and `_` (single char)
+fn sql_like_match(s: &str, pattern: &str) -> bool {
+    let s_chars: Vec<char> = s.chars().collect();
+    let p_chars: Vec<char> = pattern.chars().collect();
+    let (sn, pn) = (s_chars.len(), p_chars.len());
+
+    // DP table: dp[i][j] = true if s[0..i] matches pattern[0..j]
+    let mut dp = vec![vec![false; pn + 1]; sn + 1];
+    dp[0][0] = true;
+
+    // Handle leading %
+    for j in 1..=pn {
+        if p_chars[j - 1] == '%' {
+            dp[0][j] = dp[0][j - 1];
+        } else {
+            break;
+        }
+    }
+
+    for i in 1..=sn {
+        for j in 1..=pn {
+            match p_chars[j - 1] {
+                '%' => dp[i][j] = dp[i - 1][j] || dp[i][j - 1],
+                '_' => dp[i][j] = dp[i - 1][j - 1],
+                c => {
+                    // Case-insensitive comparison for SQL LIKE compatibility
+                    dp[i][j] = dp[i - 1][j - 1]
+                        && s_chars[i - 1].to_lowercase().eq(c.to_lowercase());
+                }
+            }
+        }
+    }
+
+    dp[sn][pn]
 }
 
 /// Vector Search Clause within a Query
@@ -303,8 +379,27 @@ pub enum Statement {
         key: String,
         value: String,
     },
+    /// ALTER TABLE operations
+    AlterTable {
+        collection: String,
+        action: AlterAction,
+    },
+    /// SELECT DISTINCT field FROM collection
+    Distinct {
+        collection: String,
+        field: String,
+        filter: Option<FilterExpr>,
+    },
     BeginTransaction,
     CommitTransaction,
     RollbackTransaction,
+}
+
+/// ALTER TABLE action types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AlterAction {
+    AddColumn { name: String, default: Option<Value> },
+    DropColumn { name: String },
+    RenameTable { new_name: String },
 }
 

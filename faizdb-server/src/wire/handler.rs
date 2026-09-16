@@ -256,6 +256,60 @@ fn dispatch_command(
         };
     }
 
+    // 7. Extended MongoDB Driver & Utility Commands
+    if cmd.contains_key("connectionStatus") {
+        let users = if let Some(ref u) = session.authenticated_user {
+            vec![bson::to_bson(&doc! { "user": u.clone(), "db": "admin" }).unwrap_or(Bson::Null)]
+        } else {
+            vec![]
+        };
+        let roles = if let Some(ref r) = session.role {
+            vec![bson::to_bson(&doc! { "role": format!("{r:?}"), "db": "admin" }).unwrap_or(Bson::Null)]
+        } else {
+            vec![]
+        };
+        return doc! {
+            "authInfo": doc! {
+                "authenticatedUsers": users,
+                "authenticatedUserRoles": roles
+            },
+            "ok": 1.0
+        };
+    }
+
+    if cmd.contains_key("serverStatus") {
+        return doc! {
+            "host": "faizdb-node",
+            "version": "7.0.0-FaizDB",
+            "process": "faizdb",
+            "uptime": 3600.0,
+            "uptimeMillis": 3600000i64,
+            "connections": doc! { "current": 1, "available": 10000 },
+            "mem": doc! { "resident": 64, "virtual": 128 },
+            "ok": 1.0
+        };
+    }
+
+    if cmd.contains_key("dbStats") {
+        return handle_db_stats(db, cmd);
+    }
+
+    if let Ok(col_name) = cmd.get_str("collStats") {
+        return handle_coll_stats(db, col_name, cmd);
+    }
+
+    if let Ok(col_name) = cmd.get_str("distinct") {
+        return handle_distinct(db, col_name, cmd);
+    }
+
+    if let Ok(col_name) = cmd.get_str("findAndModify") {
+        return handle_find_and_modify(db, col_name, cmd);
+    }
+
+    if let Ok(from_full) = cmd.get_str("renameCollection") {
+        return handle_rename_collection(db, from_full, cmd);
+    }
+
     // Generic fallback for unhandled commands to avoid driver crashes
     tracing::debug!("Received unhandled MongoDB command: {:?}", cmd);
     doc! { "ok": 1.0 }
@@ -963,6 +1017,245 @@ fn handle_update(
         "nModified": modified_count,
         "ok": 1.0
     }
+}
+
+fn handle_distinct(
+    db: &Arc<DatabaseContext>,
+    col_name: &str,
+    cmd: &BsonDocument,
+) -> BsonDocument {
+    let key = cmd.get_str("key").unwrap_or("_id");
+    let col = db.get_or_create_collection(col_name);
+    let filter_doc = cmd.get_document("query").ok();
+
+    let docs = col.find_all(None);
+    let mut seen = std::collections::HashSet::new();
+    let mut values: Vec<Bson> = Vec::new();
+
+    for d in docs {
+        if let Some(filter) = filter_doc {
+            if !filter.is_empty() {
+                let mut matches = true;
+                for (k, v) in filter {
+                    if k == "_id" {
+                        let id_str = d.id.as_str();
+                        let matches_id = match v {
+                            bson::Bson::String(s) => s.as_str() == id_str,
+                            bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                            _ => false,
+                        };
+                        if !matches_id {
+                            matches = false;
+                            break;
+                        }
+                    } else if let Some(val) = d.get_nested(k) {
+                        let b_val = faiz_val_to_bson(val);
+                        if &b_val != v {
+                            matches = false;
+                            break;
+                        }
+                    } else {
+                        matches = false;
+                        break;
+                    }
+                }
+                if !matches {
+                    continue;
+                }
+            }
+        }
+
+        let b_val = if key == "_id" || key == "id" {
+            Bson::String(d.id.as_str().to_string())
+        } else if let Some(val) = d.get_nested(key) {
+            faiz_val_to_bson(val)
+        } else {
+            continue;
+        };
+
+        let repr = format!("{b_val:?}");
+        if seen.insert(repr) {
+            values.push(b_val);
+        }
+    }
+
+    doc! {
+        "values": values,
+        "ok": 1.0
+    }
+}
+
+fn handle_find_and_modify(
+    db: &Arc<DatabaseContext>,
+    col_name: &str,
+    cmd: &BsonDocument,
+) -> BsonDocument {
+    let col = db.get_or_create_collection(col_name);
+    let filter_doc = cmd.get_document("query").ok();
+    let is_remove = cmd.get_bool("remove").unwrap_or(false);
+    let return_new = cmd.get_bool("new").unwrap_or(false);
+    let update_doc = cmd.get_document("update").ok();
+
+    let docs = col.find_all(None);
+    let mut matched_doc = None;
+
+    for d in docs {
+        if let Some(filter) = filter_doc {
+            if !filter.is_empty() {
+                let mut matches = true;
+                for (k, v) in filter {
+                    if k == "_id" {
+                        let id_str = d.id.as_str();
+                        let matches_id = match v {
+                            bson::Bson::String(s) => s.as_str() == id_str,
+                            bson::Bson::ObjectId(oid) => oid.to_hex() == id_str,
+                            _ => false,
+                        };
+                        if !matches_id {
+                            matches = false;
+                            break;
+                        }
+                    } else if let Some(val) = d.get_nested(k) {
+                        let b_val = faiz_val_to_bson(val);
+                        if &b_val != v {
+                            matches = false;
+                            break;
+                        }
+                    } else {
+                        matches = false;
+                        break;
+                    }
+                }
+                if !matches {
+                    continue;
+                }
+            }
+        }
+        matched_doc = Some(d);
+        break;
+    }
+
+    if let Some(doc) = matched_doc {
+        let old_bson = faiz_document_to_bson(&doc);
+        if is_remove {
+            let _ = col.delete_by_id(&doc.id);
+            return doc! {
+                "value": old_bson,
+                "lastErrorObject": doc! { "n": 1 },
+                "ok": 1.0
+            };
+        }
+
+        if let Some(upd) = update_doc {
+            let id = doc.id.clone();
+            let mut updated_doc = doc.clone();
+            if let Ok(set_doc) = upd.get_document("$set") {
+                for (k, v) in set_doc {
+                    updated_doc.set(k.as_str(), bson_val_to_faiz(v));
+                }
+            } else {
+                for (k, v) in upd {
+                    if !k.starts_with('$') {
+                        updated_doc.set(k.as_str(), bson_val_to_faiz(v));
+                    }
+                }
+            }
+            let _ = col.update_by_id(&id, |target| {
+                *target = updated_doc.clone();
+            });
+
+            let new_bson = faiz_document_to_bson(&updated_doc);
+            return doc! {
+                "value": if return_new { new_bson } else { old_bson },
+                "lastErrorObject": doc! { "n": 1, "updatedExisting": true },
+                "ok": 1.0
+            };
+        }
+
+        doc! {
+            "value": old_bson,
+            "lastErrorObject": doc! { "n": 1 },
+            "ok": 1.0
+        }
+    } else {
+        doc! {
+            "value": Bson::Null,
+            "lastErrorObject": doc! { "n": 0, "updatedExisting": false },
+            "ok": 1.0
+        }
+    }
+}
+
+fn handle_coll_stats(
+    db: &Arc<DatabaseContext>,
+    col_name: &str,
+    cmd: &BsonDocument,
+) -> BsonDocument {
+    let db_name = cmd.get_str("$db").unwrap_or("default");
+    let col = db.get_or_create_collection(col_name);
+    let count = col.count(None);
+    let size = (count * 128) as i64;
+    let avg = if count > 0 { 128.0 } else { 0.0 };
+
+    doc! {
+        "ns": format!("{db_name}.{col_name}"),
+        "count": count as i64,
+        "size": size,
+        "avgObjSize": avg,
+        "storageSize": size,
+        "nindexes": 1,
+        "totalIndexSize": 4096,
+        "ok": 1.0
+    }
+}
+
+fn handle_db_stats(db: &Arc<DatabaseContext>, cmd: &BsonDocument) -> BsonDocument {
+    let db_name = cmd.get_str("$db").unwrap_or("default");
+    let collections = db.list_collections();
+    let mut total_docs = 0;
+    for c in &collections {
+        let col = db.get_or_create_collection(c);
+        total_docs += col.count(None);
+    }
+    let data_size = (total_docs * 128) as i64;
+
+    doc! {
+        "db": db_name,
+        "collections": collections.len() as i32,
+        "views": 0,
+        "objects": total_docs as i64,
+        "avgObjSize": if total_docs > 0 { 128.0 } else { 0.0 },
+        "dataSize": data_size,
+        "storageSize": data_size,
+        "indexes": collections.len() as i32,
+        "indexSize": (collections.len() * 4096) as i64,
+        "totalSize": data_size + (collections.len() * 4096) as i64,
+        "ok": 1.0
+    }
+}
+
+fn handle_rename_collection(
+    db: &Arc<DatabaseContext>,
+    from_full: &str,
+    cmd: &BsonDocument,
+) -> BsonDocument {
+    let to_full = match cmd.get_str("to") {
+        Ok(t) => t,
+        Err(_) => return doc! { "ok": 0.0, "errmsg": "Missing 'to' target collection" },
+    };
+    let from_name = from_full.split('.').last().unwrap_or(from_full);
+    let to_name = to_full.split('.').last().unwrap_or(to_full);
+
+    let from_col = db.get_or_create_collection(from_name);
+    let to_col = db.get_or_create_collection(to_name);
+
+    let docs = from_col.find_all(None);
+    for doc in docs {
+        let _ = to_col.insert(doc);
+    }
+    let _ = db.drop_collection(from_name);
+
+    doc! { "ok": 1.0 }
 }
 
 // ── BSON <-> FaizDB Conversion Helpers ───────────────────────────

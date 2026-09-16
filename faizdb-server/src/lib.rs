@@ -227,7 +227,10 @@ pub async fn run_multi_protocol_server(
         }
     });
 
-    // 5. Background TTL Sweeper: automatically purge expired documents every 30s
+    // 5. Background Raft Consensus Daemon: drive heartbeat timeouts & leader elections
+    api::cluster::spawn_raft_tick_daemon(db.raft(), shutdown_tx.subscribe());
+
+    // 6. Background TTL Sweeper: automatically purge expired documents every 30s
     let db_for_ttl = db.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));

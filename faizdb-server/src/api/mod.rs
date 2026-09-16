@@ -244,6 +244,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(cluster::raft_append_entries),
         )
         .route(
+            "/v1/cluster/raft/snapshot",
+            post(cluster::raft_install_snapshot),
+        )
+        .route(
             "/v1/cluster/regions",
             get(cluster::cluster_get_regions).post(cluster::cluster_register_region),
         )

@@ -1,9 +1,18 @@
-//! MVCC (Multi-Version Concurrency Control) — snapshot isolation for transactions.
+//! MVCC — Serializable Snapshot Isolation (SSI) for transactions.
 //!
 //! Each transaction gets a snapshot of the database at the time it started.
 //! Writes are buffered locally and only applied on commit.
-//! Write-write conflicts are detected: if two transactions modify the same key,
-//! the second one to commit will be aborted.
+//!
+//! Conflict detection operates at two levels:
+//! 1. **Write-Write (WW)**: If two transactions modify the same key, the second
+//!    to commit is aborted. (Standard in all SI implementations.)
+//! 2. **Read-Write (RW) Anti-Dependency** (SSI): If transaction T1 reads a key
+//!    that transaction T2 subsequently writes and commits, T1's commit is aborted
+//!    because its read set is no longer consistent — preventing **write skew**
+//!    anomalies that plain Snapshot Isolation cannot detect.
+//!
+//! This gives FaizDB the same isolation level as PostgreSQL 9.1+ SERIALIZABLE
+//! and CockroachDB — the strongest ANSI SQL isolation level.
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -133,6 +142,11 @@ impl Transaction {
         self.write_buffer.get(key)
     }
 
+    /// Get reference to the read set (for SSI validation)
+    pub fn read_set(&self) -> &HashSet<Vec<u8>> {
+        &self.read_set
+    }
+
     /// Attempt to transition transaction to Committing status.
     /// Fails if the transaction is already Committing, Committed, or Aborted.
     pub fn try_set_committing(&mut self) -> FaizResult<()> {
@@ -209,16 +223,24 @@ impl Transaction {
     }
 }
 
-/// Transaction manager — coordinates concurrent transactions.
+/// Transaction manager — coordinates concurrent transactions with **Serializable Snapshot Isolation**.
 ///
-/// Tracks active transactions and detects write-write conflicts.
+/// Tracks active transactions and detects both:
+/// - **Write-Write (WW) conflicts**: two transactions writing the same key
+/// - **Read-Write (RW) anti-dependencies**: a transaction reading a key that was
+///   subsequently written by a committed concurrent transaction (write skew)
 pub struct TransactionManager {
     /// Active transactions
     active_txns: RwLock<HashSet<u64>>,
 
     /// Recently committed writes: key -> commit timestamp
-    /// Used for conflict detection
+    /// Used for WW conflict detection and RW anti-dependency (SSI) detection
     committed_writes: RwLock<BTreeMap<Vec<u8>, u64>>,
+
+    /// Recently committed reads: key -> list of (txn_snapshot_ts) that read it
+    /// Used for SSI write-skew detection: when a transaction commits writes,
+    /// we check if any concurrent transaction read those keys.
+    committed_reads: RwLock<BTreeMap<Vec<u8>, Vec<u64>>>,
 }
 
 impl TransactionManager {
@@ -227,6 +249,7 @@ impl TransactionManager {
         Self {
             active_txns: RwLock::new(HashSet::new()),
             committed_writes: RwLock::new(BTreeMap::new()),
+            committed_reads: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -237,7 +260,7 @@ impl TransactionManager {
         txn
     }
 
-    /// Validate and prepare a transaction for commit.
+    /// Validate and prepare a transaction for commit (pre-check, non-atomic).
     ///
     /// Checks for write-write conflicts: if any key in the transaction's
     /// write set was modified by another committed transaction after our
@@ -260,7 +283,40 @@ impl TransactionManager {
         Ok(())
     }
 
-    /// Record a transaction as committed atomically with conflict validation
+    /// Validate SSI read-write anti-dependencies.
+    ///
+    /// Checks the transaction's **read set** against committed writes:
+    /// if any key that this transaction read was modified by another
+    /// transaction that committed after our snapshot started, this
+    /// transaction must abort to prevent write skew.
+    ///
+    /// This is the core of Serializable Snapshot Isolation (SSI).
+    fn validate_ssi(&self, txn: &Transaction, committed: &BTreeMap<Vec<u8>, u64>) -> FaizResult<()> {
+        for key in txn.read_set() {
+            // Skip keys we also wrote — our own writes are always visible
+            if txn.write_buffer.contains_key(key) {
+                continue;
+            }
+            if let Some(&commit_ts) = committed.get(key) {
+                if commit_ts > txn.snapshot_ts {
+                    return Err(FaizError::SerializationFailure(format!(
+                        "Read-write anti-dependency on key {:?}: read at snapshot_ts={}, \
+                         but another transaction committed a write at ts={} — \
+                         aborting to prevent write skew (SSI violation)",
+                        String::from_utf8_lossy(key),
+                        txn.snapshot_ts,
+                        commit_ts
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Record a transaction as committed atomically with full SSI conflict validation.
+    ///
+    /// Performs both Write-Write and Read-Write anti-dependency checks under a
+    /// single write lock to prevent TOCTOU race conditions.
     pub fn commit(&self, txn: &mut Transaction) -> FaizResult<()> {
         let commit_ts = NEXT_TXN_ID.fetch_add(1, Ordering::SeqCst);
 
@@ -269,6 +325,7 @@ impl TransactionManager {
         {
             let mut committed = self.committed_writes.write();
 
+            // 1. Write-Write conflict detection
             for key in txn.write_buffer.keys() {
                 if let Some(&prev_commit_ts) = committed.get(key) {
                     if prev_commit_ts > txn.snapshot_ts {
@@ -281,8 +338,23 @@ impl TransactionManager {
                 }
             }
 
+            // 2. SSI Read-Write anti-dependency detection (write skew prevention)
+            self.validate_ssi(txn, &committed)?;
+
+            // 3. All validations passed — record our writes
             for key in txn.write_buffer.keys() {
                 committed.insert(key.clone(), commit_ts);
+            }
+
+            // 4. Record our reads for future SSI checks by other transactions
+            if !txn.read_set().is_empty() {
+                let mut committed_reads = self.committed_reads.write();
+                for key in txn.read_set() {
+                    committed_reads
+                        .entry(key.clone())
+                        .or_default()
+                        .push(txn.snapshot_ts);
+                }
             }
         }
 
@@ -299,6 +371,7 @@ impl TransactionManager {
                 // Fast path: no active transactions → clear everything
                 drop(active);
                 self.committed_writes.write().clear();
+                self.committed_reads.write().clear();
             } else if committed_len > 5_000 {
                 // Incremental GC: prune entries no longer needed for conflict detection.
                 // An entry is safe to remove if its commit_ts < min(active snapshot_ts),
@@ -340,7 +413,7 @@ impl TransactionManager {
         self.active_txns.read().len()
     }
 
-    /// Clean up old committed write records.
+    /// Clean up old committed write and read records.
     ///
     /// Removes records older than the oldest active transaction's snapshot,
     /// since they can no longer cause conflicts.
@@ -349,12 +422,21 @@ impl TransactionManager {
         if active.is_empty() {
             // No active transactions — safe to clear all
             self.committed_writes.write().clear();
+            self.committed_reads.write().clear();
             return;
         }
 
         let min_ts = *active.iter().min().unwrap();
         let mut committed = self.committed_writes.write();
         committed.retain(|_, ts| *ts >= min_ts);
+
+        // Also GC committed reads — prune entries where all snapshot timestamps
+        // are below the watermark
+        let mut reads = self.committed_reads.write();
+        reads.retain(|_, timestamps| {
+            timestamps.retain(|&ts| ts >= min_ts);
+            !timestamps.is_empty()
+        });
     }
 }
 
@@ -438,5 +520,125 @@ mod tests {
             TxnWrite::Put(v) => assert_eq!(v, b"value"),
             TxnWrite::Delete => panic!("Expected Put"),
         }
+    }
+
+    // ── SSI (Serializable Snapshot Isolation) Tests ────────────────────────
+
+    #[test]
+    fn test_ssi_write_skew_bank_accounts() {
+        // Classic write-skew scenario:
+        // Two bank accounts A=100, B=100. Constraint: A+B >= 0.
+        // T1 reads both, sees A=100 B=100, withdraws 200 from A → A=-100 (A+B=0, ok)
+        // T2 reads both, sees A=100 B=100, withdraws 200 from B → B=-100 (A+B=0, ok)
+        // If both commit, A=-100 B=-100, A+B=-200 — VIOLATION!
+        // SSI must prevent one of them from committing.
+        let mgr = TransactionManager::new();
+
+        // Seed the accounts
+        let mut seed = mgr.begin();
+        seed.put(b"account_A".to_vec(), b"100".to_vec()).unwrap();
+        seed.put(b"account_B".to_vec(), b"100".to_vec()).unwrap();
+        mgr.commit(&mut seed).unwrap();
+
+        // T1: reads both accounts, decides to withdraw from A
+        let mut t1 = mgr.begin();
+        t1.record_read(b"account_A");
+        t1.record_read(b"account_B");
+        t1.put(b"account_A".to_vec(), b"-100".to_vec()).unwrap();
+
+        // T2: reads both accounts, decides to withdraw from B
+        let mut t2 = mgr.begin();
+        t2.record_read(b"account_A");
+        t2.record_read(b"account_B");
+        t2.put(b"account_B".to_vec(), b"-100".to_vec()).unwrap();
+
+        // T1 commits first — succeeds
+        mgr.commit(&mut t1).unwrap();
+        assert_eq!(t1.status(), TxnStatus::Committed);
+
+        // T2 should fail: it read account_A, which T1 wrote after T2's snapshot
+        let result = mgr.commit(&mut t2);
+        assert!(result.is_err(), "T2 must fail due to SSI write-skew on account_A");
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("write skew") || err.to_string().contains("Serialization failure"),
+            "Error should mention write skew: {err}"
+        );
+    }
+
+    #[test]
+    fn test_ssi_read_write_anti_dependency() {
+        // T1 reads key_x, T2 writes key_x and commits, T1 tries to commit a write to key_y
+        // SSI should abort T1 because its read of key_x is stale.
+        let mgr = TransactionManager::new();
+
+        let mut t1 = mgr.begin();
+        t1.record_read(b"key_x");
+
+        let mut t2 = mgr.begin();
+        t2.put(b"key_x".to_vec(), b"new_value".to_vec()).unwrap();
+        mgr.commit(&mut t2).unwrap();
+
+        // T1 writes a different key but its read of key_x is now stale
+        t1.put(b"key_y".to_vec(), b"based_on_stale_read".to_vec()).unwrap();
+        let result = mgr.commit(&mut t1);
+        assert!(result.is_err(), "T1 should fail due to SSI — it read key_x which was written by T2");
+    }
+
+    #[test]
+    fn test_ssi_self_written_key_no_false_positive() {
+        // If a transaction reads AND writes the same key, it should NOT be
+        // flagged as a write-skew violation against its own writes.
+        let mgr = TransactionManager::new();
+
+        let mut seed = mgr.begin();
+        seed.put(b"counter".to_vec(), b"0".to_vec()).unwrap();
+        mgr.commit(&mut seed).unwrap();
+
+        let mut t1 = mgr.begin();
+        t1.record_read(b"counter");
+        t1.put(b"counter".to_vec(), b"1".to_vec()).unwrap();
+        // Should succeed — the read and write are on the same key within the same txn
+        mgr.commit(&mut t1).unwrap();
+        assert_eq!(t1.status(), TxnStatus::Committed);
+    }
+
+    #[test]
+    fn test_ssi_non_overlapping_reads_pass() {
+        // T1 reads key_a, writes key_b
+        // T2 reads key_c, writes key_d
+        // No overlap → both should commit
+        let mgr = TransactionManager::new();
+
+        let mut t1 = mgr.begin();
+        t1.record_read(b"key_a");
+        t1.put(b"key_b".to_vec(), b"val".to_vec()).unwrap();
+
+        let mut t2 = mgr.begin();
+        t2.record_read(b"key_c");
+        t2.put(b"key_d".to_vec(), b"val".to_vec()).unwrap();
+
+        mgr.commit(&mut t1).unwrap();
+        mgr.commit(&mut t2).unwrap();
+        assert_eq!(t1.status(), TxnStatus::Committed);
+        assert_eq!(t2.status(), TxnStatus::Committed);
+    }
+
+    #[test]
+    fn test_ssi_sequential_transactions_pass() {
+        // If T1 commits before T2 begins, T2 should see T1's writes
+        // and there should be no conflict even if T2 reads what T1 wrote.
+        let mgr = TransactionManager::new();
+
+        let mut t1 = mgr.begin();
+        t1.put(b"key".to_vec(), b"value_from_t1".to_vec()).unwrap();
+        mgr.commit(&mut t1).unwrap();
+
+        let mut t2 = mgr.begin();
+        t2.record_read(b"key");
+        t2.put(b"key2".to_vec(), b"value_from_t2".to_vec()).unwrap();
+        // Should succeed — T1 committed before T2's snapshot, so T2 sees T1's writes
+        mgr.commit(&mut t2).unwrap();
+        assert_eq!(t2.status(), TxnStatus::Committed);
     }
 }

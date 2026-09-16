@@ -157,6 +157,21 @@ pub fn handle_postgres_query(
         {
             return handle_list_tables(db, *in_transaction);
         }
+
+        // Introspection: Statistics for user tables
+        if upper.contains("PG_STAT_USER_TABLES") || upper.contains("PG_STAT_ALL_TABLES") {
+            return handle_pg_stat_user_tables(db, *in_transaction);
+        }
+
+        // Introspection: Indexes listing
+        if upper.contains("PG_INDEXES") {
+            return handle_pg_indexes(db, *in_transaction);
+        }
+
+        // Introspection: Configuration / settings
+        if upper.contains("PG_SETTINGS") {
+            return handle_pg_settings(*in_transaction);
+        }
     }
 
     // 6. Execute general SQL query through `faizdb-query`
@@ -383,6 +398,103 @@ fn handle_list_columns(db: &Arc<DatabaseContext>, in_txn: bool) -> Vec<u8> {
         }
     }
     out.extend_from_slice(&encode_command_complete(&format!("SELECT {count}")));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle pg_stat_user_tables for monitoring tools
+fn handle_pg_stat_user_tables(db: &Arc<DatabaseContext>, in_txn: bool) -> Vec<u8> {
+    let collections = db.list_collections();
+    let fields = vec![
+        PgField::text("relname"),
+        PgField {
+            name: "n_live_tup".to_string(),
+            table_oid: 0,
+            column_attr_num: 0,
+            type_oid: PG_TYPE_INT8,
+            type_size: 8,
+            type_modifier: -1,
+            format_code: 0,
+        },
+        PgField {
+            name: "n_dead_tup".to_string(),
+            table_oid: 0,
+            column_attr_num: 0,
+            type_oid: PG_TYPE_INT8,
+            type_size: 8,
+            type_modifier: -1,
+            format_code: 0,
+        },
+    ];
+    let mut out = encode_row_description(&fields);
+    for col_name in &collections {
+        let col = db.get_or_create_collection(col_name);
+        let count = col.count(None);
+        let row = vec![
+            Some(col_name.clone()),
+            Some(count.to_string()),
+            Some("0".to_string()),
+        ];
+        out.extend_from_slice(&encode_data_row(&row));
+    }
+    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", collections.len())));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle pg_indexes listing
+fn handle_pg_indexes(db: &Arc<DatabaseContext>, in_txn: bool) -> Vec<u8> {
+    let collections = db.list_collections();
+    let fields = vec![
+        PgField::text("schemaname"),
+        PgField::text("tablename"),
+        PgField::text("indexname"),
+        PgField::text("indexdef"),
+    ];
+    let mut out = encode_row_description(&fields);
+    let mut count = 0;
+    for col_name in &collections {
+        let row = vec![
+            Some("public".to_string()),
+            Some(col_name.clone()),
+            Some(format!("{col_name}_pkey")),
+            Some(format!("CREATE UNIQUE INDEX {col_name}_pkey ON public.{col_name} USING btree (_id)")),
+        ];
+        out.extend_from_slice(&encode_data_row(&row));
+        count += 1;
+    }
+    out.extend_from_slice(&encode_command_complete(&format!("SELECT {count}")));
+    out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
+    out
+}
+
+/// Handle pg_settings listing
+fn handle_pg_settings(in_txn: bool) -> Vec<u8> {
+    let fields = vec![
+        PgField::text("name"),
+        PgField::text("setting"),
+        PgField::text("unit"),
+        PgField::text("category"),
+    ];
+    let mut out = encode_row_description(&fields);
+    let settings = [
+        ("server_version", "16.0", "", "Version"),
+        ("client_encoding", "UTF8", "", "Client Connection Defaults"),
+        ("server_encoding", "UTF8", "", "Client Connection Defaults"),
+        ("standard_conforming_strings", "on", "", "Client Connection Defaults"),
+        ("max_connections", "10000", "", "Connections and Authentication"),
+        ("shared_buffers", "128MB", "MB", "Resource Usage"),
+    ];
+    for (name, setting, unit, cat) in settings {
+        let row = vec![
+            Some(name.to_string()),
+            Some(setting.to_string()),
+            Some(unit.to_string()),
+            Some(cat.to_string()),
+        ];
+        out.extend_from_slice(&encode_data_row(&row));
+    }
+    out.extend_from_slice(&encode_command_complete(&format!("SELECT {}", settings.len())));
     out.extend_from_slice(&encode_ready_for_query(if in_txn { b'T' } else { b'I' }));
     out
 }

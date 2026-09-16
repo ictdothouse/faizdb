@@ -1344,6 +1344,87 @@ impl DatabaseContext {
                     Err(format!("Graph edge from '{from}' to '{to}' not found"))
                 }
             }
+            Statement::AlterTable { collection, action } => {
+                let col = self.get_or_create_collection(&collection);
+                match action {
+                    crate::ast::AlterAction::AddColumn { name, default } => {
+                        let ids: Vec<String> = col
+                            .find_all(None)
+                            .iter()
+                            .map(|d| d.id.as_str().to_string())
+                            .collect();
+                        for id in ids {
+                            let def = default.clone().unwrap_or(Value::Null);
+                            let col_name = name.clone();
+                            let _ = col.update_by_id(&id, move |doc| {
+                                if !doc.fields.contains_key(&col_name) {
+                                    doc.set(col_name, def);
+                                }
+                            });
+                        }
+                        Ok(QueryResult::Success(format!(
+                            "Column '{name}' added to collection '{collection}'"
+                        )))
+                    }
+                    crate::ast::AlterAction::DropColumn { name } => {
+                        let ids: Vec<String> = col
+                            .find_all(None)
+                            .iter()
+                            .map(|d| d.id.as_str().to_string())
+                            .collect();
+                        for id in ids {
+                            let col_name = name.clone();
+                            let _ = col.update_by_id(&id, move |doc| {
+                                doc.fields.remove(&col_name);
+                            });
+                        }
+                        Ok(QueryResult::Success(format!(
+                            "Column '{name}' dropped from collection '{collection}'"
+                        )))
+                    }
+                    crate::ast::AlterAction::RenameTable { new_name } => {
+                        if let Some((_, old_col)) = self.collections.remove(&collection) {
+                            let new_col = self.get_or_create_collection(&new_name);
+                            for doc in old_col.find_all(None) {
+                                let _ = new_col.insert(doc);
+                            }
+                            let _ = old_col.clear();
+                        }
+                        Ok(QueryResult::Success(format!(
+                            "Collection '{collection}' renamed to '{new_name}'"
+                        )))
+                    }
+                }
+            }
+            Statement::Distinct {
+                collection,
+                field,
+                filter,
+            } => {
+                let col = self.get_or_create_collection(&collection);
+                let docs = col.find_all(filter.as_ref());
+                let mut seen = std::collections::HashSet::new();
+                let mut distinct_docs = Vec::new();
+
+                for doc in docs {
+                    let val_opt = if field == "id" || field == "_id" {
+                        Some(Value::String(doc.id.as_str().to_string()))
+                    } else {
+                        doc.get_nested(&field).cloned()
+                    };
+
+                    if let Some(val) = val_opt {
+                        let val_str = serde_json::to_string(&val).unwrap_or_default();
+                        if seen.insert(val_str) {
+                            let mut d = Document::new();
+                            d.set(&field, val);
+                            distinct_docs.push(d);
+                        }
+                    }
+                }
+
+                Ok(QueryResult::Documents(distinct_docs))
+            }
             Statement::Set { key, value } => Ok(QueryResult::Success(
                 format!("SET {key} = '{value}' acknowledged"),
             )),
